@@ -1,3 +1,6 @@
+import image1 from "../../imports/03A0DC2B-F970-48BA-98C6-637A5E3D2042.png";
+import image2 from "../../imports/6FD69605-01B6-4FAA-ADAA-3F41FD35BD4E.png";
+import image3 from "../../imports/A0F32DA8-6BBE-4248-B021-EC5C53119F75.png";
 import { motion } from "motion/react";
 import { ExternalLink } from "lucide-react";
 
@@ -7,19 +10,19 @@ export function Projects() {
     {
       title: "Neural Analytics Platform",
       description: "AI-powered data intelligence system with real-time insights and predictive analytics",
-      image: "/src/imports/03A0DC2B-F970-48BA-98C6-637A5E3D2042.png",
+      image: image1,
       tags: ["AI", "Python", "Analytics"]
     },
     {
       title: "Cloud Automation Suite",
       description: "Serverless infrastructure automation platform built on Cloudflare Workers",
-      image: "/src/imports/6FD69605-01B6-4FAA-ADAA-3F41FD35BD4E.png",
+      image: image2,
       tags: ["Cloudflare", "Automation", "APIs"]
     },
     {
       title: "Enterprise Web Portal",
       description: "Modern web application with seamless UX and lightning-fast performance",
-      image: "/src/imports/A0F32DA8-6BBE-4248-B021-EC5C53119F75.png",
+      image: image3,
       tags: ["Web", "React", "Performance"]
     }
   ];
