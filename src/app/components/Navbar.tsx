@@ -1,4 +1,4 @@
-import logo from "src/imports/View_recent_photos.png";
+import logo from "../../imports/View_recent_photos.png";
 import { motion } from "motion/react";
 
 export function Navbar() {

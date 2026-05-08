@@ -1,4 +1,4 @@
-import logo from "src/imports/View_recent_photos.png";
+import logo from "../../imports/View_recent_photos.png";
 import { Github, Linkedin, Twitter } from "lucide-react";
 
 export function Footer() {
