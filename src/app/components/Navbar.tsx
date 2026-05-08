@@ -12,7 +12,7 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img
-            src= logo
+            src= {logo}
             alt="EkaTech Logo"
             className="w-10 h-10 object-contain"
           />
