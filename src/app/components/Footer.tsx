@@ -16,7 +16,7 @@ export function Footer() {
           </div>
 
           <p className="text-gray-500 text-sm">
-            © 2026 EkaTech. Building the future, one line at a time.
+            © 2026 EkaTech. comtact@ekatech.net
           </p>
 
           <div className="flex items-center gap-4">
