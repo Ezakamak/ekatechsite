@@ -149,9 +149,9 @@ export function AutomationSimulator() {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="relative min-h-[620px] overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 shadow-[0_0_80px_rgba(139,92,246,0.12)] backdrop-blur-xl"
+            className="relative min-h-[700px] overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 shadow-[0_0_80px_rgba(139,92,246,0.12)] backdrop-blur-xl"
           >
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-5 flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm uppercase tracking-[0.28em] text-white/35">Workflow state</p>
                 <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
@@ -159,30 +159,30 @@ export function AutomationSimulator() {
                 </h3>
               </div>
 
-              <div className="rounded-full border border-white/10 bg-black/35 px-4 py-2 text-sm text-white/50">
+              <div className="shrink-0 rounded-full border border-white/10 bg-black/35 px-4 py-2 text-sm text-white/50">
                 {phase === "idle" ? "Unstructured" : phase === "running" ? "Processing" : "Optimized"}
               </div>
             </div>
 
-            <div className="relative mt-6 h-[500px] rounded-[2rem] border border-white/10 bg-black/35">
+            <div className="relative mt-6 h-[570px] rounded-[2rem] border border-white/10 bg-black/35">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,212,255,0.08),transparent_55%)]" />
 
               {phase !== "idle" && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="absolute left-1/2 top-8 h-[420px] w-px -translate-x-1/2 bg-[linear-gradient(to_bottom,transparent,rgba(0,212,255,0.35),transparent)]"
+                  className="absolute left-1/2 top-10 h-[490px] w-px -translate-x-1/2 bg-[linear-gradient(to_bottom,transparent,rgba(0,212,255,0.35),transparent)]"
                 />
               )}
 
               {items.map((item, index) => {
                 const Icon = item.icon;
-                const orderedY = -170 + index * 88;
+                const orderedY = -220 + index * 110;
 
                 return (
                   <motion.div
                     key={item.title}
-                    className="absolute left-1/2 top-1/2 z-10 w-[260px] -translate-x-1/2"
+                    className="absolute left-1/2 top-1/2 z-10 w-[320px] max-w-[calc(100%-2rem)] -translate-x-1/2"
                     initial={false}
                     animate={
                       phase === "idle"
@@ -233,7 +233,7 @@ export function AutomationSimulator() {
 
                       <div className="relative flex items-center gap-4">
                         <div
-                          className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${
+                          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${
                             phase === "done"
                               ? "border-emerald-300/30 bg-emerald-300/10"
                               : phase === "running"
@@ -250,8 +250,8 @@ export function AutomationSimulator() {
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-4">
-                            <p className="font-medium text-white">{item.title}</p>
-                            <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-xs text-white/45">
+                            <p className="font-medium leading-tight text-white">{item.title}</p>
+                            <span className="shrink-0 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-xs text-white/45">
                               {phase === "done" ? "Done" : "Input"}
                             </span>
                           </div>
@@ -324,7 +324,7 @@ export function AutomationSimulator() {
                     transition={{ delay: index * 0.08 }}
                   >
                     <div
-                      className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${
                         phase === "done"
                           ? "border-emerald-300/30 bg-emerald-300/10"
                           : phase === "running"
