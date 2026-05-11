@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
 import { About } from "./components/About";
@@ -6,18 +7,33 @@ import { TechStack } from "./components/TechStack";
 import { CTA } from "./components/CTA";
 import { Contact } from "./components/Contact";
 import { Footer } from "./components/Footer";
+import { Loader } from "./components/Loader";
 
 export default function App() {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 2400);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-black dark">
-      <Navbar />
-      <Hero />
-      <About />
-      <Projects />
-      <TechStack />
-      <CTA />
-      <Contact />
-      <Footer />
-    </div>
+    <>
+      <Loader show={loading} />
+
+      <div className="min-h-screen bg-black dark">
+        <Navbar />
+        <Hero />
+        <About />
+        <Projects />
+        <TechStack />
+        <CTA />
+        <Contact />
+        <Footer />
+      </div>
+    </>
   );
 }
