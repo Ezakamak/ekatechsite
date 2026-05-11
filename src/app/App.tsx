@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LanguageProvider } from "./i18n";
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
 import { About } from "./components/About";
@@ -19,7 +20,7 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, []);
   return (
-    <>
+    <LanguageProvider>
       <Loader show={loading} />
       <div className="min-h-screen bg-black dark">
         <Navbar />
@@ -34,6 +35,6 @@ export default function App() {
         <Contact />
         <Footer />
       </div>
-    </>
+    </LanguageProvider>
   );
 }
