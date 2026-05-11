@@ -24,10 +24,7 @@ export function CookieConsent() {
         reject: "Reddet",
         privacy: "Gizlilik",
         terms: "Şartlar",
-        manage: "Tercihler",
         close: "Kapat",
-        accepted: "Çerez tercihlerin kaydedildi.",
-        rejected: "Zorunlu olmayan çerezler reddedildi.",
         privacyTitle: "Gizlilik Politikası",
         privacyBody: [
           "EkaTech bu statik web sitesinde kullanıcı hesabı, ödeme sistemi veya dahili veritabanı kullanmaz.",
@@ -51,10 +48,7 @@ export function CookieConsent() {
         reject: "Reject",
         privacy: "Privacy",
         terms: "Terms",
-        manage: "Preferences",
         close: "Close",
-        accepted: "Your cookie preferences have been saved.",
-        rejected: "Non-essential cookies were rejected.",
         privacyTitle: "Privacy Policy",
         privacyBody: [
           "EkaTech does not use user accounts, payment systems, or an internal database on this static website.",
@@ -164,27 +158,6 @@ export function CookieConsent() {
               </div>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {choice && (
-          <motion.button
-            type="button"
-            onClick={() => {
-              window.localStorage.removeItem(STORAGE_KEY);
-              setChoice(null);
-            }}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.2 }}
-            className="fixed bottom-24 right-6 z-[75] hidden items-center gap-2 rounded-full border border-white/10 bg-black/65 px-4 py-3 text-sm text-white/60 shadow-[0_0_28px_rgba(0,212,255,0.14)] backdrop-blur-xl transition-all hover:border-[#00D4FF]/40 hover:text-white lg:flex"
-            aria-label={copy.manage}
-          >
-            <ShieldCheck className="h-4 w-4 text-[#00D4FF]" />
-            {copy.manage}
-          </motion.button>
         )}
       </AnimatePresence>
 
