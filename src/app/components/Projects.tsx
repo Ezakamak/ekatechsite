@@ -77,11 +77,11 @@ export function Projects() {
                   </button>
                 </div>
 
-                <div className="relative rounded-2xl bg-gradient-to-b from-white/5 to-white/10 p-4 flex items-center justify-center min-h-[300px]">
+                <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black">
                   <img
                     src={project.image}
                     alt={project.title}
-                    className="w-full h-full object-contain max-h-[400px] group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-full object-cover aspect-[4/3] group-hover:scale-105 transition-transform duration-500"
                   />
                 </div>
               </div>
