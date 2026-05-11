@@ -124,7 +124,7 @@ export function CommandMenu() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-[70] hidden items-center gap-2 rounded-full border border-white/10 bg-black/65 px-4 py-3 text-sm text-white/70 shadow-[0_0_30px_rgba(139,92,246,0.18)] backdrop-blur-xl transition-all hover:scale-105 hover:border-[#00D4FF]/40 hover:text-white md:flex"
+        className="fixed bottom-8 left-36 z-[70] hidden items-center gap-2 rounded-full border border-white/10 bg-black/65 px-4 py-3 text-sm text-white/70 shadow-[0_0_30px_rgba(139,92,246,0.18)] backdrop-blur-xl transition-all hover:scale-105 hover:border-[#00D4FF]/40 hover:text-white xl:flex"
       >
         <Search className="h-4 w-4" />
         <span>{tr ? "Komut" : "Command"}</span>
