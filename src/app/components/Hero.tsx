@@ -10,7 +10,7 @@ export function Hero() {
 
       {/* Background Silhouette Image */}
       <img
-        src="{logo}"
+        src="{background}"
         alt=""
         className="absolute inset-0 w-full h-full object-cover opacity-20 blur-sm pointer-events-none"
       />
