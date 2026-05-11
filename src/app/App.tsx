@@ -20,6 +20,7 @@ import { Loader } from "./components/Loader";
 import { ScrollProgress } from "./components/ScrollProgress";
 import { CommandMenu } from "./components/CommandMenu";
 import { BackToTop } from "./components/BackToTop";
+import { CookieConsent } from "./components/CookieConsent";
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -52,6 +53,7 @@ export default function App() {
       <ScrollProgress />
       <CommandMenu />
       <BackToTop />
+      <CookieConsent />
       <div className="min-h-screen bg-black dark">
         <Navbar />
         <Hero />
