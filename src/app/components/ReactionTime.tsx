@@ -26,7 +26,7 @@ function getDriverTier(ms: number | null): DriverTier {
     };
   }
 
-  if (ms <= 190) {
+  if (ms <= 220) {
     return {
       name: "Lewis Hamilton",
       tier: "Champion reaction tier",
@@ -34,7 +34,7 @@ function getDriverTier(ms: number | null): DriverTier {
     };
   }
 
-  if (ms <= 220) {
+  if (ms <= 260) {
     return {
       name: "Fernando Alonso",
       tier: "Veteran instinct tier",
@@ -42,7 +42,7 @@ function getDriverTier(ms: number | null): DriverTier {
     };
   }
 
-  if (ms <= 250) {
+  if (ms <= 300) {
     return {
       name: "Charles Leclerc",
       tier: "Qualifying pace tier",
@@ -50,7 +50,7 @@ function getDriverTier(ms: number | null): DriverTier {
     };
   }
 
-  if (ms <= 280) {
+  if (ms <= 340) {
     return {
       name: "Lando Norris",
       tier: "Rapid response tier",
@@ -58,7 +58,7 @@ function getDriverTier(ms: number | null): DriverTier {
     };
   }
 
-  if (ms <= 330) {
+  if (ms <= 380) {
     return {
       name: "Carlos Sainz",
       tier: "Consistent driver tier",
