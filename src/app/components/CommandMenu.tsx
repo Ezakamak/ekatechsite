@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ElementType } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Bot,
@@ -17,7 +18,7 @@ type Command = {
   id: string;
   label: string;
   hint: string;
-  icon: React.ElementType;
+  icon: ElementType;
   action: () => void;
 };
 
