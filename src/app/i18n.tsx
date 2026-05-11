@@ -19,10 +19,16 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   });
 
   const setLanguage = (nextLanguage: Language) => {
-    setLanguageState(nextLanguage);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("ekatech-language", nextLanguage);
-    }
+    setLanguageState((currentLanguage) => {
+      if (currentLanguage === nextLanguage) return currentLanguage;
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("ekatech-language", nextLanguage);
+        window.dispatchEvent(new Event("ekatech-language-switch"));
+      }
+
+      return nextLanguage;
+    });
   };
 
   const toggleLanguage = () => {
