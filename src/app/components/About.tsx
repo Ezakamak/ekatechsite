@@ -1,25 +1,58 @@
 import { motion } from "motion/react";
 import { Sparkles, Zap, Shield } from "lucide-react";
+import { useLanguage } from "../i18n";
 
 export function About() {
+  const { language } = useLanguage();
 
-  const features = [
-    {
-      icon: Sparkles,
-      title: "Intelligent Solutions",
-      description: "AI-powered systems that learn and adapt to your needs"
-    },
-    {
-      icon: Zap,
-      title: "Lightning Fast",
-      description: "Built for speed and performance at scale"
-    },
-    {
-      icon: Shield,
-      title: "Enterprise Ready",
-      description: "Secure, reliable, and production-tested"
-    }
-  ];
+  const copy =
+    language === "tr"
+      ? {
+          heading1: "Minimal Yazılım.",
+          heading2: "Maksimum Etki.",
+          description:
+            "EkaTech; sadelik, hız ve yenilik odağıyla modern, ölçeklenebilir ve akıllı dijital ürünler tasarlar. Gerekeni inşa ederiz.",
+          features: [
+            {
+              icon: Sparkles,
+              title: "Akıllı Çözümler",
+              description: "İhtiyaçlarınıza uyum sağlayan yapay zeka destekli sistemler",
+            },
+            {
+              icon: Zap,
+              title: "Yıldırım Hızında",
+              description: "Hız, performans ve ölçek için tasarlanmış altyapılar",
+            },
+            {
+              icon: Shield,
+              title: "Kurumsal Seviyede",
+              description: "Güvenli, kararlı ve gerçek kullanıma hazır çözümler",
+            },
+          ],
+        }
+      : {
+          heading1: "Minimal Software.",
+          heading2: "Maximum Impact.",
+          description:
+            "EkaTech creates modern, scalable, intelligent digital products with a relentless focus on simplicity, speed, and innovation. We build what matters.",
+          features: [
+            {
+              icon: Sparkles,
+              title: "Intelligent Solutions",
+              description: "AI-powered systems that learn and adapt to your needs",
+            },
+            {
+              icon: Zap,
+              title: "Lightning Fast",
+              description: "Built for speed and performance at scale",
+            },
+            {
+              icon: Shield,
+              title: "Enterprise Ready",
+              description: "Secure, reliable, and production-tested",
+            },
+          ],
+        };
 
   return (
     <section id="about" className="py-32 bg-black relative">
@@ -32,17 +65,17 @@ export function About() {
           className="text-center mb-20"
         >
           <h2 className="text-5xl md:text-6xl font-light text-white mb-6">
-            Minimal Software.
+            {copy.heading1}
             <br />
-            <span className="text-gray-400">Maximum Impact.</span>
+            <span className="text-gray-400">{copy.heading2}</span>
           </h2>
           <p className="text-xl text-gray-400 max-w-3xl mx-auto font-light">
-            EkaTech creates modern, scalable, intelligent digital products with a relentless focus on simplicity, speed, and innovation. We build what matters.
+            {copy.description}
           </p>
         </motion.div>
 
         <div className="grid md:grid-cols-3 gap-8">
-          {features.map((feature, index) => (
+          {copy.features.map((feature, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, y: 30 }}
