@@ -4,6 +4,7 @@ import { Hero } from "./components/Hero";
 import { About } from "./components/About";
 import { Projects } from "./components/Projects";
 import { BeforeAfter } from "./components/BeforeAfter";
+import { AutomationSimulator } from "./components/AutomationSimulator";
 import { TechStack } from "./components/TechStack";
 import { CTA } from "./components/CTA";
 import { ReactionTime } from "./components/ReactionTime";
@@ -26,6 +27,7 @@ export default function App() {
         <About />
         <Projects />
         <BeforeAfter />
+        <AutomationSimulator />
         <TechStack />
         <CTA />
         <ReactionTime />
