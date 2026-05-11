@@ -57,31 +57,32 @@
       .scene::after {
         content: "";
         position: absolute;
-        width: 720px;
-        height: 720px;
+        width: 640px;
+        height: 640px;
         border-radius: 999px;
         background: rgba(0, 212, 255, 0.08);
-        filter: blur(120px);
+        filter: blur(110px);
         z-index: -1;
       }
 
       .card {
-        width: min(920px, 100%);
+        width: min(760px, 100%);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 34px;
         background: rgba(255, 255, 255, 0.035);
         box-shadow: 0 0 120px rgba(0, 212, 255, 0.12);
         backdrop-filter: blur(24px);
-        padding: clamp(28px, 6vw, 72px);
+        padding: clamp(28px, 5vw, 58px);
         text-align: center;
         position: relative;
-        overflow: hidden;
+        overflow: visible;
       }
 
       .card::before {
         content: "";
         position: absolute;
         inset: 0;
+        border-radius: inherit;
         background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.12), transparent 55%);
         pointer-events: none;
       }
@@ -134,7 +135,7 @@
       h1 {
         position: relative;
         margin: 28px 0 0;
-        font-size: clamp(72px, 16vw, 170px);
+        font-size: clamp(72px, 14vw, 150px);
         line-height: 0.85;
         letter-spacing: -0.1em;
         font-weight: 700;
@@ -147,19 +148,19 @@
       h2 {
         position: relative;
         margin: 30px auto 0;
-        max-width: 760px;
-        font-size: clamp(34px, 6vw, 72px);
-        line-height: 0.95;
-        letter-spacing: -0.065em;
+        max-width: 680px;
+        font-size: clamp(32px, 5vw, 62px);
+        line-height: 0.98;
+        letter-spacing: -0.06em;
         font-weight: 600;
       }
 
       p {
         position: relative;
         margin: 22px auto 0;
-        max-width: 620px;
+        max-width: 580px;
         color: rgba(255, 255, 255, 0.55);
-        font-size: clamp(16px, 2vw, 20px);
+        font-size: clamp(16px, 2vw, 19px);
         line-height: 1.7;
       }
 
@@ -212,10 +213,15 @@
 
       .orbit {
         position: absolute;
-        inset: 42px;
+        left: 50%;
+        top: 50%;
+        width: min(520px, calc(100vw - 72px));
+        aspect-ratio: 1;
+        transform: translate(-50%, -50%);
         border: 1px solid rgba(255, 255, 255, 0.05);
         border-radius: 999px;
         pointer-events: none;
+        overflow: visible;
       }
 
       .orbiter {
@@ -242,11 +248,11 @@
       .trail::before {
         content: "";
         position: absolute;
-        width: 92px;
-        height: 18px;
+        width: 74px;
+        height: 16px;
         border-radius: 999px;
         filter: blur(7px);
-        opacity: 0.9;
+        opacity: 0.78;
       }
 
       .trail::after {
@@ -262,12 +268,12 @@
 
       .trail.cyan {
         top: -8px;
-        left: 14%;
+        left: 50%;
       }
 
       .trail.cyan::before {
-        left: -76px;
-        top: -1px;
+        left: -62px;
+        top: 0;
         background: linear-gradient(
           90deg,
           rgba(0, 212, 255, 0),
@@ -283,13 +289,13 @@
       }
 
       .trail.purple {
-        right: 11%;
+        right: 50%;
         bottom: -8px;
       }
 
       .trail.purple::before {
-        right: -76px;
-        top: -1px;
+        right: -62px;
+        top: 0;
         background: linear-gradient(
           270deg,
           rgba(139, 92, 246, 0),
@@ -349,7 +355,10 @@
         </div>
 
         <div class="logo-wrap" aria-label="EkaTech Logo">
-          <img src="/src/imports/View_recent_photos.png" alt="EkaTech logo" />
+          <img
+            src="https://raw.githubusercontent.com/Ezakamak/ekatechsite/main/src/imports/View_recent_photos.png"
+            alt="EkaTech logo"
+          />
         </div>
 
         <div class="eyebrow"><span class="dot"></span> Page not found</div>
