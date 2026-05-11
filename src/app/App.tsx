@@ -15,13 +15,32 @@ import { Loader } from "./components/Loader";
 
 export default function App() {
   const [loading, setLoading] = useState(true);
+  const [languageLoading, setLanguageLoading] = useState(false);
+
   useEffect(() => {
     const timer = window.setTimeout(() => setLoading(false), 3600);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    const handleLanguageSwitch = () => {
+      setLanguageLoading(true);
+
+      window.setTimeout(() => {
+        setLanguageLoading(false);
+      }, 3600);
+    };
+
+    window.addEventListener("ekatech-language-switch", handleLanguageSwitch);
+
+    return () => {
+      window.removeEventListener("ekatech-language-switch", handleLanguageSwitch);
+    };
+  }, []);
+
   return (
     <LanguageProvider>
-      <Loader show={loading} />
+      <Loader show={loading || languageLoading} />
       <div className="min-h-screen bg-black dark">
         <Navbar />
         <Hero />
