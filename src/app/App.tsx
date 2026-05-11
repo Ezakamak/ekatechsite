@@ -28,7 +28,7 @@ export default function App() {
 
       window.setTimeout(() => {
         setLanguageLoading(false);
-      }, 3600);
+      }, 1200);
     };
 
     window.addEventListener("ekatech-language-switch", handleLanguageSwitch);
