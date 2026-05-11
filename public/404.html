@@ -47,10 +47,10 @@
         background:
           radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.24), transparent 34%),
           radial-gradient(circle at 80% 60%, rgba(0, 212, 255, 0.18), transparent 34%),
-          linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+          linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
         background-size: auto, auto, 64px 64px, 64px 64px;
-        opacity: 0.8;
+        opacity: 0.85;
         z-index: -2;
       }
 
@@ -86,20 +86,26 @@
         pointer-events: none;
       }
 
-      .logo {
+      .logo-wrap {
         position: relative;
-        width: 72px;
-        height: 72px;
+        width: 94px;
+        height: 94px;
         margin: 0 auto 28px;
         display: grid;
         place-items: center;
         border: 1px solid rgba(255, 255, 255, 0.14);
-        background: rgba(255, 255, 255, 0.94);
-        color: #000;
-        font-weight: 900;
-        font-size: 24px;
-        letter-spacing: -0.12em;
-        box-shadow: 0 0 50px rgba(255, 255, 255, 0.12);
+        border-radius: 26px;
+        background: rgba(255, 255, 255, 0.06);
+        box-shadow: 0 0 50px rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(18px);
+      }
+
+      .logo-wrap img {
+        width: 66px;
+        height: 66px;
+        object-fit: contain;
+        display: block;
+        filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.16));
       }
 
       .eyebrow {
@@ -206,39 +212,107 @@
 
       .orbit {
         position: absolute;
-        inset: 40px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        inset: 42px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
         border-radius: 999px;
-        animation: spin 18s linear infinite;
         pointer-events: none;
       }
 
-      .orbit::before,
-      .orbit::after {
+      .orbiter {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+      }
+
+      .orbiter.one {
+        animation: spin 14s linear infinite;
+      }
+
+      .orbiter.two {
+        animation: spinReverse 18s linear infinite;
+      }
+
+      .trail {
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+      }
+
+      .trail::before {
         content: "";
         position: absolute;
-        width: 12px;
-        height: 12px;
+        width: 92px;
+        height: 18px;
         border-radius: 999px;
-        background: #00d4ff;
-        box-shadow: 0 0 22px rgba(0, 212, 255, 0.9);
+        filter: blur(7px);
+        opacity: 0.9;
       }
 
-      .orbit::before {
+      .trail::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 10px;
+        height: 10px;
+        transform: translate(-50%, -50%);
+        border-radius: 999px;
+      }
+
+      .trail.cyan {
+        top: -8px;
         left: 14%;
-        top: 8%;
       }
 
-      .orbit::after {
-        right: 12%;
-        bottom: 10%;
+      .trail.cyan::before {
+        left: -76px;
+        top: -1px;
+        background: linear-gradient(
+          90deg,
+          rgba(0, 212, 255, 0),
+          rgba(0, 212, 255, 0.08),
+          rgba(0, 212, 255, 0.24),
+          rgba(0, 212, 255, 0.72)
+        );
+      }
+
+      .trail.cyan::after {
+        background: #00d4ff;
+        box-shadow: 0 0 18px rgba(0, 212, 255, 0.95), 0 0 34px rgba(0, 212, 255, 0.7);
+      }
+
+      .trail.purple {
+        right: 11%;
+        bottom: -8px;
+      }
+
+      .trail.purple::before {
+        right: -76px;
+        top: -1px;
+        background: linear-gradient(
+          270deg,
+          rgba(139, 92, 246, 0),
+          rgba(139, 92, 246, 0.08),
+          rgba(139, 92, 246, 0.24),
+          rgba(139, 92, 246, 0.72)
+        );
+      }
+
+      .trail.purple::after {
         background: #8b5cf6;
-        box-shadow: 0 0 22px rgba(139, 92, 246, 0.9);
+        box-shadow: 0 0 18px rgba(139, 92, 246, 0.95), 0 0 34px rgba(139, 92, 246, 0.7);
       }
 
       @keyframes spin {
         to {
           transform: rotate(360deg);
+        }
+      }
+
+      @keyframes spinReverse {
+        to {
+          transform: rotate(-360deg);
         }
       }
 
@@ -265,8 +339,19 @@
   <body>
     <main class="scene">
       <section class="card" aria-labelledby="title">
-        <div class="orbit"></div>
-        <div class="logo" aria-label="EkaTech">EK</div>
+        <div class="orbit">
+          <div class="orbiter one">
+            <div class="trail cyan"></div>
+          </div>
+          <div class="orbiter two">
+            <div class="trail purple"></div>
+          </div>
+        </div>
+
+        <div class="logo-wrap" aria-label="EkaTech Logo">
+          <img src="/src/imports/View_recent_photos.png" alt="EkaTech logo" />
+        </div>
+
         <div class="eyebrow"><span class="dot"></span> Page not found</div>
         <h1>404</h1>
         <h2 id="title">This page slipped into the void.</h2>
