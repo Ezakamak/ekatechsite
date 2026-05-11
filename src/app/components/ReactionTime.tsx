@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
+import { useLanguage } from "../i18n";
 
 type State = "idle" | "waiting" | "ready" | "result" | "early";
 
@@ -9,78 +10,76 @@ type DriverTier = {
   note: string;
 };
 
-function getDriverTier(ms: number | null): DriverTier {
-  if (ms === null) {
-    return {
-      name: "",
-      tier: "",
-      note: "",
-    };
-  }
+function getDriverTier(ms: number | null, language: "en" | "tr"): DriverTier {
+  if (ms === null) return { name: "", tier: "", note: "" };
+
+  const tr = language === "tr";
 
   if (ms <= 160) {
     return {
       name: "Max Verstappen",
-      tier: "Elite reaction tier",
-      note: "That was brutally fast.",
+      tier: tr ? "Elit refleks seviyesi" : "Elite reaction tier",
+      note: tr ? "Bu inanılmaz hızlıydı." : "That was brutally fast.",
     };
   }
 
   if (ms <= 220) {
     return {
       name: "Lewis Hamilton",
-      tier: "Champion reaction tier",
-      note: "Sharp, clean, and controlled.",
+      tier: tr ? "Şampiyon refleks seviyesi" : "Champion reaction tier",
+      note: tr ? "Keskin, temiz ve kontrollü." : "Sharp, clean, and controlled.",
     };
   }
 
   if (ms <= 260) {
     return {
       name: "Fernando Alonso",
-      tier: "Veteran instinct tier",
-      note: "Smart timing, strong reflexes.",
+      tier: tr ? "Tecrübeli içgüdü seviyesi" : "Veteran instinct tier",
+      note: tr ? "Zeki zamanlama, güçlü refleks." : "Smart timing, strong reflexes.",
     };
   }
 
   if (ms <= 300) {
     return {
       name: "Charles Leclerc",
-      tier: "Qualifying pace tier",
-      note: "Fast enough to look dangerous.",
+      tier: tr ? "Sıralama turu temposu" : "Qualifying pace tier",
+      note: tr ? "Tehlikeli görünecek kadar hızlı." : "Fast enough to look dangerous.",
     };
   }
 
   if (ms <= 340) {
     return {
       name: "Lando Norris",
-      tier: "Rapid response tier",
-      note: "Smooth reaction, solid pace.",
+      tier: tr ? "Hızlı tepki seviyesi" : "Rapid response tier",
+      note: tr ? "Akıcı tepki, sağlam tempo." : "Smooth reaction, solid pace.",
     };
   }
 
   if (ms <= 380) {
     return {
       name: "Carlos Sainz",
-      tier: "Consistent driver tier",
-      note: "Reliable and steady.",
+      tier: tr ? "İstikrarlı sürücü seviyesi" : "Consistent driver tier",
+      note: tr ? "Güvenilir ve dengeli." : "Reliable and steady.",
     };
   }
 
   return {
     name: "Valtteri Bottas",
-    tier: "Calm driver tier",
-    note: "Steady, but the system was faster.",
+    tier: tr ? "Sakin sürücü seviyesi" : "Calm driver tier",
+    note: tr ? "Dengeliydi ama sistem bu kez daha hızlıydı." : "Steady, but the system was faster.",
   };
 }
 
 export function ReactionTime() {
+  const { language } = useLanguage();
   const [state, setState] = useState<State>("idle");
   const [time, setTime] = useState<number | null>(null);
 
   const timer = useRef<number | null>(null);
   const start = useRef(0);
 
-  const driverTier = getDriverTier(time);
+  const driverTier = getDriverTier(time, language);
+  const tr = language === "tr";
 
   const clearTimer = () => {
     if (timer.current) {
@@ -127,25 +126,51 @@ export function ReactionTime() {
 
   const bigText =
     state === "waiting"
-      ? "Wait..."
+      ? tr ? "Bekle..." : "Wait..."
       : state === "ready"
-        ? "Click"
+        ? tr ? "Tıkla" : "Click"
         : state === "early"
-          ? "Too early"
+          ? tr ? "Çok erken" : "Too early"
           : state === "result"
             ? `${time} ms`
-            : "Start";
+            : tr ? "Başlat" : "Start";
 
   const smallText =
     state === "result"
-      ? "We respond this fast."
+      ? tr ? "Bu kadar hızlı dönüş yapıyoruz." : "We respond this fast."
       : state === "waiting"
-        ? "Wait until the panel turns cyan."
+        ? tr ? "Panel cyan olana kadar bekle." : "Wait until the panel turns cyan."
         : state === "ready"
-          ? "Now."
+          ? tr ? "Şimdi." : "Now."
           : state === "early"
-            ? "Try again after the signal."
-            : "Test your reaction time.";
+            ? tr ? "Sinyalden sonra tekrar dene." : "Try again after the signal."
+            : tr ? "Refleks hızını test et." : "Test your reaction time.";
+
+  const copy = tr
+    ? {
+        eyebrow: "Canlı tepki demosu",
+        title: "Bu kadar hızlı dönüş yapıyoruz.",
+        subtitle: "Panel cyan olduğunda tıkla ve tepki süreni gör. Sonucun bir Formula 1 sürücü seviyesiyle eşleşir.",
+        reaction: "Tepki hızı",
+        match: "F1 eşleşmen",
+        youAre: "Sen",
+        start: "Testi başlat",
+        wait: "Tıklama",
+        click: "Şimdi tıkla",
+        again: "Tekrar dene",
+      }
+    : {
+        eyebrow: "Live response demo",
+        title: "We respond this fast.",
+        subtitle: "When the panel turns cyan, click it and see your reaction time. Your result gets matched with a Formula 1 driver tier.",
+        reaction: "Reaction speed",
+        match: "Your F1 match",
+        youAre: "You are",
+        start: "Start test",
+        wait: "Do not click",
+        click: "Click now",
+        again: "Try again",
+      };
 
   return (
     <section className="relative overflow-hidden bg-black px-6 py-28">
@@ -160,16 +185,15 @@ export function ReactionTime() {
           transition={{ duration: 0.6 }}
         >
           <p className="mb-4 text-sm uppercase tracking-[0.35em] text-white/40">
-            Live response demo
+            {copy.eyebrow}
           </p>
 
           <h2 className="max-w-3xl text-4xl font-semibold tracking-[-0.04em] text-white md:text-6xl">
-            We respond this fast.
+            {copy.title}
           </h2>
 
           <p className="mt-5 max-w-xl text-lg leading-8 text-white/55">
-            When the panel turns cyan, click it and see your reaction time. Your
-            result gets matched with a Formula 1 driver tier.
+            {copy.subtitle}
           </p>
         </motion.div>
 
@@ -190,7 +214,7 @@ export function ReactionTime() {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.1),transparent_50%)]" />
 
           <span className="relative z-10 block text-sm uppercase tracking-[0.35em] text-white/45">
-            Reaction speed
+            {copy.reaction}
           </span>
 
           <motion.span
@@ -215,31 +239,20 @@ export function ReactionTime() {
               className="relative z-10 mx-auto mt-6 max-w-sm rounded-2xl border border-white/10 bg-black/35 px-5 py-4"
             >
               <p className="text-xs uppercase tracking-[0.28em] text-white/35">
-                Your F1 match
+                {copy.match}
               </p>
 
               <p className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
-                You are {driverTier.name}.
+                {copy.youAre} {driverTier.name}.
               </p>
 
-              <p className="mt-2 text-sm text-[#00D4FF]">
-                {driverTier.tier}
-              </p>
-
-              <p className="mt-1 text-sm text-white/45">
-                {driverTier.note}
-              </p>
+              <p className="mt-2 text-sm text-[#00D4FF]">{driverTier.tier}</p>
+              <p className="mt-1 text-sm text-white/45">{driverTier.note}</p>
             </motion.div>
           )}
 
           <span className="relative z-10 mt-8 inline-flex rounded-full border border-white/10 bg-black/40 px-5 py-3 text-sm text-white/70">
-            {state === "idle"
-              ? "Start test"
-              : state === "waiting"
-                ? "Do not click"
-                : state === "ready"
-                  ? "Click now"
-                  : "Try again"}
+            {state === "idle" ? copy.start : state === "waiting" ? copy.wait : state === "ready" ? copy.click : copy.again}
           </span>
         </motion.button>
       </div>
