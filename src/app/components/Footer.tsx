@@ -6,12 +6,17 @@ export function Footer() {
   const { language } = useLanguage();
   const tr = language === "tr";
 
+  const openLegal = (eventName: string) => {
+    window.dispatchEvent(new Event(eventName));
+  };
+
   const copy = tr
     ? {
         rights: "© 2026 EkaTech Tüm hakları saklıdır.",
         questions: "Sorular için contact@ekatech.net",
         privacy: "Gizlilik",
         terms: "Şartlar",
+        cookies: "Çerezler",
         contact: "İletişim",
       }
     : {
@@ -19,6 +24,7 @@ export function Footer() {
         questions: "For questions contact@ekatech.net",
         privacy: "Privacy",
         terms: "Terms",
+        cookies: "Cookies",
         contact: "Contact",
       };
 
@@ -50,9 +56,17 @@ export function Footer() {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-4 border-t border-white/5 pt-6 text-sm text-white/35">
-            <a href="#privacy" className="hover:text-white transition-colors">{copy.privacy}</a>
+            <button type="button" onClick={() => openLegal("ekatech-open-privacy")} className="hover:text-white transition-colors">
+              {copy.privacy}
+            </button>
             <span>•</span>
-            <a href="#terms" className="hover:text-white transition-colors">{copy.terms}</a>
+            <button type="button" onClick={() => openLegal("ekatech-open-terms")} className="hover:text-white transition-colors">
+              {copy.terms}
+            </button>
+            <span>•</span>
+            <button type="button" onClick={() => openLegal("ekatech-open-cookie-preferences")} className="hover:text-white transition-colors">
+              {copy.cookies}
+            </button>
             <span>•</span>
             <a href="#contact" className="hover:text-white transition-colors">{copy.contact}</a>
           </div>
