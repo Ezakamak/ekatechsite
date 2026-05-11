@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useAnimationControls } from "motion/react";
 import logo from "../../imports/View_recent_photos.png";
 
 type LoaderProps = {
@@ -66,24 +66,54 @@ export function Loader({ show }: LoaderProps) {
   const [impact, setImpact] = useState(0);
   const [burst, setBurst] = useState(false);
 
+  const boxControls = useAnimationControls();
+
   useEffect(() => {
     if (!show) return;
+
+    boxControls.set({
+      y: 0,
+      scale: 1,
+      rotate: 0,
+      opacity: 1,
+    });
 
     const impactTimers = drops.map((drop) =>
       window.setTimeout(() => {
         setImpact((value) => value + 1);
+
+        boxControls.start({
+          y: [0, 9, -4, 2, 0],
+          scale: [1, 1.08, 0.96, 1.02, 1],
+          rotate: [0, -1.4, 1.2, -0.5, 0],
+          transition: {
+            duration: 0.32,
+            ease: "easeOut",
+          },
+        });
       }, (drop.delay + 0.62) * 1000)
     );
 
     const burstTimer = window.setTimeout(() => {
       setBurst(true);
+
+      boxControls.start({
+        y: [0, 4, -2],
+        scale: [1, 1.18, 0.15],
+        rotate: [0, -3, 8],
+        opacity: [1, 1, 0],
+        transition: {
+          duration: 0.45,
+          ease: "easeOut",
+        },
+      });
     }, 2650);
 
     return () => {
       impactTimers.forEach((timer) => window.clearTimeout(timer));
       window.clearTimeout(burstTimer);
     };
-  }, [show]);
+  }, [show, boxControls]);
 
   const fillPercent = Math.min((impact / drops.length) * 100, 100);
 
@@ -97,6 +127,7 @@ export function Loader({ show }: LoaderProps) {
           transition={{ duration: 0.7, ease: "easeInOut" }}
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.2),transparent_48%)]" />
+
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#111_1px,transparent_1px),linear-gradient(to_bottom,#111_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20" />
 
           <div className="relative w-80 h-80 flex items-center justify-center">
@@ -158,7 +189,6 @@ export function Loader({ show }: LoaderProps) {
               ))}
 
             <motion.div
-              key={burst ? "burst" : impact}
               className="relative z-10 flex items-center justify-center w-40 h-40 rounded-3xl border border-white/10 bg-white/[0.035] backdrop-blur-xl shadow-[0_0_60px_rgba(139,92,246,0.25)] overflow-hidden"
               initial={{
                 y: 0,
@@ -166,30 +196,7 @@ export function Loader({ show }: LoaderProps) {
                 rotate: 0,
                 opacity: 1,
               }}
-              animate={
-                burst
-                  ? {
-                      y: [0, 4, -2],
-                      scale: [1, 1.18, 0.15],
-                      rotate: [0, -3, 8],
-                      opacity: [1, 1, 0],
-                    }
-                  : impact === 0
-                    ? {
-                        y: 0,
-                        scale: 1,
-                        rotate: 0,
-                      }
-                    : {
-                        y: [0, 9, -4, 2, 0],
-                        scale: [1, 1.08, 0.96, 1.02, 1],
-                        rotate: [0, -1.4, 1.2, -0.5, 0],
-                      }
-              }
-              transition={{
-                duration: burst ? 0.45 : 0.32,
-                ease: "easeOut",
-              }}
+              animate={boxControls}
             >
               <motion.div
                 className="absolute bottom-0 left-0 right-0 bg-[linear-gradient(to_top,rgba(0,212,255,0.28),rgba(139,92,246,0.16))]"
@@ -205,7 +212,11 @@ export function Loader({ show }: LoaderProps) {
               <motion.div
                 className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,212,255,0.18),transparent_62%)]"
                 animate={{
-                  opacity: burst ? [0.4, 1, 0] : impact === 0 ? 0.25 : [0.25, 0.85, 0.25],
+                  opacity: burst
+                    ? [0.4, 1, 0]
+                    : impact === 0
+                      ? 0.25
+                      : [0.25, 0.85, 0.25],
                 }}
                 transition={{
                   duration: burst ? 0.45 : 0.32,
