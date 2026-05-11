@@ -34,6 +34,7 @@ export function Contact() {
           </h2>
           <p className="text-xl text-gray-400 font-light">
             Tell us about your vision and we'll bring it to life
+            (This site is a static site and the message box below does not work)
           </p>
         </motion.div>
 

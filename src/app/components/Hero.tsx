@@ -1,3 +1,4 @@
+import background from "../../imports/photo.png";
 import { motion } from "motion/react";
 import { ArrowRight } from "lucide-react";
 
@@ -6,6 +7,16 @@ export function Hero() {
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black">
       {/* Animated Grid Background */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#1a1a1a_1px,transparent_1px),linear-gradient(to_bottom,#1a1a1a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_50%,black,transparent)]" />
+
+      {/* Background Silhouette Image */}
+      <img
+        src="{logo}"
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover opacity-20 blur-sm pointer-events-none"
+      />
+
+      {/* Dark Overlay */}
+      <div className="absolute inset-0 bg-black/60 pointer-events-none" />
 
       {/* Glow Effect */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-[120px]" />
@@ -46,6 +57,7 @@ export function Hero() {
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           </a>
+
           <a href="#projects">
             <button className="px-8 py-4 rounded-full border border-white/10 text-white hover:bg-white/5 transition-all duration-300 font-medium">
               View Work
