@@ -2,9 +2,36 @@ import { useState } from "react";
 import { motion } from "motion/react";
 import beforeImage from "../../imports/bizco-after.png";
 import afterImage from "../../imports/bizco-before.png";
+import { useLanguage } from "../i18n";
 
 export function BeforeAfter() {
   const [value, setValue] = useState(50);
+  const { language } = useLanguage();
+
+  const copy =
+    language === "tr"
+      ? {
+          eyebrow: "Önce / Sonra",
+          title: "Eskiden geleceğe hazır hale.",
+          subtitle:
+            "Basit bir web sitesinin premium bir dijital deneyime nasıl dönüşebileceğini görmek için kaydırıcıyı sürükle.",
+          before: "Önce",
+          after: "Sonra",
+          aria: "Önce sonra kaydırıcısı",
+          beforeAlt: "Yeniden tasarım öncesi eski BizCo sitesi",
+          afterAlt: "Yeniden tasarım sonrası modern BizCo sitesi",
+        }
+      : {
+          eyebrow: "Before / After",
+          title: "From outdated to future-ready.",
+          subtitle:
+            "Drag the slider to see how a basic website can become a premium digital experience.",
+          before: "Before",
+          after: "After",
+          aria: "Before after slider",
+          beforeAlt: "Outdated BizCo website before redesign",
+          afterAlt: "Modern BizCo website after redesign",
+        };
 
   return (
     <section className="relative overflow-hidden bg-black px-6 py-28">
@@ -18,20 +45,20 @@ export function BeforeAfter() {
           className="mb-10 text-center"
         >
           <p className="mb-4 text-sm uppercase tracking-[0.35em] text-white/40">
-            Before / After
+            {copy.eyebrow}
           </p>
           <h2 className="text-4xl font-semibold tracking-[-0.04em] text-white md:text-6xl">
-            From outdated to future-ready.
+            {copy.title}
           </h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-white/55">
-            Drag the slider to see how a basic website can become a premium digital experience.
+            {copy.subtitle}
           </p>
         </motion.div>
 
         <div className="relative aspect-[16/9] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_0_90px_rgba(0,212,255,0.12)]">
           <img
             src={beforeImage}
-            alt="Outdated BizCo website before redesign"
+            alt={copy.beforeAlt}
             className="absolute inset-0 h-full w-full object-cover"
             draggable={false}
           />
@@ -42,7 +69,7 @@ export function BeforeAfter() {
           >
             <img
               src={afterImage}
-              alt="Modern BizCo website after redesign"
+              alt={copy.afterAlt}
               className="absolute inset-0 h-full w-full object-cover"
               draggable={false}
             />
@@ -58,14 +85,14 @@ export function BeforeAfter() {
           </div>
 
           <div className="pointer-events-none absolute bottom-5 left-5 z-10 rounded-full border border-white/10 bg-black/55 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white/75 backdrop-blur-md">
-            Before
+            {copy.before}
           </div>
           <div className="pointer-events-none absolute bottom-5 right-5 z-10 rounded-full border border-white/10 bg-black/55 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white/75 backdrop-blur-md">
-            After
+            {copy.after}
           </div>
 
           <input
-            aria-label="Before after slider"
+            aria-label={copy.aria}
             type="range"
             min="0"
             max="100"
