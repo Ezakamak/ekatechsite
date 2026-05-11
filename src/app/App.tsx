@@ -5,6 +5,7 @@ import { About } from "./components/About";
 import { Projects } from "./components/Projects";
 import { TechStack } from "./components/TechStack";
 import { CTA } from "./components/CTA";
+import { ReactionTime } from "./components/ReactionTime";
 import { Contact } from "./components/Contact";
 import { Footer } from "./components/Footer";
 import { Loader } from "./components/Loader";
@@ -31,6 +32,7 @@ export default function App() {
         <Projects />
         <TechStack />
         <CTA />
+        <ReactionTime />
         <Contact />
         <Footer />
       </div>
