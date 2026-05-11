@@ -12,11 +12,11 @@ export function Hero() {
       <img
         src={background}
         alt=""
-        className="absolute inset-0 w-full h-full object-cover opacity-20 blur-sm pointer-events-none"
+        className="absolute inset-0 w-full h-full object-cover opacity-70 blur-sm pointer-events-none"
       />
 
       {/* Dark Overlay */}
-      <div className="absolute inset-0 bg-black/60 pointer-events-none" />
+      <div className="absolute inset-0 bg-black/25 pointer-events-none" />
 
       {/* Glow Effect */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-[120px]" />
