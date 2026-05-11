@@ -11,9 +11,10 @@ export function Projects() {
   const copy =
     language === "tr"
       ? {
-          heading: "Öne Çıkan İşler",
-          subtitle: "Fikirleri etkileyici dijital deneyimlere dönüştürüyoruz",
-          view: "Projeyi Gör",
+          heading: "Konsept Projeler",
+          subtitle: "Gerçek müşteri iddiası olmadan, fikirleri etkileyici dijital deneyimlere dönüştüren demo çalışmalar",
+          view: "Konsepti Gör",
+          badge: "Konsept Proje",
           projects: [
             {
               title: "Neural Analytics Platformu",
@@ -36,9 +37,10 @@ export function Projects() {
           ],
         }
       : {
-          heading: "Featured Work",
-          subtitle: "Transforming ideas into exceptional digital experiences",
-          view: "View Project",
+          heading: "Concept Projects",
+          subtitle: "Demo work that shows how ideas can become exceptional digital experiences without claiming real client work",
+          view: "View Concept",
+          badge: "Concept Project",
           projects: [
             {
               title: "Neural Analytics Platform",
@@ -87,8 +89,11 @@ export function Projects() {
               transition={{ duration: 0.6, delay: 0.1 + index * 0.1 }}
               className="group relative overflow-hidden rounded-3xl bg-gradient-to-b from-white/5 to-transparent border border-white/10 hover:border-white/20 transition-all duration-500"
             >
-              <div className="grid md:grid-cols-2 gap-8 p-8">
+              <div className="grid gap-8 p-6 md:grid-cols-2 md:p-8">
                 <div className="flex flex-col justify-center">
+                  <div className="mb-4 w-fit rounded-full border border-[#00D4FF]/25 bg-[#00D4FF]/10 px-4 py-1.5 text-xs uppercase tracking-[0.22em] text-[#00D4FF]">
+                    {copy.badge}
+                  </div>
                   <h3 className="text-3xl text-white mb-4">{project.title}</h3>
                   <p className="text-gray-400 mb-6 font-light leading-relaxed">
                     {project.description}
