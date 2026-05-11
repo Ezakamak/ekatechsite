@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import beforeImage from "../../src/imports/bizco-before.png";
-import afterImage from "../../src/imports/bizco-after.png";
+import beforeImage from "../../imports/bizco-before.png";
+import afterImage from "../../imports/bizco-after.png";
 
 export function BeforeAfter() {
   const [value, setValue] = useState(50);
