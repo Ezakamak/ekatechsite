@@ -3,11 +3,84 @@ import { motion } from "motion/react";
 
 type State = "idle" | "waiting" | "ready" | "result" | "early";
 
+type DriverTier = {
+  name: string;
+  tier: string;
+  note: string;
+};
+
+function getDriverTier(ms: number | null): DriverTier {
+  if (ms === null) {
+    return {
+      name: "",
+      tier: "",
+      note: "",
+    };
+  }
+
+  if (ms <= 160) {
+    return {
+      name: "Max Verstappen",
+      tier: "Elite reaction tier",
+      note: "That was brutally fast.",
+    };
+  }
+
+  if (ms <= 190) {
+    return {
+      name: "Lewis Hamilton",
+      tier: "Champion reaction tier",
+      note: "Sharp, clean, and controlled.",
+    };
+  }
+
+  if (ms <= 220) {
+    return {
+      name: "Fernando Alonso",
+      tier: "Veteran instinct tier",
+      note: "Smart timing, strong reflexes.",
+    };
+  }
+
+  if (ms <= 250) {
+    return {
+      name: "Charles Leclerc",
+      tier: "Qualifying pace tier",
+      note: "Fast enough to look dangerous.",
+    };
+  }
+
+  if (ms <= 280) {
+    return {
+      name: "Lando Norris",
+      tier: "Rapid response tier",
+      note: "Smooth reaction, solid pace.",
+    };
+  }
+
+  if (ms <= 330) {
+    return {
+      name: "Carlos Sainz",
+      tier: "Consistent driver tier",
+      note: "Reliable and steady.",
+    };
+  }
+
+  return {
+    name: "Valtteri Bottas",
+    tier: "Calm driver tier",
+    note: "Steady, but the system was faster.",
+  };
+}
+
 export function ReactionTime() {
   const [state, setState] = useState<State>("idle");
   const [time, setTime] = useState<number | null>(null);
+
   const timer = useRef<number | null>(null);
   const start = useRef(0);
+
+  const driverTier = getDriverTier(time);
 
   const clearTimer = () => {
     if (timer.current) {
@@ -46,7 +119,8 @@ export function ReactionTime() {
     }
 
     if (state === "ready") {
-      setTime(Math.round(performance.now() - start.current));
+      const result = Math.round(performance.now() - start.current);
+      setTime(result);
       setState("result");
     }
   };
@@ -88,17 +162,20 @@ export function ReactionTime() {
           <p className="mb-4 text-sm uppercase tracking-[0.35em] text-white/40">
             Live response demo
           </p>
+
           <h2 className="max-w-3xl text-4xl font-semibold tracking-[-0.04em] text-white md:text-6xl">
             We respond this fast.
           </h2>
+
           <p className="mt-5 max-w-xl text-lg leading-8 text-white/55">
-            When the panel turns cyan, click it and see your reaction time.
+            When the panel turns cyan, click it and see your reaction time. Your
+            result gets matched with a Formula 1 driver tier.
           </p>
         </motion.div>
 
         <motion.button
           onClick={press}
-          className={`relative min-h-[310px] overflow-hidden rounded-[2rem] border p-8 text-center backdrop-blur-xl transition-all active:scale-[0.98] ${
+          className={`relative min-h-[370px] overflow-hidden rounded-[2rem] border p-8 text-center backdrop-blur-xl transition-all active:scale-[0.98] ${
             state === "ready"
               ? "border-[#00D4FF]/60 bg-[#00D4FF]/15 shadow-[0_0_70px_rgba(0,212,255,0.35)]"
               : state === "early"
@@ -110,8 +187,10 @@ export function ReactionTime() {
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
         >
-          <span className="block text-sm uppercase tracking-[0.35em] text-white/45">
-            Reaction time
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.1),transparent_50%)]" />
+
+          <span className="relative z-10 block text-sm uppercase tracking-[0.35em] text-white/45">
+            Reaction speed
           </span>
 
           <motion.span
@@ -119,16 +198,41 @@ export function ReactionTime() {
             initial={{ opacity: 0, y: 10, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.22 }}
-            className="mt-5 block text-5xl font-semibold tracking-[-0.04em] text-white"
+            className="relative z-10 mt-5 block text-5xl font-semibold tracking-[-0.04em] text-white"
           >
             {bigText}
           </motion.span>
 
-          <span className="mx-auto mt-4 block max-w-sm text-sm leading-6 text-white/55">
+          <span className="relative z-10 mx-auto mt-4 block max-w-sm text-sm leading-6 text-white/55">
             {smallText}
           </span>
 
-          <span className="mt-8 inline-flex rounded-full border border-white/10 bg-black/40 px-5 py-3 text-sm text-white/70">
+          {state === "result" && (
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="relative z-10 mx-auto mt-6 max-w-sm rounded-2xl border border-white/10 bg-black/35 px-5 py-4"
+            >
+              <p className="text-xs uppercase tracking-[0.28em] text-white/35">
+                Your F1 match
+              </p>
+
+              <p className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
+                You are {driverTier.name}.
+              </p>
+
+              <p className="mt-2 text-sm text-[#00D4FF]">
+                {driverTier.tier}
+              </p>
+
+              <p className="mt-1 text-sm text-white/45">
+                {driverTier.note}
+              </p>
+            </motion.div>
+          )}
+
+          <span className="relative z-10 mt-8 inline-flex rounded-full border border-white/10 bg-black/40 px-5 py-3 text-sm text-white/70">
             {state === "idle"
               ? "Start test"
               : state === "waiting"
