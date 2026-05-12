@@ -54,6 +54,28 @@ export async function onRequestGet(context: any) {
       .prepare("SELECT COUNT(*) AS count FROM sessions WHERE expires_at > datetime('now')")
       .first();
 
+    let customerRatingSummary = { averageRating: 0, ratedCompletedProjects: 0 };
+
+    try {
+      const ratingRow = await context.env.DB
+        .prepare(`
+          SELECT
+            ROUND(AVG(project_feedback.rating), 1) AS average_rating,
+            COUNT(project_feedback.id) AS rated_completed_projects
+          FROM project_feedback
+          JOIN project_requests ON project_feedback.project_request_id = project_requests.id
+          WHERE project_requests.status = 'completed'
+        `)
+        .first();
+
+      customerRatingSummary = {
+        averageRating: Number(ratingRow?.average_rating || 0),
+        ratedCompletedProjects: Number(ratingRow?.rated_completed_projects || 0),
+      };
+    } catch {
+      // project_feedback tablosu henüz yoksa dashboard tamamen bozulmasın.
+    }
+
     return Response.json({
       admin: admin.user,
       stats: {
@@ -63,6 +85,8 @@ export async function onRequestGet(context: any) {
         clientUsers: clientUsers?.count || 0,
         blockedUsers: blockedUsers?.count || 0,
         activeSessions: activeSessions?.count || 0,
+        averageCustomerRating: customerRatingSummary.averageRating,
+        ratedCompletedProjects: customerRatingSummary.ratedCompletedProjects,
       },
       recentUsers: recentUsers?.results || [],
     });
