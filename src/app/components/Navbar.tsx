@@ -61,7 +61,7 @@ export function Navbar() {
     { href: "/#about", label: nav.about },
     { href: "/#services", label: nav.services },
     { href: "/#projects", label: nav.projects },
-    { href: "/admin", label: nav.admin },
+    ...(user?.role === "admin" ? [{ href: "/admin", label: nav.admin }] : []),
     { href: "/#estimator", label: nav.estimator },
     { href: "/#faq", label: nav.faq },
     { href: "/#contact", label: nav.contact },
