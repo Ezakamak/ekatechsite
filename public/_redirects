@@ -1,5 +1,6 @@
 /signin /index.html 200
 /signup /index.html 200
+/forgot-password /index.html 200
 /admin /index.html 200
 /account /index.html 200
 /* /index.html 200
