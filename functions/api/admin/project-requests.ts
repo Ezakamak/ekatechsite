@@ -43,7 +43,21 @@ export async function onRequestPatch(context: any) {
     const body = await context.request.json().catch(() => null);
     const requestId = Number(body?.requestId);
     const status = String(body?.status || "");
-    const allowed = ["new", "reviewed", "contacted", "accepted", "rejected"];
+    const allowed = [
+      "received",
+      "reviewing",
+      "offer_ready",
+      "waiting_approval",
+      "development_started",
+      "revision",
+      "delivered",
+      "completed",
+      "rejected",
+      "new",
+      "reviewed",
+      "contacted",
+      "accepted",
+    ];
 
     if (!requestId || !allowed.includes(status)) {
       return Response.json({ error: "Geçersiz talep veya durum." }, { status: 400 });
