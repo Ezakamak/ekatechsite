@@ -35,10 +35,14 @@ export async function onRequestPatch(context: any) {
   try {
     const body = await context.request.json().catch(() => null);
     const userId = Number(body?.userId);
-    const approved = Number(body?.approved) ? 1 : 0;
+    const action = String(body?.action || "").trim();
 
     if (!userId) {
       return Response.json({ error: "Admin ID gerekli." }, { status: 400 });
+    }
+
+    if (!["approve", "reject"].includes(action)) {
+      return Response.json({ error: "Geçersiz işlem. action approve veya reject olmalı." }, { status: 400 });
     }
 
     const target = await context.env.DB
@@ -59,22 +63,28 @@ export async function onRequestPatch(context: any) {
     }
 
     if (target.role !== "admin") {
-      return Response.json({ error: "Sadece admin hesaplarının profil fotoğrafı onaylanabilir." }, { status: 400 });
+      return Response.json({ error: "Sadece admin hesaplarının profil fotoğrafı onaylanabilir veya reddedilebilir." }, { status: 400 });
     }
 
-    if (approved && !target.avatar_url) {
-      return Response.json({ error: "Profil fotoğrafı yüklemeyen admin onaylanamaz." }, { status: 400 });
+    if (action === "approve") {
+      if (!target.avatar_url) {
+        return Response.json({ error: "Profil fotoğrafı yüklemeyen admin onaylanamaz." }, { status: 400 });
+      }
+
+      await context.env.DB
+        .prepare("UPDATE users SET avatar_approved = 1 WHERE id = ?")
+        .bind(userId)
+        .run();
+
+      return Response.json({ success: true, message: "Admin profil fotoğrafı onaylandı." });
     }
 
     await context.env.DB
-      .prepare("UPDATE users SET avatar_approved = ? WHERE id = ?")
-      .bind(approved, userId)
+      .prepare("UPDATE users SET avatar_url = '', avatar_approved = 0 WHERE id = ?")
+      .bind(userId)
       .run();
 
-    return Response.json({
-      success: true,
-      message: approved ? "Admin profil fotoğrafı onaylandı." : "Admin profil fotoğrafı onayı kaldırıldı.",
-    });
+    return Response.json({ success: true, message: "Admin profil fotoğrafı reddedildi. Adminin yeniden fotoğraf yüklemesi gerekiyor." });
   } catch (error) {
     return Response.json({ error: "Profil fotoğrafı onayı güncellenemedi." }, { status: 500 });
   }
