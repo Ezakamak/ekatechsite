@@ -8,7 +8,7 @@ export async function onRequestGet(context: any) {
 
     const user = await context.env.DB
       .prepare(`
-        SELECT users.id, users.name, users.email
+        SELECT users.id, users.name, users.email, COALESCE(users.role, 'client') AS role
         FROM sessions
         JOIN users ON sessions.user_id = users.id
         WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
@@ -22,7 +22,7 @@ export async function onRequestGet(context: any) {
 
     return Response.json({
       loggedIn: true,
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
   } catch (error) {
     return Response.json({ error: "Sunucu hatası. D1 binding adının DB olduğundan emin ol." }, { status: 500 });
