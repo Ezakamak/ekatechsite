@@ -21,6 +21,7 @@ import { ScrollProgress } from "./components/ScrollProgress";
 import { CommandMenu } from "./components/CommandMenu";
 import { BackToTop } from "./components/BackToTop";
 import { CookieConsent } from "./components/CookieConsent";
+import { AuthPanel } from "./components/AuthPanel";
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,7 @@ export default function App() {
       <div className="min-h-screen bg-black dark">
         <Navbar />
         <Hero />
+        <AuthPanel />
         <About />
         <ServiceDetails />
         <Projects />
