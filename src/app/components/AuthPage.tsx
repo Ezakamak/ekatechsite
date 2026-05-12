@@ -40,6 +40,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         sendCode: "Doğrulama kodu gönder",
         completeSignup: "Kodu doğrula ve hesabı oluştur",
         signin: "Giriş yap",
+        forgotPassword: "Parolamı unuttum",
         switchText: isSignup ? "Zaten hesabın var mı?" : "Hesabın yok mu?",
         switchLink: isSignup ? "Giriş yap" : "Kayıt ol",
         dashboard: "Müşteri paneli",
@@ -63,6 +64,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         sendCode: "Send verification code",
         completeSignup: "Verify code and create account",
         signin: "Sign in",
+        forgotPassword: "Forgot password?",
         switchText: isSignup ? "Already have an account?" : "Need an account?",
         switchLink: isSignup ? "Sign in" : "Sign up",
         dashboard: "Client dashboard",
@@ -271,6 +273,14 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                     autoComplete={isSignup ? "new-password" : "current-password"}
                   />
                 </label>
+              )}
+
+              {!isSignup && (
+                <div className="flex justify-end">
+                  <a href="/forgot-password" className="text-sm text-white/55 underline underline-offset-4 transition-colors hover:text-white">
+                    {copy.forgotPassword}
+                  </a>
+                </div>
               )}
 
               {isSignup && waitingForCode && (
