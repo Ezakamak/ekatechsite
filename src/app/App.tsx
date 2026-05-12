@@ -22,6 +22,7 @@ import { CommandMenu } from "./components/CommandMenu";
 import { BackToTop } from "./components/BackToTop";
 import { CookieConsent } from "./components/CookieConsent";
 import { AuthPanel } from "./components/AuthPanel";
+import { AdminPanel } from "./components/AdminPanel";
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -59,6 +60,7 @@ export default function App() {
         <Navbar />
         <Hero />
         <AuthPanel />
+        <AdminPanel />
         <About />
         <ServiceDetails />
         <Projects />
