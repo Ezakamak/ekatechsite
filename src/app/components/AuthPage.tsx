@@ -91,8 +91,19 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || copy.genericError);
+      const raw = await response.text();
+      let data: any = null;
+
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+
+      if (!response.ok) {
+        const fallback = raw?.slice(0, 160) || copy.genericError;
+        throw new Error(data?.error || `HTTP ${response.status}: ${fallback}`);
+      }
 
       setUser(data.user);
       setPassword("");
