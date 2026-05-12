@@ -18,12 +18,16 @@ export async function onRequestGet(context: any) {
             WHEN lower(users.email) = ? THEN 'owner'
             ELSE COALESCE(users.role, 'client')
           END AS role,
-          users.avatar_url
+          users.avatar_url,
+          CASE
+            WHEN lower(users.email) = ? THEN 1
+            ELSE COALESCE(users.avatar_approved, 0)
+          END AS avatar_approved
         FROM sessions
         JOIN users ON sessions.user_id = users.id
         WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
       `)
-      .bind(OWNER_EMAIL, token)
+      .bind(OWNER_EMAIL, OWNER_EMAIL, token)
       .first();
 
     if (!user) {
@@ -32,10 +36,17 @@ export async function onRequestGet(context: any) {
 
     return Response.json({
       loggedIn: true,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar_url: user.avatar_url || "" },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar_url: user.avatar_url || "",
+        avatar_approved: Number(user.avatar_approved || 0),
+      },
     });
   } catch (error) {
-    return Response.json({ error: "Sunucu hatası. users tablosunda avatar_url kolonu olduğundan ve D1 binding adının DB olduğundan emin ol." }, { status: 500 });
+    return Response.json({ error: "Sunucu hatası. users tablosunda avatar_url ve avatar_approved kolonları olduğundan ve D1 binding adının DB olduğundan emin ol." }, { status: 500 });
   }
 }
 
