@@ -43,6 +43,7 @@ export function AdminPanel() {
   const [requests, setRequests] = useState<ProjectRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [visible, setVisible] = useState(false);
+  const [gateMessage, setGateMessage] = useState("");
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const t = useMemo(
@@ -71,6 +72,10 @@ export function AdminPanel() {
             requestStatus: "Durum",
             saved: "Güncellendi.",
             error: "İşlem başarısız.",
+            gateTitle: "Admin erişimi gerekli",
+            gateSubtitle: "Bu sayfa sadece role değeri admin olan hesaplarda açılır.",
+            signIn: "Giriş yap",
+            home: "Ana sayfa",
           }
         : {
             eyebrow: "Admin panel",
@@ -95,6 +100,10 @@ export function AdminPanel() {
             requestStatus: "Status",
             saved: "Updated.",
             error: "Action failed.",
+            gateTitle: "Admin access required",
+            gateSubtitle: "This page opens only for accounts whose role value is admin.",
+            signIn: "Sign in",
+            home: "Home",
           },
     [language]
   );
@@ -102,17 +111,21 @@ export function AdminPanel() {
   const loadAdminData = async () => {
     setLoading(true);
     setStatus(null);
+    setGateMessage("");
 
     try {
       const overviewResponse = await fetch("/api/admin/overview", { credentials: "same-origin" });
 
       if (overviewResponse.status === 401 || overviewResponse.status === 403) {
+        const data = await overviewResponse.json().catch(() => null);
         setVisible(false);
+        setGateMessage(data?.error || t.gateSubtitle);
         return;
       }
 
       if (!overviewResponse.ok) {
-        throw new Error(t.error);
+        const data = await overviewResponse.json().catch(() => null);
+        throw new Error(data?.error || t.error);
       }
 
       const overviewData = await overviewResponse.json();
@@ -135,6 +148,7 @@ export function AdminPanel() {
       }
     } catch (error) {
       setVisible(false);
+      setGateMessage(error instanceof Error ? error.message : t.error);
     } finally {
       setLoading(false);
     }
@@ -180,7 +194,28 @@ export function AdminPanel() {
     }
   };
 
-  if (!visible && !loading) return null;
+  if (!visible && !loading) {
+    return (
+      <section id="admin" className="relative flex min-h-screen items-center overflow-hidden bg-black px-4 py-24 sm:px-6">
+        <div className="absolute left-1/2 top-28 h-80 w-80 -translate-x-1/2 rounded-full bg-purple-500/10 blur-3xl" />
+        <div className="relative mx-auto max-w-2xl rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 text-center backdrop-blur-xl sm:p-8">
+          <div className="mx-auto mb-4 inline-flex rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-purple-100/80">
+            {t.eyebrow}
+          </div>
+          <h1 className="text-4xl font-medium tracking-tight text-white sm:text-5xl">{t.gateTitle}</h1>
+          <p className="mt-4 text-white/55">{gateMessage || t.gateSubtitle}</p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <a href="/signin" className="rounded-full bg-white px-5 py-3 font-medium text-black transition-all hover:bg-gray-200">
+              {t.signIn}
+            </a>
+            <a href="/" className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 font-medium text-white/80 transition-all hover:bg-white/[0.1]">
+              {t.home}
+            </a>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section id="admin" className="relative overflow-hidden bg-black px-4 py-24 sm:px-6">
