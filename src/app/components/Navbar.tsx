@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { MouseEvent, useState } from "react";
 import logo from "../../imports/View_recent_photos.png";
 import { motion, AnimatePresence } from "motion/react";
 import { Menu, X } from "lucide-react";
@@ -49,6 +49,23 @@ export function Navbar() {
 
   const closeMobile = () => setMobileOpen(false);
 
+  const navigate = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
+    closeMobile();
+
+    if (typeof window === "undefined") return;
+
+    event.preventDefault();
+    window.history.pushState({}, "", href);
+    window.dispatchEvent(new Event("ekatech-route-change"));
+
+    if (href.includes("#")) {
+      const hash = href.split("#")[1];
+      window.setTimeout(() => document.getElementById(hash)?.scrollIntoView({ behavior: "smooth" }), 50);
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   return (
     <motion.nav
       initial={{ y: -100 }}
@@ -57,14 +74,14 @@ export function Navbar() {
       className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-black/45 backdrop-blur-xl"
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <a href="/" onClick={closeMobile} className="flex items-center gap-3">
+        <a href="/" onClick={(event) => navigate(event, "/")} className="flex items-center gap-3">
           <img src={logo} alt="EkaTech Logo" className="h-10 w-10 object-contain" />
           <span className="font-medium tracking-tight text-white">EkaTech</span>
         </a>
 
         <div className="hidden items-center gap-6 lg:flex">
           {links.map((link) => (
-            <a key={link.href} href={link.href} className="text-sm text-gray-400 transition-colors hover:text-white">
+            <a key={link.href} href={link.href} onClick={(event) => navigate(event, link.href)} className="text-sm text-gray-400 transition-colors hover:text-white">
               {link.label}
             </a>
           ))}
@@ -92,16 +109,20 @@ export function Navbar() {
             </button>
           </div>
 
-          <a href="/signin" className="hidden sm:block">
-            <button className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-2 font-medium text-white transition-all duration-300 hover:bg-white/[0.1]">
-              {nav.signin}
-            </button>
+          <a
+            href="/signin"
+            onClick={(event) => navigate(event, "/signin")}
+            className="hidden rounded-full border border-white/10 bg-white/[0.06] px-5 py-2 font-medium text-white transition-all duration-300 hover:bg-white/[0.1] sm:block"
+          >
+            {nav.signin}
           </a>
 
-          <a href="/signup" className="hidden sm:block">
-            <button className="rounded-full bg-white px-5 py-2 font-medium text-black transition-all duration-300 hover:bg-gray-200">
-              {nav.signup}
-            </button>
+          <a
+            href="/signup"
+            onClick={(event) => navigate(event, "/signup")}
+            className="hidden rounded-full bg-white px-5 py-2 font-medium text-black transition-all duration-300 hover:bg-gray-200 sm:block"
+          >
+            {nav.signup}
           </a>
 
           <button
@@ -129,17 +150,17 @@ export function Navbar() {
                 <a
                   key={link.href}
                   href={link.href}
-                  onClick={closeMobile}
+                  onClick={(event) => navigate(event, link.href)}
                   className="rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-white/75 transition-all hover:bg-white/[0.07] hover:text-white"
                 >
                   {link.label}
                 </a>
               ))}
               <div className="grid grid-cols-2 gap-2 pt-2">
-                <a href="/signin" onClick={closeMobile} className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center font-medium text-white">
+                <a href="/signin" onClick={(event) => navigate(event, "/signin")} className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center font-medium text-white">
                   {nav.signin}
                 </a>
-                <a href="/signup" onClick={closeMobile} className="rounded-2xl bg-white px-4 py-3 text-center font-medium text-black">
+                <a href="/signup" onClick={(event) => navigate(event, "/signup")} className="rounded-2xl bg-white px-4 py-3 text-center font-medium text-black">
                   {nav.signup}
                 </a>
               </div>
