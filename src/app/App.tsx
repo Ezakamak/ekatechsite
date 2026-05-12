@@ -25,14 +25,32 @@ import { AdminPanel } from "./components/AdminPanel";
 import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
 import { AuthPage } from "./components/AuthPage";
 
+function getCurrentPath() {
+  if (typeof window === "undefined") return "/";
+  const pathname = window.location.pathname.replace(/\/+$/, "");
+  return pathname || "/";
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [languageLoading, setLanguageLoading] = useState(false);
-  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  const [path, setPath] = useState(getCurrentPath);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setLoading(false), 1600);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleRouteChange = () => setPath(getCurrentPath());
+
+    window.addEventListener("popstate", handleRouteChange);
+    window.addEventListener("ekatech-route-change", handleRouteChange);
+
+    return () => {
+      window.removeEventListener("popstate", handleRouteChange);
+      window.removeEventListener("ekatech-route-change", handleRouteChange);
+    };
   }, []);
 
   useEffect(() => {
