@@ -1,5 +1,7 @@
+const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+
 export async function onRequestGet(context: any) {
-  const admin = await requireAdmin(context);
+  const admin = await requireAdminOrOwner(context);
 
   if (!admin.ok) {
     return Response.json({ error: admin.error }, { status: admin.status });
@@ -22,7 +24,7 @@ export async function onRequestGet(context: any) {
 }
 
 export async function onRequestPost(context: any) {
-  const admin = await requireAdmin(context);
+  const admin = await requireAdminOrOwner(context);
 
   if (!admin.ok) {
     return Response.json({ error: admin.error }, { status: admin.status });
@@ -75,7 +77,7 @@ export async function onRequestPost(context: any) {
 }
 
 export async function onRequestPatch(context: any) {
-  const admin = await requireAdmin(context);
+  const admin = await requireAdminOrOwner(context);
 
   if (!admin.ok) {
     return Response.json({ error: admin.error }, { status: admin.status });
@@ -101,7 +103,7 @@ export async function onRequestPatch(context: any) {
   }
 }
 
-async function requireAdmin(context: any) {
+async function requireAdminOrOwner(context: any) {
   const token = getCookie(context.request.headers.get("Cookie") || "", "session");
 
   if (!token) {
@@ -110,19 +112,26 @@ async function requireAdmin(context: any) {
 
   const user = await context.env.DB
     .prepare(`
-      SELECT users.id, users.name, users.email, COALESCE(users.role, 'client') AS role
+      SELECT
+        users.id,
+        users.name,
+        users.email,
+        CASE
+          WHEN lower(users.email) = ? THEN 'owner'
+          ELSE COALESCE(users.role, 'client')
+        END AS role
       FROM sessions
       JOIN users ON sessions.user_id = users.id
       WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
     `)
-    .bind(token)
+    .bind(OWNER_EMAIL, token)
     .first();
 
   if (!user) {
     return { ok: false, status: 401, error: "Oturum geçersiz." };
   }
 
-  if (user.role !== "admin") {
+  if (user.role !== "admin" && user.role !== "owner") {
     return { ok: false, status: 403, error: "Bu alan sadece yöneticiler içindir." };
   }
 
