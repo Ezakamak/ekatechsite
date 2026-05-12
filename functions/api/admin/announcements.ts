@@ -30,6 +30,10 @@ export async function onRequestPost(context: any) {
     return Response.json({ error: admin.error }, { status: admin.status });
   }
 
+  if (!canMutateAdminData(admin.user)) {
+    return Response.json({ error: "Duyuru yönetmek için profil fotoğrafı yüklemeli ve owner onayı almalısın. Şimdilik paneli sadece görüntüleyebilirsin." }, { status: 403 });
+  }
+
   try {
     const body = await context.request.json().catch(() => null);
     const announcementType = String(body?.announcement_type || "").trim();
@@ -83,6 +87,10 @@ export async function onRequestPatch(context: any) {
     return Response.json({ error: admin.error }, { status: admin.status });
   }
 
+  if (!canMutateAdminData(admin.user)) {
+    return Response.json({ error: "Duyuru yönetmek için profil fotoğrafı yüklemeli ve owner onayı almalısın. Şimdilik paneli sadece görüntüleyebilirsin." }, { status: 403 });
+  }
+
   try {
     const body = await context.request.json().catch(() => null);
     const id = Number(body?.id);
@@ -103,6 +111,12 @@ export async function onRequestPatch(context: any) {
   }
 }
 
+function canMutateAdminData(user: any) {
+  if (user.role === "owner") return true;
+  if (user.role !== "admin") return false;
+  return Boolean(user.avatar_url) && Number(user.avatar_approved || 0) === 1;
+}
+
 async function requireAdminOrOwner(context: any) {
   const token = getCookie(context.request.headers.get("Cookie") || "", "session");
 
@@ -116,6 +130,11 @@ async function requireAdminOrOwner(context: any) {
         users.id,
         users.name,
         users.email,
+        users.avatar_url,
+        CASE
+          WHEN lower(users.email) = ? THEN 1
+          ELSE COALESCE(users.avatar_approved, 0)
+        END AS avatar_approved,
         CASE
           WHEN lower(users.email) = ? THEN 'owner'
           ELSE COALESCE(users.role, 'client')
@@ -124,11 +143,15 @@ async function requireAdminOrOwner(context: any) {
       JOIN users ON sessions.user_id = users.id
       WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
     `)
-    .bind(OWNER_EMAIL, token)
+    .bind(OWNER_EMAIL, OWNER_EMAIL, token)
     .first();
 
   if (!user) {
     return { ok: false, status: 401, error: "Oturum geçersiz." };
+  }
+
+  if (user.role === "blocked") {
+    return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   }
 
   if (user.role !== "admin" && user.role !== "owner") {
