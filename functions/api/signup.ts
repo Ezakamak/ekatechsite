@@ -13,6 +13,11 @@ export async function onRequestPost(context: any) {
       return Response.json({ error: "Geçerli bir e-posta gir." }, { status: 400 });
     }
 
+    const limitResult = await checkSimpleLimit(context, `signup:${email}`, 3, 15 * 60);
+    if (!limitResult.ok) {
+      return Response.json({ error: "Bu e-posta için çok sık kayıt denemesi yapıldı. Biraz bekleyip tekrar dene." }, { status: 429 });
+    }
+
     if (password.length < 8) {
       return Response.json({ error: "Şifre en az 8 karakter olmalı." }, { status: 400 });
     }
@@ -93,6 +98,36 @@ async function sendVerificationCode(context: any, email: string, name: string, c
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new Error(`Doğrulama e-postası gönderilemedi. Resend HTTP ${response.status}: ${detail.slice(0, 160)}`);
+  }
+}
+
+async function checkSimpleLimit(context: any, key: string, limit: number, windowSeconds: number) {
+  try {
+    const now = Date.now();
+    const resetAt = new Date(now + windowSeconds * 1000).toISOString();
+    const existing = await context.env.DB
+      .prepare("SELECT count, reset_at FROM rate_limits WHERE key = ?")
+      .bind(key)
+      .first();
+
+    if (!existing || new Date(existing.reset_at).getTime() <= now) {
+      await context.env.DB
+        .prepare("INSERT OR REPLACE INTO rate_limits (key, count, reset_at) VALUES (?, 1, ?)")
+        .bind(key, resetAt)
+        .run();
+      return { ok: true };
+    }
+
+    if (Number(existing.count || 0) >= limit) return { ok: false };
+
+    await context.env.DB
+      .prepare("UPDATE rate_limits SET count = count + 1 WHERE key = ?")
+      .bind(key)
+      .run();
+
+    return { ok: true };
+  } catch {
+    return { ok: true };
   }
 }
 
