@@ -17,8 +17,8 @@ export async function onRequestPost(context: any) {
       return Response.json({ error: "Sadece görsel dosyası yükleyebilirsin." }, { status: 400 });
     }
 
-    if (avatarUrl.length > 550000) {
-      return Response.json({ error: "Fotoğraf çok büyük. Daha küçük bir görsel seç." }, { status: 413 });
+    if (avatarUrl.length > 250000) {
+      return Response.json({ error: "Fotoğraf çok büyük. Daha küçük/kırpılmış bir görsel seç." }, { status: 413 });
     }
 
     await context.env.DB
@@ -28,7 +28,8 @@ export async function onRequestPost(context: any) {
 
     return Response.json({ success: true, message: "Profil fotoğrafı güncellendi.", avatar_url: avatarUrl });
   } catch (error) {
-    return Response.json({ error: "Profil fotoğrafı kaydedilemedi. users tablosuna avatar_url kolonu eklediğinden emin ol." }, { status: 500 });
+    const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
+    return Response.json({ error: `Profil fotoğrafı kaydedilemedi: ${detail}` }, { status: 500 });
   }
 }
 
@@ -47,7 +48,8 @@ export async function onRequestDelete(context: any) {
 
     return Response.json({ success: true, message: "Profil fotoğrafı kaldırıldı." });
   } catch (error) {
-    return Response.json({ error: "Profil fotoğrafı kaldırılamadı." }, { status: 500 });
+    const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
+    return Response.json({ error: `Profil fotoğrafı kaldırılamadı: ${detail}` }, { status: 500 });
   }
 }
 
