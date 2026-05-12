@@ -1,4 +1,8 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+const BROWSER_COOKIE = "ekatech_browser_id";
+const OAUTH_ADD_COOKIE = "ekatech_oauth_add";
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+const SESSION_SECONDS = 60 * 60 * 24 * 30;
 
 type GoogleUserInfo = {
   sub: string;
@@ -13,7 +17,10 @@ export async function onRequestGet(context: any) {
     const url = new URL(context.request.url);
     const code = url.searchParams.get("code") || "";
     const state = url.searchParams.get("state") || "";
-    const savedState = getCookie(context.request.headers.get("Cookie") || "", "google_oauth_state") || "";
+    const cookieHeader = context.request.headers.get("Cookie") || "";
+    const savedState = getCookie(cookieHeader, "google_oauth_state") || "";
+    const browserId = getCookie(cookieHeader, BROWSER_COOKIE) || crypto.randomUUID();
+    const addMode = getCookie(cookieHeader, OAUTH_ADD_COOKIE) === "1";
 
     if (!code || !state || !savedState || state !== savedState) {
       return redirectWithError(url.origin, "Google oturum doğrulaması geçersiz. Tekrar dene.");
@@ -125,22 +132,34 @@ export async function onRequestGet(context: any) {
     }
 
     const token = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
+    const expiresAt = sqlDate(Date.now() + SESSION_SECONDS * 1000);
 
     await context.env.DB
       .prepare("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)")
       .bind(user.id, token, expiresAt)
       .run();
 
-    const headers = new Headers();
-    headers.set("Location", `${url.origin}/account`);
-    headers.append("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`);
-    headers.append("Set-Cookie", `google_oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+    try {
+      await context.env.DB
+        .prepare("INSERT OR IGNORE INTO account_switch_sessions (browser_id, session_token, created_at, last_used_at) VALUES (?, ?, datetime('now'), datetime('now'))")
+        .bind(browserId, token)
+        .run();
+      await context.env.DB
+        .prepare("UPDATE account_switch_sessions SET last_used_at = datetime('now') WHERE browser_id = ? AND session_token = ?")
+        .bind(browserId, token)
+        .run();
+    } catch {
+      // account_switch_sessions yoksa Google girişini bozma.
+    }
 
-    return new Response(null, {
-      status: 302,
-      headers,
-    });
+    const headers = new Headers();
+    headers.set("Location", `${url.origin}/account${addMode ? "?added=1" : ""}`);
+    headers.append("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_SECONDS}`);
+    headers.append("Set-Cookie", `${BROWSER_COOKIE}=${browserId}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${ONE_YEAR_SECONDS}`);
+    headers.append("Set-Cookie", `google_oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+    headers.append("Set-Cookie", `${OAUTH_ADD_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+
+    return new Response(null, { status: 302, headers });
   } catch (error) {
     const origin = new URL(context.request.url).origin;
     const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
@@ -148,22 +167,21 @@ export async function onRequestGet(context: any) {
   }
 }
 
+function sqlDate(ms: number) {
+  return new Date(ms).toISOString().slice(0, 19).replace("T", " ");
+}
+
 function redirectWithError(origin: string, message: string) {
   const headers = new Headers();
   headers.set("Location", `${origin}/signin?error=${encodeURIComponent(message)}`);
   headers.append("Set-Cookie", `google_oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+  headers.append("Set-Cookie", `${OAUTH_ADD_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
 
-  return new Response(null, {
-    status: 302,
-    headers,
-  });
+  return new Response(null, { status: 302, headers });
 }
 
 function getCookie(cookieHeader: string, name: string) {
-  return cookieHeader
-    .split("; ")
-    .find((row) => row.startsWith(`${name}=`))
-    ?.split("=")[1];
+  return cookieHeader.split("; ").find((row) => row.startsWith(`${name}=`))?.split("=")[1];
 }
 
 function makeSalt() {
@@ -174,32 +192,13 @@ function makeSalt() {
 
 async function hashValue(value: string, salt: string) {
   const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(value),
-    "PBKDF2",
-    false,
-    ["deriveBits"]
-  );
-
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      hash: "SHA-256",
-      salt: encoder.encode(salt),
-      iterations: 60000,
-    },
-    keyMaterial,
-    256
-  );
-
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(value), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: encoder.encode(salt), iterations: 60000 }, keyMaterial, 256);
   return bytesToBase64(new Uint8Array(bits));
 }
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
   return btoa(binary);
 }
