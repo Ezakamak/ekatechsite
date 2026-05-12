@@ -25,6 +25,8 @@ import { AdminPanel } from "./components/AdminPanel";
 import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
 import { AuthPage } from "./components/AuthPage";
 import { AccountPage } from "./components/AccountPage";
+import { AnnouncementAdmin } from "./components/AnnouncementAdmin";
+import { AnnouncementPopup } from "./components/AnnouncementPopup";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -82,6 +84,7 @@ export default function App() {
       <CommandMenu />
       <BackToTop />
       <CookieConsent />
+      <AnnouncementPopup />
       <div className="min-h-screen bg-black dark">
         <Navbar />
 
@@ -90,7 +93,14 @@ export default function App() {
         ) : isSignUp ? (
           <AuthPage mode="signup" />
         ) : isAdmin ? (
-          <AdminPanel />
+          <>
+            <AdminPanel />
+            <div className="bg-black px-4 pb-24 sm:px-6">
+              <div className="mx-auto max-w-7xl">
+                <AnnouncementAdmin />
+              </div>
+            </div>
+          </>
         ) : isAccount ? (
           <AccountPage />
         ) : (
