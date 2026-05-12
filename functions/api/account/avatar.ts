@@ -1,3 +1,5 @@
+const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+
 export async function onRequestPost(context: any) {
   try {
     const user = await requireUser(context);
@@ -21,12 +23,22 @@ export async function onRequestPost(context: any) {
       return Response.json({ error: "Fotoğraf çok büyük. Daha küçük/kırpılmış bir görsel seç." }, { status: 413 });
     }
 
+    const isOwner = String(user.user.email).toLowerCase() === OWNER_EMAIL;
+    const shouldApproveImmediately = isOwner || user.user.role === "client";
+
     await context.env.DB
-      .prepare("UPDATE users SET avatar_url = ? WHERE id = ?")
-      .bind(avatarUrl, user.user.id)
+      .prepare("UPDATE users SET avatar_url = ?, avatar_approved = ? WHERE id = ?")
+      .bind(avatarUrl, shouldApproveImmediately ? 1 : 0, user.user.id)
       .run();
 
-    return Response.json({ success: true, message: "Profil fotoğrafı güncellendi.", avatar_url: avatarUrl });
+    return Response.json({
+      success: true,
+      message: shouldApproveImmediately
+        ? "Profil fotoğrafı güncellendi."
+        : "Profil fotoğrafı yüklendi. Sipariş yönetimi için owner onayı bekleniyor.",
+      avatar_url: avatarUrl,
+      avatar_approved: shouldApproveImmediately ? 1 : 0,
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
     return Response.json({ error: `Profil fotoğrafı kaydedilemedi: ${detail}` }, { status: 500 });
@@ -42,7 +54,7 @@ export async function onRequestDelete(context: any) {
     }
 
     await context.env.DB
-      .prepare("UPDATE users SET avatar_url = '' WHERE id = ?")
+      .prepare("UPDATE users SET avatar_url = '', avatar_approved = 0 WHERE id = ?")
       .bind(user.user.id)
       .run();
 
@@ -62,12 +74,19 @@ async function requireUser(context: any) {
 
   const user = await context.env.DB
     .prepare(`
-      SELECT users.id, users.name, users.email, COALESCE(users.role, 'client') AS role
+      SELECT
+        users.id,
+        users.name,
+        users.email,
+        CASE
+          WHEN lower(users.email) = ? THEN 'owner'
+          ELSE COALESCE(users.role, 'client')
+        END AS role
       FROM sessions
       JOIN users ON sessions.user_id = users.id
       WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
     `)
-    .bind(token)
+    .bind(OWNER_EMAIL, token)
     .first();
 
   if (!user) {
