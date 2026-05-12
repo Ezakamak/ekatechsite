@@ -34,7 +34,28 @@ type Overview = {
   recentUsers: User[];
 };
 
-const requestStatuses = ["new", "reviewed", "contacted", "accepted", "rejected"];
+const requestStatuses = [
+  { value: "received", label: "Talep alındı" },
+  { value: "reviewing", label: "İnceleniyor" },
+  { value: "offer_ready", label: "Teklif hazırlandı" },
+  { value: "waiting_approval", label: "Onay bekliyor" },
+  { value: "development_started", label: "Geliştirme başladı" },
+  { value: "revision", label: "Revize" },
+  { value: "delivered", label: "Teslim edildi" },
+  { value: "completed", label: "Tamamlandı" },
+  { value: "rejected", label: "Reddedildi" },
+];
+
+const legacyStatusLabels: Record<string, string> = {
+  new: "Talep alındı",
+  reviewed: "İnceleniyor",
+  contacted: "Teklif hazırlandı",
+  accepted: "Onay bekliyor",
+};
+
+function getStatusLabel(status: string) {
+  return requestStatuses.find((item) => item.value === status)?.label || legacyStatusLabels[status] || status;
+}
 
 export function AdminPanel() {
   const { language } = useLanguage();
@@ -57,19 +78,11 @@ export function AdminPanel() {
             admins: "Admin",
             clients: "Client",
             activeSessions: "Aktif oturum",
-            recentUsers: "Son kullanıcılar",
             allUsers: "Kullanıcı yönetimi",
             requests: "Proje talepleri",
             noRequests: "Henüz proje talebi yok.",
-            role: "Rol",
-            email: "E-posta",
-            user: "Kullanıcı",
-            created: "Tarih",
-            project: "Proje",
-            type: "Tür",
             budget: "Bütçe",
             deadline: "Deadline",
-            requestStatus: "Durum",
             saved: "Güncellendi.",
             error: "İşlem başarısız.",
             gateTitle: "Admin erişimi gerekli",
@@ -85,19 +98,11 @@ export function AdminPanel() {
             admins: "Admins",
             clients: "Clients",
             activeSessions: "Active sessions",
-            recentUsers: "Recent users",
             allUsers: "User management",
             requests: "Project requests",
             noRequests: "No project requests yet.",
-            role: "Role",
-            email: "Email",
-            user: "User",
-            created: "Date",
-            project: "Project",
-            type: "Type",
             budget: "Budget",
             deadline: "Deadline",
-            requestStatus: "Status",
             saved: "Updated.",
             error: "Action failed.",
             gateTitle: "Admin access required",
@@ -186,12 +191,13 @@ export function AdminPanel() {
         body: JSON.stringify({ requestId, status: nextStatus }),
       });
 
-      if (!response.ok) throw new Error(t.error);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || t.error);
 
       setStatus({ type: "success", message: t.saved });
       await loadAdminData();
-    } catch {
-      setStatus({ type: "error", message: t.error });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : t.error });
     }
   };
 
@@ -310,6 +316,7 @@ export function AdminPanel() {
                       <div className="flex flex-wrap gap-2 text-xs text-white/45">
                         {request.budget_range && <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.budget}: {request.budget_range}</span>}
                         {request.deadline && <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.deadline}: {request.deadline}</span>}
+                        <span className="rounded-full bg-white/[0.06] px-3 py-1">Durum: {getStatusLabel(request.status)}</span>
                       </div>
                     </div>
 
@@ -319,7 +326,7 @@ export function AdminPanel() {
                       className="rounded-full border border-white/10 bg-black px-4 py-2 text-sm text-white outline-none"
                     >
                       {requestStatuses.map((item) => (
-                        <option key={item} value={item}>{item}</option>
+                        <option key={item.value} value={item.value}>{item.label}</option>
                       ))}
                     </select>
                   </div>
