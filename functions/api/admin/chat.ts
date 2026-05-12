@@ -19,10 +19,10 @@ export async function onRequestGet(context: any) {
           admin_chat_messages.user_id,
           COALESCE(users.name, 'Silinmiş kullanıcı') AS user_name,
           COALESCE(users.email, '') AS user_email,
-          '' AS user_avatar_url,
+          COALESCE(users.avatar_url, '') AS user_avatar_url,
           CASE
             WHEN lower(COALESCE(users.email, '')) = ? THEN 'owner'
-            ELSE 'admin'
+            ELSE COALESCE(users.role, 'admin')
           END AS user_role,
           admin_chat_messages.message,
           admin_chat_messages.created_at
