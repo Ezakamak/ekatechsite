@@ -41,6 +41,8 @@ type Overview = {
     clientUsers: number;
     blockedUsers?: number;
     activeSessions: number;
+    averageCustomerRating?: number;
+    ratedCompletedProjects?: number;
   };
   recentUsers: User[];
 };
@@ -110,7 +112,8 @@ export function AdminPanel() {
             title: "EkaTech kontrol merkezi",
             subtitle: "Kullanıcıları, oturumları ve proje taleplerini tek yerden yönet.",
             totalUsers: "Toplam kullanıcı",
-            owners: "Owner",
+            averageRating: "Ortalama müşteri puanı",
+            ratedProjects: "tamamlanan proje puanlandı",
             admins: "Admin",
             clients: "Client",
             activeSessions: "Aktif oturum",
@@ -144,7 +147,8 @@ export function AdminPanel() {
             title: "EkaTech control center",
             subtitle: "Manage users, sessions and project requests from one place.",
             totalUsers: "Total users",
-            owners: "Owner",
+            averageRating: "Average customer rating",
+            ratedProjects: "completed projects rated",
             admins: "Admins",
             clients: "Clients",
             activeSessions: "Active sessions",
@@ -307,6 +311,9 @@ export function AdminPanel() {
     );
   }
 
+  const averageRating = Number(overview?.stats.averageCustomerRating || 0);
+  const ratedCompletedProjects = Number(overview?.stats.ratedCompletedProjects || 0);
+
   return (
     <section id="admin" className="relative overflow-hidden bg-black px-4 py-24 sm:px-6">
       <div className="absolute inset-x-0 top-0 mx-auto h-px max-w-5xl bg-gradient-to-r from-transparent via-purple-200/20 to-transparent" />
@@ -351,7 +358,7 @@ export function AdminPanel() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label={t.totalUsers} value={overview?.stats.totalUsers ?? 0} />
-          <StatCard label={t.owners} value={overview?.stats.ownerUsers ?? 0} />
+          <StatCard label={t.averageRating} value={averageRating ? averageRating.toFixed(1) : "-"} suffix={averageRating ? "/5" : ""} note={`${ratedCompletedProjects} ${t.ratedProjects}`} />
           <StatCard label={t.admins} value={overview?.stats.adminUsers ?? 0} />
           <StatCard label={t.activeSessions} value={overview?.stats.activeSessions ?? 0} />
         </div>
@@ -490,11 +497,12 @@ export function AdminPanel() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value, suffix = "", note = "" }: { label: string; value: number | string; suffix?: string; note?: string }) {
   return (
     <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl">
       <p className="text-sm text-white/45">{label}</p>
-      <p className="mt-3 text-4xl font-medium text-white">{value}</p>
+      <p className="mt-3 text-4xl font-medium text-white">{value}<span className="text-xl text-white/45">{suffix}</span></p>
+      {note && <p className="mt-2 text-xs text-white/35">{note}</p>}
     </div>
   );
 }
