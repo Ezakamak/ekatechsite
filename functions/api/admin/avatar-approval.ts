@@ -12,8 +12,12 @@ export async function onRequestGet(context: any) {
       .prepare(`
         SELECT id, name, email, avatar_url, COALESCE(avatar_approved, 0) AS avatar_approved, created_at
         FROM users
-        WHERE role = 'admin' AND lower(email) != ?
-        ORDER BY avatar_approved ASC, id DESC
+        WHERE
+          role = 'admin'
+          AND lower(email) != ?
+          AND COALESCE(avatar_url, '') != ''
+          AND COALESCE(avatar_approved, 0) = 0
+        ORDER BY id DESC
         LIMIT 100
       `)
       .bind(OWNER_EMAIL)
@@ -82,10 +86,12 @@ export async function onRequestPatch(context: any) {
         targetType: "user",
         targetId: userId,
         targetLabel: `${target.name} <${target.email}>`,
-        details: "Owner admin profil fotoğrafını onayladı.",
+        details: "Owner admin profil fotoğrafını onayladı. Kayıt onay listesinden kaldırıldı.",
       });
 
-      return Response.json({ success: true, message: "Admin profil fotoğrafı onaylandı." });
+      await notify(context, userId, "Profil fotoğrafın onaylandı", "Artık admin panelinde sipariş yönetebilirsin.", "/admin");
+
+      return Response.json({ success: true, message: "Admin profil fotoğrafı onaylandı ve onay listesinden kaldırıldı." });
     }
 
     await context.env.DB
@@ -99,10 +105,12 @@ export async function onRequestPatch(context: any) {
       targetType: "user",
       targetId: userId,
       targetLabel: `${target.name} <${target.email}>`,
-      details: "Owner admin profil fotoğrafını reddetti. Fotoğraf silindi.",
+      details: "Owner admin profil fotoğrafını reddetti. Fotoğraf silindi ve kayıt onay listesinden kaldırıldı.",
     });
 
-    return Response.json({ success: true, message: "Admin profil fotoğrafı reddedildi. Adminin yeniden fotoğraf yüklemesi gerekiyor." });
+    await notify(context, userId, "Profil fotoğrafın reddedildi", "Sipariş yönetebilmek için yeni bir profil fotoğrafı yüklemelisin.", "/account");
+
+    return Response.json({ success: true, message: "Admin profil fotoğrafı reddedildi ve onay listesinden kaldırıldı." });
   } catch (error) {
     return Response.json({ error: "Profil fotoğrafı onayı güncellenemedi." }, { status: 500 });
   }
@@ -134,6 +142,17 @@ async function requireOwner(context: any) {
   }
 
   return { ok: true, user };
+}
+
+async function notify(context: any, userId: number, title: string, body: string, link: string) {
+  try {
+    await context.env.DB
+      .prepare("INSERT INTO notifications (user_id, title, body, link) VALUES (?, ?, ?, ?)")
+      .bind(userId, title, body, link)
+      .run();
+  } catch {
+    // Bildirim tablosu yoksa ana işlem bozulmasın.
+  }
 }
 
 async function writeAuditLog(context: any, entry: any) {
