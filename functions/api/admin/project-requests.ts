@@ -77,7 +77,7 @@ export async function onRequestPatch(context: any) {
     }
 
     const current = await context.env.DB
-      .prepare("SELECT id, status, assigned_admin_id FROM project_requests WHERE id = ?")
+      .prepare("SELECT id, project_name, status, assigned_admin_id FROM project_requests WHERE id = ?")
       .bind(requestId)
       .first();
 
@@ -106,6 +106,15 @@ export async function onRequestPatch(context: any) {
     if (updateResult?.meta?.changes === 0) {
       return Response.json({ error: "Bu proje aynı anda başka bir admin tarafından alınmış veya artık sana atanmış değil." }, { status: 409 });
     }
+
+    await writeAuditLog(context, {
+      actorUserId: admin.user.id,
+      action: "project_status_updated",
+      targetType: "project_request",
+      targetId: requestId,
+      targetLabel: current.project_name || `Project #${requestId}`,
+      details: `${admin.user.name} proje durumunu ${current.status} → ${status} olarak değiştirdi.${nextAssignedAdminId ? " Proje sorumlu admine atandı." : " Proje tekrar tüm adminlere açıldı."}`,
+    });
 
     return Response.json({
       success: true,
@@ -166,6 +175,20 @@ async function requireAdminOrOwner(context: any) {
   }
 
   return { ok: true, user };
+}
+
+async function writeAuditLog(context: any, entry: any) {
+  try {
+    await context.env.DB
+      .prepare(`
+        INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, target_label, details)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .bind(entry.actorUserId, entry.action, entry.targetType, entry.targetId, entry.targetLabel, entry.details)
+      .run();
+  } catch {
+    // Log yazılamazsa ana işlem bozulmasın.
+  }
 }
 
 function getCookie(cookieHeader: string, name: string) {
