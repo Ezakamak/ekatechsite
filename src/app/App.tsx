@@ -31,6 +31,10 @@ import { ForgotPasswordPage } from "./components/ForgotPasswordPage";
 import { AdminAvatarApprovals } from "./components/AdminAvatarApprovals";
 import { AdminAuditLogs } from "./components/AdminAuditLogs";
 import { AdminChat } from "./components/AdminChat";
+import { AdminTodoPanel } from "./components/AdminTodoPanel";
+import { AdminProjectTools } from "./components/AdminProjectTools";
+import { MaintenancePanel } from "./components/MaintenancePanel";
+import { MaintenanceGate } from "./components/MaintenanceGate";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -124,6 +128,7 @@ export default function App() {
       <BackToTop />
       <CookieConsent />
       <AnnouncementPopup />
+      <MaintenanceGate />
       <div className="min-h-screen bg-black dark">
         <Navbar />
 
@@ -138,6 +143,9 @@ export default function App() {
             <AdminPanel />
             <div className="bg-black px-4 pb-24 sm:px-6">
               <div className="mx-auto max-w-7xl space-y-6">
+                <MaintenancePanel />
+                <AdminTodoPanel />
+                <AdminProjectTools />
                 <AdminChat />
                 <AdminAvatarApprovals />
                 <AnnouncementAdmin />
