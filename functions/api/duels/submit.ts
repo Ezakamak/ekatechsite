@@ -51,21 +51,69 @@ export async function onRequestPost(context: any) {
       .all();
 
     const players = results?.results || [];
+    let completed = false;
+    let winner: number | null = null;
+
     if (players.length >= 2) {
       const [a, b] = players;
-      let winner = Number(a.user_id);
+      winner = Number(a.user_id);
       if (Number(b.score_ms) < Number(a.score_ms)) winner = Number(b.user_id);
       if (Number(b.score_ms) === Number(a.score_ms) && Number(b.best_ms) < Number(a.best_ms)) winner = Number(b.user_id);
 
-      await context.env.DB
-        .prepare("UPDATE duel_lobbies SET status = 'completed', winner_user_id = ?, updated_at = datetime('now') WHERE id = ?")
+      const update = await context.env.DB
+        .prepare("UPDATE duel_lobbies SET status = 'completed', winner_user_id = ?, updated_at = datetime('now') WHERE id = ? AND status = 'in_progress'")
         .bind(winner, lobbyId)
         .run();
+
+      completed = Number(update?.meta?.changes || 0) > 0;
+
+      if (completed) {
+        await awardSystemCoins(context, winner, Number(lobby.reward_amount || 0), lobbyId);
+      }
     }
 
-    return Response.json({ success: true, message: players.length >= 2 ? "Düello tamamlandı." : "Sonucun kaydedildi. Rakibin sonucu bekleniyor." });
+    return Response.json({
+      success: true,
+      completed,
+      winner_user_id: winner,
+      message: completed
+        ? `Düello tamamlandı. Kazanan ${lobby.reward_amount} sistem coin ödülü aldı.`
+        : "Sonucun kaydedildi. Rakibin sonucu bekleniyor.",
+    });
   } catch (error) {
     return Response.json({ error: "Düello sonucu kaydedilemedi." }, { status: 500 });
+  }
+}
+
+async function awardSystemCoins(context: any, userId: number, amount: number, lobbyId: number) {
+  if (!amount || amount < 1) return;
+
+  try {
+    const existing = await context.env.DB
+      .prepare("SELECT id FROM coin_transactions WHERE reason = ? LIMIT 1")
+      .bind(`tech_duel:${lobbyId}`)
+      .first();
+
+    if (existing) return;
+
+    await context.env.DB
+      .prepare(`
+        INSERT INTO coin_wallets (user_id, balance, lifetime_earned, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+        ON CONFLICT(user_id) DO UPDATE SET
+          balance = balance + excluded.balance,
+          lifetime_earned = lifetime_earned + excluded.lifetime_earned,
+          updated_at = datetime('now')
+      `)
+      .bind(userId, amount, amount)
+      .run();
+
+    await context.env.DB
+      .prepare("INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)")
+      .bind(userId, amount, `tech_duel:${lobbyId}`)
+      .run();
+  } catch {
+    // Coin tabloları yoksa düello sonucu bozulmasın. Migration sonrası ödüller çalışır.
   }
 }
 
