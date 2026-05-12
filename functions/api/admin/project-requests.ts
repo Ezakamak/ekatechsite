@@ -1,4 +1,5 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+const CLOSED_ADMIN_STATUSES = ["delivered", "rejected"];
 
 export async function onRequestGet(context: any) {
   const admin = await requireAdminOrOwner(context);
@@ -33,7 +34,9 @@ export async function onRequestGet(context: any) {
         JOIN users ON project_requests.user_id = users.id
         LEFT JOIN users AS assigned_admin ON project_requests.assigned_admin_id = assigned_admin.id
         LEFT JOIN project_feedback AS feedback ON feedback.project_request_id = project_requests.id
-        WHERE project_requests.assigned_admin_id IS NULL OR project_requests.assigned_admin_id = ? OR ? = 'owner'
+        WHERE
+          project_requests.status NOT IN ('delivered', 'rejected')
+          AND (project_requests.assigned_admin_id IS NULL OR project_requests.assigned_admin_id = ? OR ? = 'owner')
         ORDER BY
           CASE COALESCE(project_requests.priority, 'normal')
             WHEN 'urgent' THEN 1
@@ -104,7 +107,8 @@ export async function onRequestPatch(context: any) {
 
     const firstStageStatuses = ["received", "new"];
     const shouldRelease = firstStageStatuses.includes(status);
-    const nextAssignedAdminId = shouldRelease ? null : current.assigned_admin_id || admin.user.id;
+    const shouldCloseForAdmin = CLOSED_ADMIN_STATUSES.includes(status);
+    const nextAssignedAdminId = shouldRelease || shouldCloseForAdmin ? null : current.assigned_admin_id || admin.user.id;
 
     const updateResult = await context.env.DB
       .prepare(`
@@ -126,16 +130,18 @@ export async function onRequestPatch(context: any) {
       targetType: "project_request",
       targetId: requestId,
       targetLabel: current.project_name || `Project #${requestId}`,
-      details: `${admin.user.name} proje durumunu ${current.status} → ${status} olarak değiştirdi.${nextAssignedAdminId ? " Proje sorumlu admine atandı." : " Proje tekrar tüm adminlere açıldı."}`,
+      details: `${admin.user.name} proje durumunu ${current.status} → ${status} olarak değiştirdi.${shouldCloseForAdmin ? " Proje admin aktif listesinden kaldırıldı." : nextAssignedAdminId ? " Proje sorumlu admine atandı." : " Proje tekrar tüm adminlere açıldı."}`,
     });
 
     await notify(context, current.user_id, "Proje durumun güncellendi", `${current.project_name} durumu: ${status}`, "/account");
 
     return Response.json({
       success: true,
-      message: nextAssignedAdminId
-        ? "Talep durumu güncellendi ve proje sorumlu admin hesabına atandı."
-        : "Talep ilk aşamaya alındı ve tüm adminlere açıldı.",
+      message: shouldCloseForAdmin
+        ? "Talep durumu güncellendi ve proje admin panelindeki aktif listeden kaldırıldı."
+        : nextAssignedAdminId
+          ? "Talep durumu güncellendi ve proje sorumlu admin hesabına atandı."
+          : "Talep ilk aşamaya alındı ve tüm adminlere açıldı.",
     });
   } catch (error) {
     return Response.json({ error: "Talep güncellenemedi. assigned_admin_id ve avatar_approved kolonlarını kontrol et." }, { status: 500 });
