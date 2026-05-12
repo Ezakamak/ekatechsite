@@ -253,7 +253,7 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
           </div>
           <p className="mt-2 text-sm text-amber-100/80">{currency}</p>
         </div>
-        <CoinIcon size="lg" tone="amber" />
+        <CoinIcon size="md" tone="amber" />
       </div>
       <div className="relative mt-6 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
@@ -274,7 +274,7 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
 function CoinAmount({ amount, locale, size, tone }: { amount: number; locale: string; size: "sm" | "md" | "xl"; tone: "cyan" | "amber" }) {
   const formatted = new Intl.NumberFormat(locale).format(amount || 0);
   const textSize = size === "xl" ? "text-5xl" : size === "md" ? "text-2xl" : "text-lg";
-  const iconSize = size === "xl" ? "md" : "xs";
+  const iconSize = size === "xl" ? "sm" : "xs";
 
   return (
     <span className={`inline-flex items-center gap-2 font-semibold tracking-tight text-white ${textSize}`}>
@@ -286,26 +286,24 @@ function CoinAmount({ amount, locale, size, tone }: { amount: number; locale: st
 
 function CoinIcon({ size, tone }: { size: "xs" | "sm" | "md" | "lg"; tone: "cyan" | "amber" }) {
   const wrapperSize =
-    size === "lg" ? "h-16 w-16 rounded-full" :
-    size === "md" ? "h-10 w-10 rounded-full" :
-    size === "sm" ? "h-12 w-12 rounded-full" :
-    "h-6 w-6 rounded-full";
-  const imageSize =
-    size === "lg" ? "h-[132%] w-[132%]" :
-    size === "md" ? "h-[138%] w-[138%]" :
-    size === "sm" ? "h-[136%] w-[136%]" :
-    "h-[145%] w-[145%]";
+    size === "lg" ? "h-14 w-14" :
+    size === "md" ? "h-11 w-11" :
+    size === "sm" ? "h-8 w-8" :
+    "h-5 w-5";
   const glow = tone === "amber" ? "shadow-amber-500/20" : "shadow-cyan-500/20";
-  const ring = tone === "amber" ? "border-amber-300/25" : "border-cyan-300/25";
-  const drop = tone === "amber" ? "drop-shadow-[0_0_18px_rgba(251,191,36,0.5)]" : "drop-shadow-[0_0_14px_rgba(34,211,238,0.45)]";
+  const ring = tone === "amber" ? "border-amber-300/30" : "border-cyan-300/30";
+  const bg = tone === "amber" ? "bg-amber-100/5" : "bg-cyan-100/5";
 
   return (
-    <span className={`inline-flex ${wrapperSize} shrink-0 items-center justify-center overflow-hidden border ${ring} bg-black/30 shadow-2xl ${glow}`}>
-      <img
-        src={coinIcon}
-        alt="Tech Coin"
-        className={`${imageSize} max-w-none rounded-full object-cover mix-blend-multiply ${drop}`}
-      />
+    <span className={`inline-flex ${wrapperSize} shrink-0 items-center justify-center overflow-hidden rounded-full border ${ring} ${bg} p-[2px] shadow-xl ${glow}`}>
+      <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-black/60">
+        <img
+          src={coinIcon}
+          alt="Tech Coin"
+          className="block h-full w-full rounded-full object-cover"
+          style={{ clipPath: "circle(50% at 50% 50%)" }}
+        />
+      </span>
     </span>
   );
 }
