@@ -31,27 +31,29 @@ export function AdminAvatarApprovals() {
   const copy = tr
     ? {
         title: "Admin profil fotoğrafı onayları",
-        subtitle: "Adminler sipariş yönetebilmek için profil fotoğrafı yüklemeli ve owner onayı almalıdır.",
+        subtitle: "Adminler sipariş yönetebilmek için profil fotoğrafı yüklemeli ve owner onayı almalıdır. Reddedilen fotoğraf silinir; admin yeniden yükleme yapar.",
         approved: "Onaylı",
         pending: "Onay bekliyor",
         noPhoto: "Fotoğraf yok",
         approve: "Onayla",
-        revoke: "Onayı kaldır",
+        reject: "Reddet",
         refresh: "Yenile",
         empty: "Onaylanacak admin bulunamadı.",
         error: "Profil fotoğrafları alınamadı.",
+        rejectConfirm: "Bu profil fotoğrafı reddedilecek ve admin yeniden fotoğraf yüklemek zorunda kalacak. Emin misin?",
       }
     : {
         title: "Admin profile photo approvals",
-        subtitle: "Admins must upload a profile photo and receive owner approval before managing orders.",
+        subtitle: "Admins must upload a profile photo and receive owner approval before managing orders. Rejected photos are removed, forcing a re-upload.",
         approved: "Approved",
         pending: "Pending approval",
         noPhoto: "No photo",
         approve: "Approve",
-        revoke: "Revoke approval",
+        reject: "Reject",
         refresh: "Refresh",
         empty: "No admins to review.",
         error: "Could not load profile photos.",
+        rejectConfirm: "This profile photo will be rejected and removed. The admin will need to upload a new one. Are you sure?",
       };
 
   const loadAdmins = async () => {
@@ -77,7 +79,9 @@ export function AdminAvatarApprovals() {
     }
   };
 
-  const updateApproval = async (userId: number, approved: boolean) => {
+  const updateApproval = async (userId: number, action: "approve" | "reject") => {
+    if (action === "reject" && !window.confirm(copy.rejectConfirm)) return;
+
     setMessage(null);
 
     try {
@@ -85,12 +89,12 @@ export function AdminAvatarApprovals() {
         method: "PATCH",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, approved: approved ? 1 : 0 }),
+        body: JSON.stringify({ userId, action }),
       });
       const data = await response.json().catch(() => null);
 
       if (!response.ok) throw new Error(data?.error || copy.error);
-      setMessage({ type: "success", text: data?.message || (approved ? copy.approved : copy.pending) });
+      setMessage({ type: "success", text: data?.message || (action === "approve" ? copy.approved : copy.pending) });
       await loadAdmins();
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : copy.error });
@@ -160,7 +164,7 @@ export function AdminAvatarApprovals() {
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => updateApproval(admin.id, true)}
+                  onClick={() => updateApproval(admin.id, "approve")}
                   disabled={!hasPhoto || approved}
                   className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-45"
                 >
@@ -168,11 +172,11 @@ export function AdminAvatarApprovals() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => updateApproval(admin.id, false)}
-                  disabled={!approved}
-                  className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-45"
+                  onClick={() => updateApproval(admin.id, "reject")}
+                  disabled={!hasPhoto}
+                  className="rounded-full border border-red-300/20 bg-red-300/10 px-4 py-2 text-sm font-medium text-red-100 transition-all hover:bg-red-300/15 disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  {copy.revoke}
+                  {copy.reject}
                 </button>
               </div>
             </div>
