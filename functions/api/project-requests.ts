@@ -20,7 +20,7 @@ export async function onRequestPost(context: any) {
     await context.env.DB
       .prepare(`
         INSERT INTO project_requests (user_id, project_name, project_type, budget_range, deadline, description, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'new')
+        VALUES (?, ?, ?, ?, ?, ?, 'received')
       `)
       .bind(user.user.id, projectName, projectType, budgetRange, deadline, description)
       .run();
