@@ -14,6 +14,34 @@ CREATE TABLE IF NOT EXISTS duel_lobbies (
   FOREIGN KEY (winner_user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS duel_rounds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lobby_id INTEGER NOT NULL,
+  round_number INTEGER NOT NULL,
+  signal_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  winner_user_id INTEGER,
+  completed_at TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(lobby_id, round_number),
+  FOREIGN KEY (lobby_id) REFERENCES duel_lobbies(id),
+  FOREIGN KEY (winner_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS duel_round_submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lobby_id INTEGER NOT NULL,
+  round_number INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  ms INTEGER,
+  too_early INTEGER DEFAULT 0,
+  score_ms INTEGER NOT NULL,
+  submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(lobby_id, round_number, user_id),
+  FOREIGN KEY (lobby_id) REFERENCES duel_lobbies(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS duel_results (
   lobby_id INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
@@ -50,6 +78,10 @@ CREATE INDEX IF NOT EXISTS idx_duel_lobbies_status ON duel_lobbies(status);
 CREATE INDEX IF NOT EXISTS idx_duel_lobbies_creator ON duel_lobbies(creator_user_id);
 CREATE INDEX IF NOT EXISTS idx_duel_lobbies_opponent ON duel_lobbies(opponent_user_id);
 CREATE INDEX IF NOT EXISTS idx_duel_lobbies_mode ON duel_lobbies(mode);
+CREATE INDEX IF NOT EXISTS idx_duel_rounds_lobby ON duel_rounds(lobby_id);
+CREATE INDEX IF NOT EXISTS idx_duel_rounds_status ON duel_rounds(status);
+CREATE INDEX IF NOT EXISTS idx_duel_round_submissions_lobby_round ON duel_round_submissions(lobby_id, round_number);
+CREATE INDEX IF NOT EXISTS idx_duel_round_submissions_user ON duel_round_submissions(user_id);
 CREATE INDEX IF NOT EXISTS idx_duel_results_lobby ON duel_results(lobby_id);
 CREATE INDEX IF NOT EXISTS idx_duel_results_user ON duel_results(user_id);
 CREATE INDEX IF NOT EXISTS idx_coin_transactions_user ON coin_transactions(user_id);
