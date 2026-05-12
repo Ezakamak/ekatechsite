@@ -45,6 +45,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         sendCode: "Doğrulama kodu gönder",
         completeSignup: "Kodu doğrula ve hesabı oluştur",
         signin: "Giriş yap",
+        google: "Google ile devam et",
         forgotPassword: "Parolamı unuttum",
         switchText: isSignup ? "Zaten hesabın var mı?" : "Hesabın yok mu?",
         switchLink: isSignup ? "Giriş yap" : "Kayıt ol",
@@ -53,6 +54,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         logout: "Çıkış yap",
         genericError: "Bir hata oluştu.",
         changeEmail: "E-postayı değiştir",
+        or: "veya",
       }
     : {
         eyebrow: isSignup ? "New account" : "Client login",
@@ -69,6 +71,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         sendCode: "Send verification code",
         completeSignup: "Verify code and create account",
         signin: "Sign in",
+        google: "Continue with Google",
         forgotPassword: "Forgot password?",
         switchText: isSignup ? "Already have an account?" : "Need an account?",
         switchLink: isSignup ? "Sign in" : "Sign up",
@@ -77,10 +80,18 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         logout: "Log out",
         genericError: "Something went wrong.",
         changeEmail: "Change email",
+        or: "or",
       };
 
   useEffect(() => {
     let active = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+    if (error) {
+      setStatus({ type: "error", message: error });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
 
     fetch("/api/me", { credentials: "same-origin" })
       .then(async (response) => (response.ok ? response.json() : null))
@@ -240,6 +251,20 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5 rounded-[1.5rem] border border-white/10 bg-black/40 p-6">
+              <a
+                href="/api/auth/google"
+                className="flex w-full items-center justify-center gap-3 rounded-full border border-white/10 bg-white px-5 py-3 font-medium text-black transition-all hover:bg-gray-200"
+              >
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-base font-bold text-black">G</span>
+                {copy.google}
+              </a>
+
+              <div className="flex items-center gap-3 text-xs uppercase tracking-[0.22em] text-white/30">
+                <div className="h-px flex-1 bg-white/10" />
+                {copy.or}
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+
               {isSignup && !waitingForCode && (
                 <label className="block space-y-2">
                   <span className="text-sm text-white/55">{copy.name}</span>
