@@ -9,7 +9,7 @@ export async function onRequestPost(context: any) {
     }
 
     const user = await context.env.DB
-      .prepare("SELECT id, name, email, password_hash, salt, COALESCE(role, 'client') AS role FROM users WHERE email = ?")
+      .prepare("SELECT id, name, email, password_hash, salt, COALESCE(role, 'client') AS role, COALESCE(email_verified, 0) AS email_verified FROM users WHERE email = ?")
       .bind(email)
       .first();
 
@@ -25,6 +25,10 @@ export async function onRequestPost(context: any) {
 
     if (user.role === "blocked") {
       return Response.json({ error: "Bu hesap site erişiminden engellendi." }, { status: 403 });
+    }
+
+    if (!user.email_verified) {
+      return Response.json({ error: "E-posta adresini doğrulamadan giriş yapamazsın." }, { status: 403 });
     }
 
     const token = crypto.randomUUID();
@@ -44,7 +48,8 @@ export async function onRequestPost(context: any) {
       token
     );
   } catch (error) {
-    return Response.json({ error: "Sunucu hatası. D1 binding adının DB olduğundan emin ol." }, { status: 500 });
+    const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
+    return Response.json({ error: `Sunucu hatası: ${detail}` }, { status: 500 });
   }
 }
 
