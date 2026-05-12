@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
+import { Search } from "lucide-react";
 import { useLanguage } from "../i18n";
 
 type User = {
@@ -16,6 +17,8 @@ type ProjectRequest = {
   project_type: string;
   budget_range?: string;
   deadline?: string;
+  target_date?: string;
+  priority?: string;
   description: string;
   status: string;
   created_at?: string;
@@ -25,6 +28,8 @@ type ProjectRequest = {
   assigned_admin_name?: string | null;
   assigned_admin_email?: string | null;
   assigned_admin_avatar_url?: string | null;
+  feedback_rating?: number | null;
+  feedback_comment?: string | null;
 };
 
 type Overview = {
@@ -59,6 +64,13 @@ const legacyStatusLabels: Record<string, string> = {
   accepted: "Onay bekliyor",
 };
 
+const priorityLabels: Record<string, string> = {
+  low: "Düşük",
+  normal: "Normal",
+  high: "Yüksek",
+  urgent: "Acil",
+};
+
 function getStatusLabel(status: string) {
   return requestStatuses.find((item) => item.value === status)?.label || legacyStatusLabels[status] || status;
 }
@@ -82,6 +94,11 @@ export function AdminPanel() {
   const [visible, setVisible] = useState(false);
   const [gateMessage, setGateMessage] = useState("");
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [userSearch, setUserSearch] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("all");
+  const [requestSearch, setRequestSearch] = useState("");
+  const [requestStatusFilter, setRequestStatusFilter] = useState("all");
+  const [requestPriorityFilter, setRequestPriorityFilter] = useState("all");
 
   const isOwner = overview?.admin?.role === "owner";
 
@@ -99,9 +116,12 @@ export function AdminPanel() {
             activeSessions: "Aktif oturum",
             allUsers: "Kullanıcı yönetimi",
             requests: "Proje talepleri",
-            noRequests: "Sana atanmış veya henüz alınmamış proje talebi yok.",
+            noRequests: "Filtreye uyan proje talebi yok.",
+            noUsers: "Filtreye uyan kullanıcı yok.",
             budget: "Bütçe",
-            deadline: "Deadline",
+            deadline: "Hedef",
+            priority: "Öncelik",
+            rating: "Puan",
             saved: "Güncellendi.",
             error: "İşlem başarısız.",
             gateTitle: "Admin erişimi gerekli",
@@ -112,6 +132,12 @@ export function AdminPanel() {
             assignedToYou: "Sana atanmış",
             assignedAdmin: "Sorumlu admin",
             protectedOwner: "Korunan owner hesabı",
+            userSearch: "İsim veya e-posta ara...",
+            projectSearch: "Proje, müşteri veya e-posta ara...",
+            roleFilter: "Rol filtresi",
+            statusFilter: "Durum filtresi",
+            priorityFilter: "Öncelik filtresi",
+            all: "Tümü",
           }
         : {
             eyebrow: "Admin panel",
@@ -124,9 +150,12 @@ export function AdminPanel() {
             activeSessions: "Active sessions",
             allUsers: "User management",
             requests: "Project requests",
-            noRequests: "No unassigned or assigned-to-you project requests yet.",
+            noRequests: "No project requests match the filters.",
+            noUsers: "No users match the filters.",
             budget: "Budget",
-            deadline: "Deadline",
+            deadline: "Target",
+            priority: "Priority",
+            rating: "Rating",
             saved: "Updated.",
             error: "Action failed.",
             gateTitle: "Admin access required",
@@ -137,9 +166,35 @@ export function AdminPanel() {
             assignedToYou: "Assigned to you",
             assignedAdmin: "Assigned admin",
             protectedOwner: "Protected owner account",
+            userSearch: "Search name or email...",
+            projectSearch: "Search project, client or email...",
+            roleFilter: "Role filter",
+            statusFilter: "Status filter",
+            priorityFilter: "Priority filter",
+            all: "All",
           },
     [language]
   );
+
+  const filteredUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase();
+    return users.filter((user) => {
+      const matchesQuery = !query || `${user.name} ${user.email}`.toLowerCase().includes(query);
+      const matchesRole = userRoleFilter === "all" || user.role === userRoleFilter;
+      return matchesQuery && matchesRole;
+    });
+  }, [users, userSearch, userRoleFilter]);
+
+  const filteredRequests = useMemo(() => {
+    const query = requestSearch.trim().toLowerCase();
+    return requests.filter((request) => {
+      const haystack = `${request.project_name} ${request.project_type} ${request.user_name} ${request.user_email}`.toLowerCase();
+      const matchesQuery = !query || haystack.includes(query);
+      const matchesStatus = requestStatusFilter === "all" || request.status === requestStatusFilter;
+      const matchesPriority = requestPriorityFilter === "all" || (request.priority || "normal") === requestPriorityFilter;
+      return matchesQuery && matchesStatus && matchesPriority;
+    });
+  }, [requests, requestSearch, requestStatusFilter, requestPriorityFilter]);
 
   const loadAdminData = async () => {
     setLoading(true);
@@ -303,8 +358,22 @@ export function AdminPanel() {
 
         <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <Panel title={t.allUsers}>
+            <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_0.45fr]">
+              <label className="relative block">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+                <input value={userSearch} onChange={(event) => setUserSearch(event.target.value)} placeholder={t.userSearch} className="w-full rounded-2xl border border-white/10 bg-black/35 py-3 pl-11 pr-4 text-white outline-none placeholder:text-white/25" />
+              </label>
+              <select value={userRoleFilter} onChange={(event) => setUserRoleFilter(event.target.value)} className="rounded-2xl border border-white/10 bg-black px-4 py-3 text-white outline-none">
+                <option value="all">{t.roleFilter}: {t.all}</option>
+                <option value="owner">owner</option>
+                <option value="admin">admin</option>
+                <option value="client">client</option>
+                <option value="blocked">blocked</option>
+              </select>
+            </div>
             <div className="space-y-3">
-              {users.map((user) => {
+              {filteredUsers.length === 0 && <p className="text-white/45">{t.noUsers}</p>}
+              {filteredUsers.map((user) => {
                 const targetIsOwner = user.role === "owner";
                 const targetIsAdmin = user.role === "admin";
                 const canEditTarget = !targetIsOwner && (isOwner || !targetIsAdmin);
@@ -336,9 +405,26 @@ export function AdminPanel() {
           </Panel>
 
           <Panel title={t.requests}>
+            <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_0.45fr_0.45fr]">
+              <label className="relative block">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+                <input value={requestSearch} onChange={(event) => setRequestSearch(event.target.value)} placeholder={t.projectSearch} className="w-full rounded-2xl border border-white/10 bg-black/35 py-3 pl-11 pr-4 text-white outline-none placeholder:text-white/25" />
+              </label>
+              <select value={requestStatusFilter} onChange={(event) => setRequestStatusFilter(event.target.value)} className="rounded-2xl border border-white/10 bg-black px-4 py-3 text-white outline-none">
+                <option value="all">{t.statusFilter}: {t.all}</option>
+                {requestStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+              <select value={requestPriorityFilter} onChange={(event) => setRequestPriorityFilter(event.target.value)} className="rounded-2xl border border-white/10 bg-black px-4 py-3 text-white outline-none">
+                <option value="all">{t.priorityFilter}: {t.all}</option>
+                <option value="low">{priorityLabels.low}</option>
+                <option value="normal">{priorityLabels.normal}</option>
+                <option value="high">{priorityLabels.high}</option>
+                <option value="urgent">{priorityLabels.urgent}</option>
+              </select>
+            </div>
             <div className="space-y-3">
-              {requests.length === 0 && <p className="text-white/45">{t.noRequests}</p>}
-              {requests.map((request) => {
+              {filteredRequests.length === 0 && <p className="text-white/45">{t.noRequests}</p>}
+              {filteredRequests.map((request) => {
                 const isAssigned = Boolean(request.assigned_admin_id);
 
                 return (
@@ -355,7 +441,9 @@ export function AdminPanel() {
                         <p className="text-sm leading-6 text-white/60">{request.description}</p>
                         <div className="flex flex-wrap gap-2 text-xs text-white/45">
                           {request.budget_range && <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.budget}: {request.budget_range}</span>}
-                          {request.deadline && <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.deadline}: {request.deadline}</span>}
+                          {(request.target_date || request.deadline) && <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.deadline}: {request.target_date || request.deadline}</span>}
+                          <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.priority}: {priorityLabels[request.priority || "normal"] || request.priority}</span>
+                          {request.feedback_rating && <span className="rounded-full bg-amber-200/10 px-3 py-1 text-amber-100">{t.rating}: {request.feedback_rating}/5</span>}
                           <span className="rounded-full bg-white/[0.06] px-3 py-1">Durum: {getStatusLabel(request.status)}</span>
                           <span className={`rounded-full px-3 py-1 ${isAssigned ? "bg-purple-300/15 text-purple-100" : "bg-cyan-300/10 text-cyan-100"}`}>
                             {isAssigned ? t.assignedToYou : t.unassigned}
