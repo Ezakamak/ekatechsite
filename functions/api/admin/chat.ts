@@ -17,17 +17,17 @@ export async function onRequestGet(context: any) {
         SELECT
           admin_chat_messages.id,
           admin_chat_messages.user_id,
-          users.name AS user_name,
-          users.email AS user_email,
-          users.avatar_url AS user_avatar_url,
+          COALESCE(users.name, 'Silinmiş kullanıcı') AS user_name,
+          COALESCE(users.email, '') AS user_email,
+          '' AS user_avatar_url,
           CASE
-            WHEN lower(users.email) = ? THEN 'owner'
-            ELSE COALESCE(users.role, 'admin')
+            WHEN lower(COALESCE(users.email, '')) = ? THEN 'owner'
+            ELSE 'admin'
           END AS user_role,
           admin_chat_messages.message,
           admin_chat_messages.created_at
         FROM admin_chat_messages
-        JOIN users ON admin_chat_messages.user_id = users.id
+        LEFT JOIN users ON admin_chat_messages.user_id = users.id
         ORDER BY admin_chat_messages.id DESC
         LIMIT ?
       `)
@@ -36,7 +36,8 @@ export async function onRequestGet(context: any) {
 
     return Response.json({ messages: [...(result?.results || [])].reverse() });
   } catch (error) {
-    return Response.json({ error: "Admin chat mesajları alınamadı. admin_chat_messages tablosunu oluşturduğundan emin ol." }, { status: 500 });
+    const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
+    return Response.json({ error: `Admin chat mesajları alınamadı: ${detail}` }, { status: 500 });
   }
 }
 
@@ -71,7 +72,8 @@ export async function onRequestPost(context: any) {
 
     return Response.json({ success: true, message: "Mesaj gönderildi." });
   } catch (error) {
-    return Response.json({ error: "Mesaj gönderilemedi. admin_chat_messages tablosunu kontrol et." }, { status: 500 });
+    const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
+    return Response.json({ error: `Mesaj gönderilemedi: ${detail}` }, { status: 500 });
   }
 }
 
@@ -101,7 +103,8 @@ export async function onRequestDelete(context: any) {
 
     return Response.json({ success: true, message: "Mesaj silindi." });
   } catch (error) {
-    return Response.json({ error: "Mesaj silinemedi." }, { status: 500 });
+    const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
+    return Response.json({ error: `Mesaj silinemedi: ${detail}` }, { status: 500 });
   }
 }
 
@@ -118,7 +121,6 @@ async function requireAdminOrOwner(context: any) {
         users.id,
         users.name,
         users.email,
-        users.avatar_url,
         CASE
           WHEN lower(users.email) = ? THEN 'owner'
           ELSE COALESCE(users.role, 'client')
