@@ -35,6 +35,7 @@ import { AdminTodoPanel } from "./components/AdminTodoPanel";
 import { AdminProjectTools } from "./components/AdminProjectTools";
 import { MaintenancePanel } from "./components/MaintenancePanel";
 import { MaintenanceGate } from "./components/MaintenanceGate";
+import { OffPage } from "./components/OffPage";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -119,6 +120,7 @@ export default function App() {
   const isForgotPassword = path === "/forgot-password";
   const isAdmin = path === "/admin";
   const isAccount = path === "/account";
+  const isOff = path === "/off";
 
   return (
     <LanguageProvider>
@@ -155,6 +157,8 @@ export default function App() {
           </>
         ) : isAccount ? (
           <AccountPage />
+        ) : isOff ? (
+          <OffPage />
         ) : (
           <>
             <Hero />
