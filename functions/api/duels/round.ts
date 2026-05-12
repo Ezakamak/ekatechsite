@@ -13,10 +13,10 @@ export async function onRequestGet(context: any) {
     if (!lobby) return Response.json({ error: "Lobby bulunamadı." }, { status: 404 });
     if (!isParticipant(lobby, auth.user.id)) return Response.json({ error: "Bu düellonun oyuncusu değilsin." }, { status: 403 });
 
-    await ensureFirstRound(context, lobby);
+    await ensureRoundOneAfterBothReady(context, lobby, auth.user.id);
     return Response.json(await buildRoundPayload(context, lobbyId, auth.user.id));
   } catch (error) {
-    return Response.json({ error: "Round verisi alınamadı. duel_rounds tablolarını kontrol et." }, { status: 500 });
+    return Response.json({ error: "Round verisi alınamadı. duel_round_ready ve duel_rounds tablolarını kontrol et." }, { status: 500 });
   }
 }
 
@@ -42,7 +42,7 @@ export async function onRequestPost(context: any) {
       .first();
 
     if (!currentRound) {
-      await createRound(context, lobbyId, 1);
+      await ensureRoundOneAfterBothReady(context, lobby, auth.user.id);
       return Response.json(await buildRoundPayload(context, lobbyId, auth.user.id));
     }
 
@@ -61,10 +61,15 @@ export async function onRequestPost(context: any) {
       return Response.json(await buildRoundPayload(context, lobbyId, auth.user.id));
     }
 
-    await createRound(context, lobbyId, Number(currentRound.round_number) + 1);
+    const nextRoundNumber = Number(currentRound.round_number) + 1;
+    await markReady(context, lobbyId, nextRoundNumber, auth.user.id);
+    if (await bothPlayersReady(context, lobby, nextRoundNumber)) {
+      await createRound(context, lobbyId, nextRoundNumber);
+    }
+
     return Response.json(await buildRoundPayload(context, lobbyId, auth.user.id));
   } catch (error) {
-    return Response.json({ error: "Sonraki tur başlatılamadı." }, { status: 500 });
+    return Response.json({ error: "Sonraki tur başlatılamadı. duel_round_ready tablosunu kontrol et." }, { status: 500 });
   }
 }
 
@@ -90,13 +95,44 @@ async function getLobby(context: any, lobbyId: number) {
     .first();
 }
 
-async function ensureFirstRound(context: any, lobby: any) {
+async function ensureRoundOneAfterBothReady(context: any, lobby: any, userId: number) {
   if (lobby.status !== "in_progress" || !lobby.opponent_user_id) return;
+
   const existing = await context.env.DB
-    .prepare("SELECT id FROM duel_rounds WHERE lobby_id = ? LIMIT 1")
+    .prepare("SELECT id FROM duel_rounds WHERE lobby_id = ? AND round_number = 1 LIMIT 1")
     .bind(lobby.id)
     .first();
-  if (!existing) await createRound(context, lobby.id, 1);
+  if (existing) return;
+
+  await markReady(context, lobby.id, 1, userId);
+  if (await bothPlayersReady(context, lobby, 1)) {
+    await createRound(context, lobby.id, 1);
+  }
+}
+
+async function markReady(context: any, lobbyId: number, roundNumber: number, userId: number) {
+  await context.env.DB
+    .prepare(`
+      INSERT OR IGNORE INTO duel_round_ready (lobby_id, round_number, user_id, ready_at)
+      VALUES (?, ?, ?, datetime('now'))
+    `)
+    .bind(lobbyId, roundNumber, userId)
+    .run();
+}
+
+async function bothPlayersReady(context: any, lobby: any, roundNumber: number) {
+  if (!lobby.creator_user_id || !lobby.opponent_user_id) return false;
+
+  const row = await context.env.DB
+    .prepare(`
+      SELECT COUNT(DISTINCT user_id) AS ready_count
+      FROM duel_round_ready
+      WHERE lobby_id = ? AND round_number = ? AND user_id IN (?, ?)
+    `)
+    .bind(lobby.id, roundNumber, lobby.creator_user_id, lobby.opponent_user_id)
+    .first();
+
+  return Number(row?.ready_count || 0) >= 2;
 }
 
 async function createRound(context: any, lobbyId: number, roundNumber: number) {
@@ -140,6 +176,17 @@ async function buildRoundPayload(context: any, lobbyId: number, userId: number) 
         .all()
     : { results: [] };
 
+  const pendingRoundNumber = currentRound ? Number(currentRound.round_number) + (currentRound.status === "completed" ? 1 : 0) : 1;
+  const readyRows = await context.env.DB
+    .prepare(`
+      SELECT duel_round_ready.user_id, users.name
+      FROM duel_round_ready
+      JOIN users ON duel_round_ready.user_id = users.id
+      WHERE duel_round_ready.lobby_id = ? AND duel_round_ready.round_number = ?
+    `)
+    .bind(lobbyId, pendingRoundNumber)
+    .all();
+
   const score = await getScore(context, lobbyId);
   const targetWins = lobby ? Math.floor(Number(lobby.round_count) / 2) + 1 : 0;
   const mySubmission = (submissions?.results || []).find((item: any) => Number(item.user_id) === Number(userId)) || null;
@@ -153,6 +200,9 @@ async function buildRoundPayload(context: any, lobbyId: number, userId: number) 
     my_submission: mySubmission,
     score,
     target_wins: targetWins,
+    ready: readyRows?.results || [],
+    ready_count: readyRows?.results?.length || 0,
+    pending_round_number: pendingRoundNumber,
   };
 }
 
