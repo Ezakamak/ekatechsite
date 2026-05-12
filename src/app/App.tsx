@@ -27,6 +27,7 @@ import { AuthPage } from "./components/AuthPage";
 import { AccountPage } from "./components/AccountPage";
 import { AnnouncementAdmin } from "./components/AnnouncementAdmin";
 import { AnnouncementPopup } from "./components/AnnouncementPopup";
+import { ForgotPasswordPage } from "./components/ForgotPasswordPage";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -74,6 +75,7 @@ export default function App() {
 
   const isSignIn = path === "/signin";
   const isSignUp = path === "/signup";
+  const isForgotPassword = path === "/forgot-password";
   const isAdmin = path === "/admin";
   const isAccount = path === "/account";
 
@@ -92,6 +94,8 @@ export default function App() {
           <AuthPage mode="login" />
         ) : isSignUp ? (
           <AuthPage mode="signup" />
+        ) : isForgotPassword ? (
+          <ForgotPasswordPage />
         ) : isAdmin ? (
           <>
             <AdminPanel />
