@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { useLanguage } from "../i18n";
 
@@ -15,9 +15,15 @@ function navigateTo(path: string) {
   window.dispatchEvent(new Event("ekatech-route-change"));
 }
 
+function getSearchFlag(name: string) {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get(name) === "1";
+}
+
 export function AuthPage({ mode }: { mode: AuthMode }) {
   const { language } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,14 +34,20 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
 
   const isSignup = mode === "signup";
   const tr = language === "tr";
+  const addAccountMode = useMemo(() => getSearchFlag("add"), [mode]);
+  const authorizedMode = useMemo(() => getSearchFlag("authorized"), [mode]);
 
   const copy = tr
     ? {
-        eyebrow: isSignup ? "Yeni hesap" : "Müşteri girişi",
-        title: isSignup ? "EkaTech hesabı oluştur" : "EkaTech hesabına giriş yap",
-        subtitle: isSignup
-          ? "Önce e-postana doğrulama kodu gönderilir. Kod doğruysa hesap oluşturulur."
-          : "Proje taleplerini ve müşteri panelini yönetmek için giriş yap.",
+        eyebrow: addAccountMode ? "Hesap ekle" : authorizedMode ? "Yetkili giriş" : isSignup ? "Yeni hesap" : "Müşteri girişi",
+        title: addAccountMode ? "Başka bir hesabı ekle" : authorizedMode ? "Yetkili hesabına giriş yap" : isSignup ? "EkaTech hesabı oluştur" : "EkaTech hesabına giriş yap",
+        subtitle: addAccountMode
+          ? "Mevcut hesabın korunur. Buradan giriş yaptığın hesap, hızlı hesap geçiş listesine eklenir."
+          : authorizedMode
+            ? "Bakım modunu aşmak için admin veya owner hesabınla giriş yap."
+            : isSignup
+              ? "Önce e-postana doğrulama kodu gönderilir. Kod doğruysa hesap oluşturulur."
+              : "Proje taleplerini ve müşteri panelini yönetmek için giriş yap.",
         name: "Ad Soyad",
         email: "E-posta",
         password: "Şifre",
@@ -44,8 +56,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         passwordHint: "En az 8 karakter",
         sendCode: "Doğrulama kodu gönder",
         completeSignup: "Kodu doğrula ve hesabı oluştur",
-        signin: "Giriş yap",
-        google: "Google ile devam et",
+        signin: addAccountMode ? "Hesabı ekle" : "Giriş yap",
+        google: addAccountMode ? "Google ile hesabı ekle" : "Google ile devam et",
         forgotPassword: "Parolamı unuttum",
         switchText: isSignup ? "Zaten hesabın var mı?" : "Hesabın yok mu?",
         switchLink: isSignup ? "Giriş yap" : "Kayıt ol",
@@ -55,13 +67,18 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         genericError: "Bir hata oluştu.",
         changeEmail: "E-postayı değiştir",
         or: "veya",
+        checking: "Oturum kontrol ediliyor...",
       }
     : {
-        eyebrow: isSignup ? "New account" : "Client login",
-        title: isSignup ? "Create your EkaTech account" : "Sign in to EkaTech",
-        subtitle: isSignup
-          ? "A verification code is sent first. The account is created only after the code is confirmed."
-          : "Sign in to manage project requests and client access.",
+        eyebrow: addAccountMode ? "Add account" : authorizedMode ? "Authorized login" : isSignup ? "New account" : "Client login",
+        title: addAccountMode ? "Add another account" : authorizedMode ? "Sign in as authorized user" : isSignup ? "Create your EkaTech account" : "Sign in to EkaTech",
+        subtitle: addAccountMode
+          ? "Your current account is kept. The account you sign into here is added to the quick switcher."
+          : authorizedMode
+            ? "Sign in with an admin or owner account to bypass maintenance mode."
+            : isSignup
+              ? "A verification code is sent first. The account is created only after the code is confirmed."
+              : "Sign in to manage project requests and client access.",
         name: "Full Name",
         email: "Email",
         password: "Password",
@@ -70,8 +87,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         passwordHint: "At least 8 characters",
         sendCode: "Send verification code",
         completeSignup: "Verify code and create account",
-        signin: "Sign in",
-        google: "Continue with Google",
+        signin: addAccountMode ? "Add account" : "Sign in",
+        google: addAccountMode ? "Add with Google" : "Continue with Google",
         forgotPassword: "Forgot password?",
         switchText: isSignup ? "Already have an account?" : "Need an account?",
         switchLink: isSignup ? "Sign in" : "Sign up",
@@ -81,6 +98,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         genericError: "Something went wrong.",
         changeEmail: "Change email",
         or: "or",
+        checking: "Checking session...",
       };
 
   useEffect(() => {
@@ -93,17 +111,29 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       window.history.replaceState({}, "", window.location.pathname);
     }
 
-    fetch("/api/me", { credentials: "same-origin" })
-      .then(async (response) => (response.ok ? response.json() : null))
+    if (addAccountMode || authorizedMode) {
+      setUser(null);
+      setAuthChecked(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    fetch("/api/me", { credentials: "same-origin", cache: "no-store" })
+      .then(async (response) => response.json().catch(() => null))
       .then((data) => {
-        if (active && data?.user) setUser(data.user);
+        if (!active) return;
+        setUser(data?.loggedIn ? data.user : null);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setAuthChecked(true);
+      });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [addAccountMode, authorizedMode]);
 
   const readJson = async (response: Response) => {
     const raw = await response.text();
@@ -123,6 +153,19 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     return data;
   };
 
+  const finishAuth = (nextUser: User | null, message: string) => {
+    if (nextUser) setUser(nextUser);
+    setPassword("");
+    window.dispatchEvent(new Event("ekatech-transition-start"));
+    window.dispatchEvent(new Event("ekatech-auth-change"));
+    setStatus({ type: "success", message });
+
+    window.setTimeout(() => {
+      navigateTo("/account");
+      window.dispatchEvent(new Event("ekatech-transition-end"));
+    }, 450);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
@@ -133,17 +176,15 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         const response = await fetch("/api/complete-signup", {
           method: "POST",
           credentials: "same-origin",
+          cache: "no-store",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, code: verificationCode }),
         });
 
         const data = await readJson(response);
-        setUser(data.user);
-        setPassword("");
         setVerificationCode("");
         setWaitingForCode(false);
-        window.dispatchEvent(new Event("ekatech-auth-change"));
-        setStatus({ type: "success", message: data?.message || copy.completeSignup });
+        finishAuth(data.user, data?.message || copy.completeSignup);
         return;
       }
 
@@ -153,6 +194,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       const response = await fetch(endpoint, {
         method: "POST",
         credentials: "same-origin",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -165,13 +207,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         return;
       }
 
-      if (data?.user) {
-        setUser(data.user);
-        window.dispatchEvent(new Event("ekatech-auth-change"));
-      }
-
-      setPassword("");
-      setStatus({ type: "success", message: data?.message || copy.signin });
+      if (data?.user) finishAuth(data.user, data?.message || copy.signin);
+      else setStatus({ type: "success", message: data?.message || copy.signin });
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : copy.genericError });
     } finally {
@@ -184,7 +221,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     setStatus(null);
 
     try {
-      await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+      await fetch("/api/logout", { method: "POST", credentials: "same-origin", cache: "no-store" });
       setUser(null);
       window.dispatchEvent(new Event("ekatech-auth-change"));
       setStatus({ type: "success", message: tr ? "Çıkış yapıldı." : "Logged out." });
@@ -194,6 +231,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       setLoading(false);
     }
   };
+
+  const googleHref = addAccountMode ? "/api/auth/google?add=1" : "/api/auth/google";
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-20 pt-32 sm:px-6">
@@ -214,9 +253,11 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             <h1 className="text-4xl font-medium tracking-tight text-white sm:text-6xl">{copy.title}</h1>
             <p className="text-lg leading-8 text-white/55">{copy.subtitle}</p>
           </div>
-          <p className="text-sm text-white/45">
-            {copy.switchText} <a href={isSignup ? "/signin" : "/signup"} className="text-white underline underline-offset-4">{copy.switchLink}</a>
-          </p>
+          {!addAccountMode && !authorizedMode && (
+            <p className="text-sm text-white/45">
+              {copy.switchText} <a href={isSignup ? "/signin" : "/signup"} className="text-white underline underline-offset-4">{copy.switchLink}</a>
+            </p>
+          )}
         </motion.div>
 
         <motion.div
@@ -225,7 +266,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
           transition={{ duration: 0.55, delay: 0.1 }}
           className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-4 shadow-2xl shadow-cyan-500/5 backdrop-blur-xl sm:p-6"
         >
-          {user ? (
+          {!authChecked ? (
+            <div className="rounded-[1.5rem] border border-white/10 bg-black/40 p-6 text-white/55">{copy.checking}</div>
+          ) : user && !addAccountMode && !authorizedMode ? (
             <div className="space-y-6 rounded-[1.5rem] border border-white/10 bg-black/40 p-6">
               <div>
                 <p className="text-sm text-cyan-100/70">{copy.dashboard}</p>
@@ -252,7 +295,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5 rounded-[1.5rem] border border-white/10 bg-black/40 p-6">
               <a
-                href="/api/auth/google"
+                href={googleHref}
                 className="flex w-full items-center justify-center gap-3 rounded-full border border-white/10 bg-white px-5 py-3 font-medium text-black transition-all hover:bg-gray-200"
               >
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-base font-bold text-black">G</span>
@@ -305,7 +348,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                 </label>
               )}
 
-              {!isSignup && (
+              {!isSignup && !addAccountMode && (
                 <div className="flex justify-end">
                   <button
                     type="button"
