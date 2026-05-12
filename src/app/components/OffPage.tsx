@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
+import { Coins, Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSync";
 
@@ -10,6 +10,14 @@ type User = {
   email: string;
   role?: string;
   avatar_url?: string;
+};
+
+type Wallet = {
+  currency: string;
+  symbol: string;
+  balance: number;
+  lifetime_earned: number;
+  updated_at?: string | null;
 };
 
 type GameKey = "hub" | "duel";
@@ -24,6 +32,7 @@ export function OffPage() {
   const { language } = useLanguage();
   const tr = language === "tr";
   const [user, setUser] = useState<User | null>(null);
+  const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeGame, setActiveGame] = useState<GameKey>("hub");
 
@@ -47,7 +56,12 @@ export function OffPage() {
         reactionDesc: "Tek kişilik ms ölçme, günlük rekor ve hafif leaderboard modu.",
         bossTitle: "Boss Rush",
         bossDesc: "Coin kaybettirmeyen, görev/enerji tabanlı PvE refleks etkinliği.",
-        minesRemoved: "EkaMines kaldırıldı. OFF içinde şu an güvenli Tech Duel var.",
+        minesRemoved: "EkaMines kaldırıldı. Tech Coin sistemi puan biriktirmek için duruyor.",
+        walletTitle: "Tech Coin cüzdanı",
+        balance: "Bakiye",
+        lifetime: "Toplam kazanılan",
+        currency: "Para birimi",
+        fixedReward: "Tech Duel kazanan ödülü: +50 Tech Coin",
       }
     : {
         loading: "Checking OFF access...",
@@ -68,7 +82,12 @@ export function OffPage() {
         reactionDesc: "Single-player ms tracking, daily records and a lightweight leaderboard mode.",
         bossTitle: "Boss Rush",
         bossDesc: "A non-staking PvE reflex event based on tasks/energy instead of coin loss.",
-        minesRemoved: "EkaMines was removed. OFF currently contains safe Tech Duel.",
+        minesRemoved: "EkaMines was removed. Tech Coin remains for score progression.",
+        walletTitle: "Tech Coin wallet",
+        balance: "Balance",
+        lifetime: "Lifetime earned",
+        currency: "Currency",
+        fixedReward: "Tech Duel winner reward: +50 Tech Coin",
       };
 
   useEffect(() => {
@@ -89,6 +108,31 @@ export function OffPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    fetch("/api/coins", { credentials: "same-origin", cache: "no-store" })
+      .then(async (response) => response.json().catch(() => null))
+      .then((data) => {
+        if (!active || !data) return;
+        setWallet({
+          currency: data.currency || "Tech Coin",
+          symbol: data.symbol || "TC",
+          balance: Number(data.balance || 0),
+          lifetime_earned: Number(data.lifetime_earned || 0),
+          updated_at: data.updated_at || null,
+        });
+      })
+      .catch(() => {
+        if (active) setWallet({ currency: "Tech Coin", symbol: "TC", balance: 0, lifetime_earned: 0 });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const canAccess = user?.role === "admin" || user?.role === "owner";
 
@@ -165,6 +209,22 @@ export function OffPage() {
           </div>
         </motion.section>
 
+        <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+          <CoinWalletCard wallet={wallet} copy={copy} locale={tr ? "tr-TR" : "en-US"} />
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm text-white/40">Reward rule</p>
+                <h2 className="text-2xl font-medium text-white">{copy.fixedReward}</h2>
+              </div>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-white/50">{copy.minesRemoved}</p>
+          </div>
+        </section>
+
         <section className="grid gap-5 lg:grid-cols-3">
           <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("duel")} />
           <GameCard icon={<Zap className="h-6 w-6" />} status={copy.comingSoon} title={copy.reactionTitle} description={copy.reactionDesc} accent="purple" locked />
@@ -172,6 +232,38 @@ export function OffPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy: any; locale: string }) {
+  const balance = new Intl.NumberFormat(locale).format(wallet?.balance || 0);
+  const lifetime = new Intl.NumberFormat(locale).format(wallet?.lifetime_earned || 0);
+  const currency = wallet?.currency || "Tech Coin";
+  const symbol = wallet?.symbol || "TC";
+
+  return (
+    <div className="rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.08] p-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl sm:p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm uppercase tracking-[0.2em] text-amber-100/60">{copy.walletTitle}</p>
+          <h2 className="mt-3 text-5xl font-semibold tracking-tight text-white">{balance}</h2>
+          <p className="mt-2 text-sm text-amber-100/80">{symbol} · {currency}</p>
+        </div>
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-300/25 bg-amber-300/10 text-amber-100">
+          <Coins className="h-7 w-7" />
+        </div>
+      </div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+          <p className="text-xs uppercase tracking-[0.16em] text-white/35">{copy.currency}</p>
+          <p className="mt-2 text-lg font-medium text-white">{currency}</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+          <p className="text-xs uppercase tracking-[0.16em] text-white/35">{copy.lifetime}</p>
+          <p className="mt-2 text-lg font-medium text-white">{lifetime} {symbol}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
