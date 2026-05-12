@@ -20,6 +20,7 @@ export function Navbar() {
   const { language, setLanguage } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [switchingAccountId, setSwitchingAccountId] = useState<number | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [accounts, setAccounts] = useState<SwitchAccount[]>([]);
 
@@ -41,6 +42,7 @@ export function Navbar() {
           switchAccount: "Hesap değiştir",
           addAccount: "Hesap ekle",
           current: "Aktif",
+          switching: "Geçiliyor",
         }
       : {
           about: "About",
@@ -58,6 +60,7 @@ export function Navbar() {
           switchAccount: "Switch account",
           addAccount: "Add account",
           current: "Active",
+          switching: "Switching",
         };
 
   const initials = useMemo(() => {
@@ -143,6 +146,12 @@ export function Navbar() {
   };
 
   const switchAccount = async (userId: number) => {
+    if (switchingAccountId) return;
+
+    setSwitchingAccountId(userId);
+    setAccountMenuOpen(false);
+    window.dispatchEvent(new Event("ekatech-transition-start"));
+
     try {
       const response = await fetch("/api/account-switch", {
         method: "POST",
@@ -151,18 +160,27 @@ export function Navbar() {
         body: JSON.stringify({ userId }),
       });
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        window.dispatchEvent(new Event("ekatech-transition-end"));
+        return;
+      }
 
       const data = await response.json().catch(() => null);
       if (data?.user) {
         setUser(data.user);
-        setAccountMenuOpen(false);
-        window.dispatchEvent(new Event("ekatech-auth-change"));
+        setAccounts((current) => current.map((item) => ({ ...item, active: item.id === data.user.id })));
         window.history.pushState({}, "", "/account");
+        window.dispatchEvent(new Event("ekatech-account-switched"));
+        window.dispatchEvent(new Event("ekatech-auth-change"));
         window.dispatchEvent(new Event("ekatech-route-change"));
+        window.setTimeout(() => window.dispatchEvent(new Event("ekatech-transition-end")), 650);
+      } else {
+        window.dispatchEvent(new Event("ekatech-transition-end"));
       }
     } catch {
-      undefined;
+      window.dispatchEvent(new Event("ekatech-transition-end"));
+    } finally {
+      setSwitchingAccountId(null);
     }
   };
 
@@ -272,14 +290,18 @@ export function Navbar() {
                           type="button"
                           onClick={() => account.active ? undefined : switchAccount(account.id)}
                           className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-white transition-colors hover:bg-white/[0.06] disabled:opacity-70"
-                          disabled={account.active}
+                          disabled={account.active || Boolean(switchingAccountId)}
                         >
                           <Avatar account={account} />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">{account.name}</p>
                             <p className="truncate text-xs text-white/40">{account.email}</p>
                           </div>
-                          {account.active && <span className="rounded-full bg-emerald-300/10 px-2 py-1 text-xs text-emerald-100">{nav.current}</span>}
+                          {switchingAccountId === account.id ? (
+                            <span className="rounded-full bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100">{nav.switching}</span>
+                          ) : account.active ? (
+                            <span className="rounded-full bg-emerald-300/10 px-2 py-1 text-xs text-emerald-100">{nav.current}</span>
+                          ) : null}
                         </button>
                       ))}
                     </div>
