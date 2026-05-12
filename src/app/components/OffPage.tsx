@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 import { useLanguage } from "../i18n";
-import { TechDuelLive } from "./TechDuelLive";
+import { TechDuelSync } from "./TechDuelSync";
 
 type User = {
   id: number;
@@ -73,12 +73,10 @@ export function OffPage() {
 
   useEffect(() => {
     let active = true;
-
     fetch("/api/me", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => response.json().catch(() => null))
       .then((data) => {
-        if (!active) return;
-        setUser(data?.loggedIn ? data.user : null);
+        if (active) setUser(data?.loggedIn ? data.user : null);
       })
       .catch(() => {
         if (active) setUser(null);
@@ -142,7 +140,7 @@ export function OffPage() {
             ← {copy.backHub}
           </button>
         </div>
-        <TechDuelLive />
+        <TechDuelSync />
       </>
     );
   }
@@ -168,31 +166,9 @@ export function OffPage() {
         </motion.section>
 
         <section className="grid gap-5 lg:grid-cols-3">
-          <GameCard
-            icon={<Swords className="h-6 w-6" />}
-            status={copy.available}
-            title={copy.duelTitle}
-            description={copy.duelDesc}
-            accent="cyan"
-            buttonLabel={copy.open}
-            onClick={() => setActiveGame("duel")}
-          />
-          <GameCard
-            icon={<Zap className="h-6 w-6" />}
-            status={copy.comingSoon}
-            title={copy.reactionTitle}
-            description={copy.reactionDesc}
-            accent="purple"
-            locked
-          />
-          <GameCard
-            icon={<Trophy className="h-6 w-6" />}
-            status={copy.comingSoon}
-            title={copy.bossTitle}
-            description={copy.bossDesc}
-            accent="amber"
-            locked
-          />
+          <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("duel")} />
+          <GameCard icon={<Zap className="h-6 w-6" />} status={copy.comingSoon} title={copy.reactionTitle} description={copy.reactionDesc} accent="purple" locked />
+          <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.comingSoon} title={copy.bossTitle} description={copy.bossDesc} accent="amber" locked />
         </section>
       </div>
     </main>
@@ -227,9 +203,7 @@ function GameCard({
   return (
     <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
       <div className="flex items-start justify-between gap-4">
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${accentClasses[accent]}`}>
-          {icon}
-        </div>
+        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${accentClasses[accent]}`}>{icon}</div>
         <span className={`rounded-full border px-3 py-1 text-xs ${locked ? "border-white/10 bg-white/[0.04] text-white/40" : accentClasses[accent]}`}>
           {locked ? <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> {status}</span> : status}
         </span>
@@ -237,9 +211,7 @@ function GameCard({
       <h2 className="mt-5 text-2xl font-medium text-white">{title}</h2>
       <p className="mt-3 min-h-24 text-sm leading-6 text-white/50">{description}</p>
       {locked ? (
-        <button type="button" disabled className="mt-5 w-full rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-medium text-white/35">
-          {status}
-        </button>
+        <button type="button" disabled className="mt-5 w-full rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-medium text-white/35">{status}</button>
       ) : (
         <button type="button" onClick={onClick} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200">
           <Sparkles className="h-4 w-4" /> {buttonLabel}
