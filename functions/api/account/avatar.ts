@@ -31,6 +31,17 @@ export async function onRequestPost(context: any) {
       .bind(avatarUrl, shouldApproveImmediately ? 1 : 0, user.user.id)
       .run();
 
+    await writeAuditLog(context, {
+      actorUserId: user.user.id,
+      action: user.user.role === "admin" ? "admin_avatar_uploaded_pending" : "profile_photo_updated",
+      targetType: "user",
+      targetId: user.user.id,
+      targetLabel: `${user.user.name} <${user.user.email}>`,
+      details: shouldApproveImmediately
+        ? "Profil fotoğrafı güncellendi."
+        : "Admin profil fotoğrafı yükledi; owner onayı bekliyor.",
+    });
+
     return Response.json({
       success: true,
       message: shouldApproveImmediately
@@ -57,6 +68,15 @@ export async function onRequestDelete(context: any) {
       .prepare("UPDATE users SET avatar_url = '', avatar_approved = 0 WHERE id = ?")
       .bind(user.user.id)
       .run();
+
+    await writeAuditLog(context, {
+      actorUserId: user.user.id,
+      action: "profile_photo_removed",
+      targetType: "user",
+      targetId: user.user.id,
+      targetLabel: `${user.user.name} <${user.user.email}>`,
+      details: "Profil fotoğrafı kaldırıldı.",
+    });
 
     return Response.json({ success: true, message: "Profil fotoğrafı kaldırıldı." });
   } catch (error) {
@@ -94,6 +114,20 @@ async function requireUser(context: any) {
   }
 
   return { ok: true, user };
+}
+
+async function writeAuditLog(context: any, entry: any) {
+  try {
+    await context.env.DB
+      .prepare(`
+        INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, target_label, details)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .bind(entry.actorUserId, entry.action, entry.targetType, entry.targetId, entry.targetLabel, entry.details)
+      .run();
+  } catch {
+    // Log yazılamazsa ana işlem bozulmasın.
+  }
 }
 
 function getCookie(cookieHeader: string, name: string) {
