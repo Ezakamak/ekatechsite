@@ -65,13 +65,22 @@ export async function onRequestPost(context: any) {
       return Response.json({ error: "Geçerli bir bitiş zamanı gerekli." }, { status: 400 });
     }
 
-    await context.env.DB
+    const insertResult = await context.env.DB
       .prepare(`
         INSERT INTO announcements (announcement_type, message, image_url, expires_at, is_active)
         VALUES (?, ?, ?, ?, 1)
       `)
       .bind(announcementType, message, imageUrl, expiresAt)
       .run();
+
+    await writeAuditLog(context, {
+      actorUserId: admin.user.id,
+      action: "announcement_created",
+      targetType: "announcement",
+      targetId: insertResult?.meta?.last_row_id || null,
+      targetLabel: announcementType === "message" ? message.slice(0, 80) : "Görsel duyuru",
+      details: `${admin.user.name} ${announcementType === "message" ? "mesaj" : "görsel"} duyurusu oluşturdu. Bitiş: ${expiresAt}`,
+    });
 
     return Response.json({ success: true, message: "Duyuru oluşturuldu." });
   } catch (error) {
@@ -100,10 +109,24 @@ export async function onRequestPatch(context: any) {
       return Response.json({ error: "Duyuru id gerekli." }, { status: 400 });
     }
 
+    const current = await context.env.DB
+      .prepare("SELECT id, announcement_type, message, is_active FROM announcements WHERE id = ?")
+      .bind(id)
+      .first();
+
     await context.env.DB
       .prepare("UPDATE announcements SET is_active = ? WHERE id = ?")
       .bind(isActive, id)
       .run();
+
+    await writeAuditLog(context, {
+      actorUserId: admin.user.id,
+      action: isActive ? "announcement_enabled" : "announcement_disabled",
+      targetType: "announcement",
+      targetId: id,
+      targetLabel: current?.message ? String(current.message).slice(0, 80) : `Duyuru #${id}`,
+      details: `${admin.user.name} duyuru durumunu ${isActive ? "aktif" : "pasif"} yaptı.`,
+    });
 
     return Response.json({ success: true, message: "Duyuru güncellendi." });
   } catch (error) {
@@ -159,6 +182,20 @@ async function requireAdminOrOwner(context: any) {
   }
 
   return { ok: true, user };
+}
+
+async function writeAuditLog(context: any, entry: any) {
+  try {
+    await context.env.DB
+      .prepare(`
+        INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, target_label, details)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .bind(entry.actorUserId, entry.action, entry.targetType, entry.targetId, entry.targetLabel, entry.details)
+      .run();
+  } catch {
+    // Log yazılamazsa ana işlem bozulmasın.
+  }
 }
 
 function getCookie(cookieHeader: string, name: string) {
