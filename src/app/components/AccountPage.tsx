@@ -51,7 +51,7 @@ export function AccountPage() {
   }, [user]);
 
   const loadRequests = () => {
-    fetch("/api/my-project-requests", { credentials: "same-origin" })
+    return fetch("/api/my-project-requests", { credentials: "same-origin" })
       .then(async (response) => {
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(data?.error || "Request failed");
@@ -68,17 +68,40 @@ export function AccountPage() {
   const loadUser = () => {
     return fetch("/api/me", { credentials: "same-origin" })
       .then(async (response) => (response.ok ? response.json() : null))
-      .then((data) => {
+      .then(async (data) => {
         const nextUser = data?.user || null;
         setUser(nextUser);
-        if (nextUser) loadRequests();
+        if (nextUser) await loadRequests();
+        else setRequests([]);
       })
-      .catch(() => setUser(null));
+      .catch(() => {
+        setUser(null);
+        setRequests([]);
+      });
   };
 
   useEffect(() => {
     loadUser().finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const refreshAfterAuthChange = () => {
+      setLoading(true);
+      setStatus(null);
+      loadUser().finally(() => {
+        setLoading(false);
+        window.dispatchEvent(new Event("ekatech-transition-end"));
+      });
+    };
+
+    window.addEventListener("ekatech-auth-change", refreshAfterAuthChange);
+    window.addEventListener("ekatech-account-switched", refreshAfterAuthChange);
+
+    return () => {
+      window.removeEventListener("ekatech-auth-change", refreshAfterAuthChange);
+      window.removeEventListener("ekatech-account-switched", refreshAfterAuthChange);
+    };
+  }, [language]);
 
   useEffect(() => {
     if (!user) return;
@@ -161,6 +184,16 @@ export function AccountPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-20 pt-32 sm:px-6">
+        <div className="mx-auto max-w-6xl rounded-[2rem] border border-white/10 bg-white/[0.045] p-8 text-white/55 backdrop-blur-xl">
+          {tr ? "Hesap bilgileri yükleniyor..." : "Loading account..."}
+        </div>
+      </main>
+    );
+  }
+
   if (!loading && !user) {
     return (
       <main className="relative flex min-h-screen items-center overflow-hidden bg-black px-4 py-24 sm:px-6">
@@ -186,6 +219,7 @@ export function AccountPage() {
 
       <div className="relative mx-auto max-w-6xl space-y-6">
         <motion.div
+          key={user?.id || "guest"}
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55 }}
@@ -263,6 +297,7 @@ export function AccountPage() {
         </motion.div>
 
         <motion.section
+          key={`projects-${user?.id || "guest"}`}
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.1 }}
