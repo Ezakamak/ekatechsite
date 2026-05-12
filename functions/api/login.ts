@@ -8,6 +8,11 @@ export async function onRequestPost(context: any) {
       return Response.json({ error: "E-posta ve şifre gerekli." }, { status: 400 });
     }
 
+    const limitResult = await checkSimpleLimit(context, `login:${email}`, 10, 15 * 60);
+    if (!limitResult.ok) {
+      return Response.json({ error: "Bu e-posta için çok sık giriş denemesi yapıldı. Biraz bekleyip tekrar dene." }, { status: 429 });
+    }
+
     const user = await context.env.DB
       .prepare("SELECT id, name, email, password_hash, salt, COALESCE(role, 'client') AS role, COALESCE(email_verified, 0) AS email_verified FROM users WHERE email = ?")
       .bind(email)
@@ -75,6 +80,36 @@ async function hashPassword(password: string, salt: string) {
   );
 
   return bytesToBase64(new Uint8Array(bits));
+}
+
+async function checkSimpleLimit(context: any, key: string, limit: number, windowSeconds: number) {
+  try {
+    const now = Date.now();
+    const resetAt = new Date(now + windowSeconds * 1000).toISOString();
+    const existing = await context.env.DB
+      .prepare("SELECT count, reset_at FROM rate_limits WHERE key = ?")
+      .bind(key)
+      .first();
+
+    if (!existing || new Date(existing.reset_at).getTime() <= now) {
+      await context.env.DB
+        .prepare("INSERT OR REPLACE INTO rate_limits (key, count, reset_at) VALUES (?, 1, ?)")
+        .bind(key, resetAt)
+        .run();
+      return { ok: true };
+    }
+
+    if (Number(existing.count || 0) >= limit) return { ok: false };
+
+    await context.env.DB
+      .prepare("UPDATE rate_limits SET count = count + 1 WHERE key = ?")
+      .bind(key)
+      .run();
+
+    return { ok: true };
+  } catch {
+    return { ok: true };
+  }
 }
 
 function bytesToBase64(bytes: Uint8Array) {
