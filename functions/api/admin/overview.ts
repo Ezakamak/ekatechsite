@@ -18,6 +18,10 @@ export async function onRequestGet(context: any) {
       .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'client' OR role IS NULL")
       .first();
 
+    const blockedUsers = await context.env.DB
+      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'blocked'")
+      .first();
+
     const recentUsers = await context.env.DB
       .prepare("SELECT id, name, email, COALESCE(role, 'client') AS role, created_at FROM users ORDER BY id DESC LIMIT 6")
       .all();
@@ -32,6 +36,7 @@ export async function onRequestGet(context: any) {
         totalUsers: totalUsers?.count || 0,
         adminUsers: adminUsers?.count || 0,
         clientUsers: clientUsers?.count || 0,
+        blockedUsers: blockedUsers?.count || 0,
         activeSessions: activeSessions?.count || 0,
       },
       recentUsers: recentUsers?.results || [],
@@ -60,6 +65,10 @@ async function requireAdmin(context: any) {
 
   if (!user) {
     return { ok: false, status: 401, error: "Oturum geçersiz." };
+  }
+
+  if (user.role === "blocked") {
+    return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   }
 
   if (user.role !== "admin") {
