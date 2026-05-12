@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Shield, Sparkles, Trophy, Gamepad2, Coins, RotateCcw } from "lucide-react";
+import { Shield, Sparkles, Trophy, Gamepad2, Coins, RotateCcw, Crown } from "lucide-react";
 import { useLanguage } from "../i18n";
 import techCoin from "../../imports/ekatech-coin.png";
 
@@ -9,6 +9,26 @@ type User = {
   name: string;
   email: string;
   role?: string;
+  avatar_url?: string;
+};
+
+type Wallet = {
+  balance: number;
+  lifetime_earned: number;
+  best_round: number;
+  perfect_clears: number;
+  total_rounds: number;
+};
+
+type LeaderboardUser = {
+  id: number;
+  name: string;
+  email: string;
+  avatar_url?: string;
+  balance: number;
+  best_round: number;
+  perfect_clears: number;
+  total_rounds: number;
 };
 
 type CellState = "hidden" | "safe" | "mine";
@@ -17,12 +37,12 @@ type GameState = {
   mineIndexes: number[];
   cells: CellState[];
   openedSafe: number;
-  roundGain: number;
-  status: "ready" | "playing" | "lost" | "perfect";
+  roundPoints: number;
+  status: "playing" | "lost" | "perfect";
 };
 
 const TOTAL_CELLS = 25;
-const BASE_SAFE_REWARD = 5;
+const BASE_SAFE_POINTS = 5;
 
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
@@ -47,7 +67,7 @@ function TechCoinIcon({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
 function CoinAmount({ amount, size = "large" }: { amount: number; size?: "small" | "large" }) {
   return (
     <span className={`inline-flex items-center gap-2 font-medium tracking-tight text-white ${size === "large" ? "text-5xl" : "text-lg"}`}>
-      <span>{amount}</span>
+      <span>{Math.round(amount)}</span>
       <TechCoinIcon size={size === "large" ? "lg" : "sm"} />
     </span>
   );
@@ -71,20 +91,30 @@ function createGame(mineCount: number): GameState {
     mineIndexes: createMines(mineCount),
     cells: Array.from({ length: TOTAL_CELLS }, () => "hidden" as CellState),
     openedSafe: 0,
-    roundGain: 0,
+    roundPoints: 0,
     status: "playing",
   };
 }
 
-function getFairPointMultiplier(mineCount: number, openedSafe: number) {
+function getDifficultyBonus(mineCount: number, openedSafe: number) {
   const safeCells = TOTAL_CELLS - mineCount;
   const safeRatio = safeCells / TOTAL_CELLS;
   const progressRatio = openedSafe / Math.max(1, safeCells);
   const riskBase = 1 / Math.max(0.25, safeRatio);
-  const progressiveBoost = 1 + progressRatio * 0.65;
-  const multiplier = riskBase * progressiveBoost;
+  const progressBoost = 1 + progressRatio * 0.65;
+  const bonus = riskBase * progressBoost;
 
-  return Math.min(5, Math.max(1, multiplier));
+  return Math.min(5, Math.max(1, bonus));
+}
+
+function initials(name: string, email: string) {
+  const source = name || email || "E";
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "E";
 }
 
 export function OffPage() {
@@ -92,14 +122,15 @@ export function OffPage() {
   const tr = language === "tr";
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [balance, setBalance] = useState(100);
-  const [bestRound, setBestRound] = useState(0);
-  const [perfectClears, setPerfectClears] = useState(0);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletError, setWalletError] = useState("");
+  const [wallet, setWallet] = useState<Wallet>({ balance: 100, lifetime_earned: 0, best_round: 0, perfect_clears: 0, total_rounds: 0 });
+  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
   const [mineCount, setMineCount] = useState(5);
   const [game, setGame] = useState<GameState>(() => createGame(5));
 
-  const currentMultiplier = useMemo(() => getFairPointMultiplier(mineCount, game.openedSafe), [mineCount, game.openedSafe]);
-  const nextReward = Math.round(BASE_SAFE_REWARD * currentMultiplier);
+  const difficultyBonus = useMemo(() => getDifficultyBonus(mineCount, game.openedSafe), [mineCount, game.openedSafe]);
+  const nextPoints = Math.round(BASE_SAFE_POINTS * difficultyBonus);
   const safeTarget = TOTAL_CELLS - mineCount;
 
   const copy = tr
@@ -108,55 +139,112 @@ export function OffPage() {
         title: "EkaTech OFF",
         subtitle: "Only for fun. Bu alan sadece admin ve owner hesaplarına görünür.",
         balance: "Tech Coin Bakiyesi",
-        balanceNote: "Tech Coin sadece site içi eğlence puanıdır.",
+        balanceNote: "Tech Coin sadece site içi eğlence puanıdır; gerçek para, ödeme veya transfer değildir.",
         coinDesc: "EkaTech içi eğlence puanı.",
         gameTitle: "EkaMines",
-        gameDesc: "Mayın sayısına göre adil puan çarpanı kullanan admin mini oyunu.",
+        gameDesc: "Mayın sayısına göre zorluk bonusu kullanan admin mini oyunu.",
         bestRound: "En iyi tur",
         perfectClear: "Perfect clear",
         mines: "Mayın",
         safeOpened: "Güvenli açılan",
-        multiplier: "Çarpan",
-        nextReward: "Sıradaki güvenli kutu",
-        roundGain: "Tur kazancı",
+        difficultyBonus: "Zorluk bonusu",
+        nextPoints: "Sıradaki puan",
+        roundPoints: "Tur puanı",
         newRound: "Yeni tur",
-        statusReady: "Hazır",
-        statusPlaying: "Oynanıyor",
-        statusLost: "Mayına bastın, tur bitti.",
+        leaderboard: "Sıralama",
+        lifetimeEarned: "Toplam kazanılan",
+        totalRounds: "Tur sayısı",
+        statusPlaying: "Oynanıyor. Kutuları aç, puan topla.",
+        statusLost: "Mayına bastın, tur bitti. Puanların eksilmedi.",
         statusPerfect: "Perfect Clear! Tüm güvenli kutular açıldı.",
         accessDeniedTitle: "Yetkili erişimi gerekli",
         accessDeniedDesc: "Bu sayfa sadece admin ve owner hesapları için açık.",
         signIn: "Yetkili giriş",
         home: "Ana sayfa",
         loading: "OFF alanı kontrol ediliyor...",
+        walletLoading: "Tech Coin cüzdanı yükleniyor...",
+        d1Hint: "D1 tabloları eksikse d1-tech-coin.sql dosyasını çalıştır.",
       }
     : {
         eyebrow: "Admin-only area",
         title: "EkaTech OFF",
         subtitle: "Only for fun. This area is visible only to admin and owner accounts.",
         balance: "Tech Coin Balance",
-        balanceNote: "Tech Coin is only an internal fun score.",
+        balanceNote: "Tech Coin is only an internal fun score; not real money, payment, or transfer.",
         coinDesc: "Internal EkaTech fun points.",
         gameTitle: "EkaMines",
-        gameDesc: "An admin mini-game with a fair point multiplier based on mine count.",
+        gameDesc: "An admin mini-game with a difficulty bonus based on mine count.",
         bestRound: "Best round",
         perfectClear: "Perfect clear",
         mines: "Mines",
         safeOpened: "Safe opened",
-        multiplier: "Multiplier",
-        nextReward: "Next safe cell",
-        roundGain: "Round gain",
+        difficultyBonus: "Difficulty bonus",
+        nextPoints: "Next points",
+        roundPoints: "Round points",
         newRound: "New round",
-        statusReady: "Ready",
-        statusPlaying: "Playing",
-        statusLost: "Mine opened. Round over.",
+        leaderboard: "Leaderboard",
+        lifetimeEarned: "Lifetime earned",
+        totalRounds: "Total rounds",
+        statusPlaying: "Playing. Open cells and collect points.",
+        statusLost: "Mine opened. Round over. Your points were not reduced.",
         statusPerfect: "Perfect Clear! All safe cells opened.",
         accessDeniedTitle: "Authorized access required",
         accessDeniedDesc: "This page is available only to admin and owner accounts.",
         signIn: "Authorized login",
         home: "Home",
         loading: "Checking OFF access...",
+        walletLoading: "Loading Tech Coin wallet...",
+        d1Hint: "If D1 tables are missing, run d1-tech-coin.sql.",
       };
+
+  const loadWallet = async () => {
+    setWalletLoading(true);
+    setWalletError("");
+
+    try {
+      const response = await fetch("/api/admin/tech-coin", { credentials: "same-origin", cache: "no-store" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Tech Coin failed");
+      if (data?.wallet) setWallet(data.wallet);
+      setLeaderboard(data?.leaderboard || []);
+    } catch (error) {
+      setWalletError(error instanceof Error ? error.message : "Tech Coin failed");
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
+  const recordTechCoin = async (eventType: string, amount: number, roundPoints: number, perfect = false) => {
+    if (amount > 0) {
+      setWallet((current) => ({
+        ...current,
+        balance: current.balance + amount,
+        lifetime_earned: current.lifetime_earned + amount,
+        best_round: Math.max(current.best_round, roundPoints),
+        perfect_clears: current.perfect_clears + (perfect ? 1 : 0),
+        total_rounds: current.total_rounds + (eventType === "perfect_clear" || eventType === "round_end" ? 1 : 0),
+      }));
+    } else if (eventType === "round_end") {
+      setWallet((current) => ({ ...current, best_round: Math.max(current.best_round, roundPoints), total_rounds: current.total_rounds + 1 }));
+    }
+
+    try {
+      const response = await fetch("/api/admin/tech-coin", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventType, amount, roundGain: roundPoints, perfect, details: `EkaMines · mines=${mineCount}` }),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Tech Coin update failed");
+      if (data?.wallet) setWallet(data.wallet);
+      if (eventType === "perfect_clear" || eventType === "round_end") loadWallet();
+    } catch (error) {
+      setWalletError(error instanceof Error ? error.message : "Tech Coin update failed");
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -179,6 +267,10 @@ export function OffPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (user?.role === "admin" || user?.role === "owner") loadWallet();
+  }, [user?.id, user?.role]);
+
   const startNewRound = (nextMineCount = mineCount) => {
     setMineCount(nextMineCount);
     setGame(createGame(nextMineCount));
@@ -195,27 +287,26 @@ export function OffPage() {
         nextCells[mineIndex] = "mine";
       });
       setGame({ ...game, cells: nextCells, status: "lost" });
-      setBestRound((current) => Math.max(current, game.roundGain));
+      recordTechCoin("round_end", 0, game.roundPoints, false);
       return;
     }
 
-    const reward = Math.round(BASE_SAFE_REWARD * getFairPointMultiplier(mineCount, game.openedSafe));
+    const points = Math.round(BASE_SAFE_POINTS * getDifficultyBonus(mineCount, game.openedSafe));
     const nextOpenedSafe = game.openedSafe + 1;
-    const nextRoundGain = game.roundGain + reward;
+    const nextRoundPoints = game.roundPoints + points;
     nextCells[index] = "safe";
 
     if (nextOpenedSafe >= safeTarget) {
       const perfectBonus = Math.round(50 + mineCount * 8);
-      const finalGain = nextRoundGain + perfectBonus;
-      setBalance((current) => current + finalGain);
-      setBestRound((current) => Math.max(current, finalGain));
-      setPerfectClears((current) => current + 1);
-      setGame({ ...game, cells: nextCells, openedSafe: nextOpenedSafe, roundGain: finalGain, status: "perfect" });
+      const totalAdded = points + perfectBonus;
+      const finalRoundPoints = nextRoundPoints + perfectBonus;
+      setGame({ ...game, cells: nextCells, openedSafe: nextOpenedSafe, roundPoints: finalRoundPoints, status: "perfect" });
+      recordTechCoin("perfect_clear", totalAdded, finalRoundPoints, true);
       return;
     }
 
-    setBalance((current) => current + reward);
-    setGame({ ...game, cells: nextCells, openedSafe: nextOpenedSafe, roundGain: nextRoundGain, status: "playing" });
+    setGame({ ...game, cells: nextCells, openedSafe: nextOpenedSafe, roundPoints: nextRoundPoints, status: "playing" });
+    recordTechCoin("safe_cell", points, nextRoundPoints, false);
   };
 
   const canAccess = user?.role === "admin" || user?.role === "owner";
@@ -279,20 +370,22 @@ export function OffPage() {
 
             <div className="rounded-[1.75rem] border border-white/10 bg-black/35 p-6">
               <p className="text-sm text-white/45">{copy.balance}</p>
-              <div className="mt-4"><CoinAmount amount={balance} /></div>
+              <div className="mt-4"><CoinAmount amount={wallet.balance} /></div>
               <p className="mt-4 text-sm leading-6 text-white/40">{copy.balanceNote}</p>
+              {walletLoading && <p className="mt-3 text-xs text-cyan-100/70">{copy.walletLoading}</p>}
+              {walletError && <p className="mt-3 text-xs leading-5 text-red-100">{walletError} · {copy.d1Hint}</p>}
             </div>
           </div>
         </motion.section>
 
         <div className="grid gap-5 md:grid-cols-3">
-          <StatCard icon={<Coins className="h-5 w-5" />} title={copy.roundGain} value={<CoinAmount amount={game.roundGain} size="small" />} desc={`${copy.nextReward}: +${nextReward}`} />
-          <StatCard icon={<Trophy className="h-5 w-5" />} title={copy.bestRound} value={<CoinAmount amount={bestRound} size="small" />} desc={`${copy.perfectClear}: ${perfectClears}`} />
-          <StatCard icon={<Sparkles className="h-5 w-5" />} title={copy.multiplier} value={`${currentMultiplier.toFixed(2)}x`} desc={`${copy.mines}: ${mineCount} · ${copy.safeOpened}: ${game.openedSafe}/${safeTarget}`} />
+          <StatCard icon={<Coins className="h-5 w-5" />} title={copy.roundPoints} value={<CoinAmount amount={game.roundPoints} size="small" />} desc={`${copy.nextPoints}: +${nextPoints}`} />
+          <StatCard icon={<Trophy className="h-5 w-5" />} title={copy.bestRound} value={<CoinAmount amount={wallet.best_round} size="small" />} desc={`${copy.perfectClear}: ${wallet.perfect_clears}`} />
+          <StatCard icon={<Sparkles className="h-5 w-5" />} title={copy.difficultyBonus} value={`${difficultyBonus.toFixed(2)}x`} desc={`${copy.mines}: ${mineCount} · ${copy.safeOpened}: ${game.openedSafe}/${safeTarget}`} />
         </div>
 
         <motion.section initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.12 }} className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 backdrop-blur-xl sm:p-8">
-          <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+          <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
             <div className="space-y-5">
               <div>
                 <p className="flex items-center gap-2 text-sm text-cyan-100/70"><Gamepad2 className="h-4 w-4" /> Internal mini-game</p>
@@ -311,9 +404,9 @@ export function OffPage() {
                   className="mt-4 w-full accent-purple-300"
                 />
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <Metric label={copy.multiplier} value={`${currentMultiplier.toFixed(2)}x`} />
-                  <Metric label={copy.nextReward} value={`+${nextReward}`} />
-                  <Metric label={copy.roundGain} value={`${game.roundGain}`} />
+                  <Metric label={copy.difficultyBonus} value={`${difficultyBonus.toFixed(2)}x`} />
+                  <Metric label={copy.nextPoints} value={`+${nextPoints}`} />
+                  <Metric label={copy.roundPoints} value={`${game.roundPoints}`} />
                   <Metric label={copy.safeOpened} value={`${game.openedSafe}/${safeTarget}`} />
                 </div>
               </div>
@@ -351,6 +444,31 @@ export function OffPage() {
                 );
               })}
             </div>
+          </div>
+        </motion.section>
+
+        <motion.section initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.18 }} className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 backdrop-blur-xl sm:p-8">
+          <div className="flex items-center gap-2">
+            <Crown className="h-5 w-5 text-purple-100" />
+            <h2 className="text-2xl font-medium text-white">{copy.leaderboard}</h2>
+          </div>
+          <div className="mt-5 space-y-2">
+            {leaderboard.map((item, index) => (
+              <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
+                <span className="w-6 text-sm text-white/35">#{index + 1}</span>
+                <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-white text-sm font-semibold text-black">
+                  {item.avatar_url ? <img src={item.avatar_url} alt="" className="h-full w-full object-cover" /> : initials(item.name, item.email)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-white">{item.name}</p>
+                  <p className="truncate text-xs text-white/35">{item.email}</p>
+                </div>
+                <div className="text-right">
+                  <CoinAmount amount={item.balance || 0} size="small" />
+                  <p className="mt-1 text-xs text-white/35">{copy.bestRound}: {item.best_round || 0}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </motion.section>
       </div>
