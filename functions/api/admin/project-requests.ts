@@ -17,18 +17,25 @@ export async function onRequestGet(context: any) {
           project_requests.description,
           project_requests.status,
           project_requests.created_at,
+          project_requests.assigned_admin_id,
           users.name AS user_name,
-          users.email AS user_email
+          users.email AS user_email,
+          assigned_admin.name AS assigned_admin_name,
+          assigned_admin.email AS assigned_admin_email,
+          assigned_admin.avatar_url AS assigned_admin_avatar_url
         FROM project_requests
         JOIN users ON project_requests.user_id = users.id
+        LEFT JOIN users AS assigned_admin ON project_requests.assigned_admin_id = assigned_admin.id
+        WHERE project_requests.assigned_admin_id IS NULL OR project_requests.assigned_admin_id = ?
         ORDER BY project_requests.id DESC
         LIMIT 100
       `)
+      .bind(admin.user.id)
       .all();
 
     return Response.json({ requests: requests?.results || [] });
   } catch (error) {
-    return Response.json({ error: "Proje talepleri alınamadı. project_requests tablosunu oluşturduğundan emin ol." }, { status: 500 });
+    return Response.json({ error: "Proje talepleri alınamadı. project_requests tablosunu ve assigned_admin_id kolonunu kontrol et." }, { status: 500 });
   }
 }
 
@@ -63,14 +70,36 @@ export async function onRequestPatch(context: any) {
       return Response.json({ error: "Geçersiz talep veya durum." }, { status: 400 });
     }
 
+    const current = await context.env.DB
+      .prepare("SELECT id, status, assigned_admin_id FROM project_requests WHERE id = ?")
+      .bind(requestId)
+      .first();
+
+    if (!current) {
+      return Response.json({ error: "Proje talebi bulunamadı." }, { status: 404 });
+    }
+
+    if (current.assigned_admin_id && Number(current.assigned_admin_id) !== Number(admin.user.id)) {
+      return Response.json({ error: "Bu proje başka bir admin tarafından alınmış." }, { status: 409 });
+    }
+
+    const firstStageStatuses = ["received", "new"];
+    const shouldRelease = firstStageStatuses.includes(status);
+    const nextAssignedAdminId = shouldRelease ? null : current.assigned_admin_id || admin.user.id;
+
     await context.env.DB
-      .prepare("UPDATE project_requests SET status = ? WHERE id = ?")
-      .bind(status, requestId)
+      .prepare("UPDATE project_requests SET status = ?, assigned_admin_id = ? WHERE id = ?")
+      .bind(status, nextAssignedAdminId, requestId)
       .run();
 
-    return Response.json({ success: true, message: "Talep durumu güncellendi." });
+    return Response.json({
+      success: true,
+      message: nextAssignedAdminId
+        ? "Talep durumu güncellendi ve proje bu admin hesabına atandı."
+        : "Talep ilk aşamaya alındı ve tüm adminlere açıldı.",
+    });
   } catch (error) {
-    return Response.json({ error: "Talep güncellenemedi." }, { status: 500 });
+    return Response.json({ error: "Talep güncellenemedi. assigned_admin_id kolonunu kontrol et." }, { status: 500 });
   }
 }
 
