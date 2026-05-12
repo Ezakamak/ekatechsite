@@ -72,13 +72,13 @@ export async function onRequestPost(context: any) {
     }
 
     if (action === "meta") {
-      const priority = String(body?.priority || "normal").trim();
+      const manualPriority = body?.priority === undefined ? "" : String(body.priority || "").trim();
       const targetDate = String(body?.targetDate || "").trim();
-      if (!PRIORITIES.includes(priority)) return Response.json({ error: "Geçersiz öncelik." }, { status: 400 });
+      const priority = PRIORITIES.includes(manualPriority) ? manualPriority : getPriorityFromTargetDate(targetDate);
 
       await context.env.DB.prepare("UPDATE project_requests SET priority = ?, target_date = ? WHERE id = ?").bind(priority, targetDate, projectId).run();
-      await notify(context, project.user_id, "Proje planı güncellendi", `${project.project_name} için öncelik veya hedef tarih güncellendi.`, "/account");
-      return Response.json({ success: true, message: "Proje önceliği/hedef tarihi güncellendi." });
+      await notify(context, project.user_id, "Proje planı güncellendi", `${project.project_name} için öncelik ${priority} olarak güncellendi.`, "/account");
+      return Response.json({ success: true, message: `Proje planı güncellendi. Öncelik: ${priority}`, priority });
     }
 
     return Response.json({ error: "Geçersiz işlem." }, { status: 400 });
@@ -86,6 +86,23 @@ export async function onRequestPost(context: any) {
     const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
     return Response.json({ error: `Proje aracı çalışmadı: ${detail}` }, { status: 500 });
   }
+}
+
+function getPriorityFromTargetDate(targetDate: string) {
+  if (!targetDate) return "normal";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const target = new Date(`${targetDate}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return "normal";
+
+  const diffDays = Math.ceil((target.getTime() - today.getTime()) / 86400000);
+
+  if (diffDays <= 3) return "urgent";
+  if (diffDays <= 7) return "high";
+  if (diffDays <= 21) return "normal";
+  return "low";
 }
 
 async function notify(context: any, userId: number, title: string, body: string, link: string) {
