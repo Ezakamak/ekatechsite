@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useLanguage } from "../i18n";
 
@@ -7,6 +7,7 @@ type User = {
   name: string;
   email: string;
   role?: string;
+  avatar_url?: string;
 };
 
 type ProjectRequest = {
@@ -30,9 +31,11 @@ const statusLabels: Record<string, { tr: string; en: string }> = {
 
 export function AccountPage() {
   const { language } = useLanguage();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [requests, setRequests] = useState<ProjectRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [avatarLoading, setAvatarLoading] = useState(false);
   const [requestError, setRequestError] = useState("");
   const [lastUpdated, setLastUpdated] = useState("");
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -64,16 +67,19 @@ export function AccountPage() {
       .catch((error) => setRequestError(error instanceof Error ? error.message : tr ? "Proje durumları alınamadı." : "Could not load project status."));
   };
 
-  useEffect(() => {
-    fetch("/api/me", { credentials: "same-origin" })
+  const loadUser = () => {
+    return fetch("/api/me", { credentials: "same-origin" })
       .then(async (response) => (response.ok ? response.json() : null))
       .then((data) => {
         const nextUser = data?.user || null;
         setUser(nextUser);
         if (nextUser) loadRequests();
       })
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+      .catch(() => setUser(null));
+  };
+
+  useEffect(() => {
+    loadUser().finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -82,6 +88,66 @@ export function AccountPage() {
     const timer = window.setInterval(loadRequests, 10000);
     return () => window.clearInterval(timer);
   }, [user, language]);
+
+  const handleAvatarChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setStatus(null);
+
+    if (!file.type.startsWith("image/")) {
+      setStatus({ type: "error", message: tr ? "Sadece görsel dosyası seçebilirsin." : "Choose an image file only." });
+      return;
+    }
+
+    setAvatarLoading(true);
+
+    try {
+      const avatarUrl = await compressImage(file);
+
+      const response = await fetch("/api/account/avatar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar_url: avatarUrl }),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || (tr ? "Fotoğraf kaydedilemedi." : "Could not save photo."));
+
+      setUser((current) => (current ? { ...current, avatar_url: data.avatar_url || avatarUrl } : current));
+      window.dispatchEvent(new Event("ekatech-auth-change"));
+      setStatus({ type: "success", message: tr ? "Profil fotoğrafı güncellendi." : "Profile photo updated." });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : tr ? "Fotoğraf yüklenemedi." : "Could not upload photo." });
+    } finally {
+      setAvatarLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeAvatar = async () => {
+    setStatus(null);
+    setAvatarLoading(true);
+
+    try {
+      const response = await fetch("/api/account/avatar", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || (tr ? "Fotoğraf kaldırılamadı." : "Could not remove photo."));
+
+      setUser((current) => (current ? { ...current, avatar_url: "" } : current));
+      window.dispatchEvent(new Event("ekatech-auth-change"));
+      setStatus({ type: "success", message: tr ? "Profil fotoğrafı kaldırıldı." : "Profile photo removed." });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : tr ? "Fotoğraf kaldırılamadı." : "Could not remove photo." });
+    } finally {
+      setAvatarLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     setStatus(null);
@@ -128,14 +194,40 @@ export function AccountPage() {
           className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 backdrop-blur-xl sm:p-8"
         >
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white text-2xl font-semibold text-black">
-                {initials}
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="relative h-24 w-24 overflow-hidden rounded-full bg-white text-black ring-1 ring-white/20">
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-3xl font-semibold">{initials}</div>
+                )}
               </div>
+
               <div>
                 <p className="text-sm text-cyan-100/70">{tr ? "Hesap profili" : "Account profile"}</p>
                 <h1 className="mt-1 text-3xl font-medium text-white sm:text-4xl">{user?.name || "EkaTech User"}</h1>
                 <p className="mt-2 text-white/45">{user?.email}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={avatarLoading}
+                    className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {avatarLoading ? "..." : tr ? "Profil fotoğrafı ekle" : "Add profile photo"}
+                  </button>
+                  {user?.avatar_url && (
+                    <button
+                      type="button"
+                      onClick={removeAvatar}
+                      disabled={avatarLoading}
+                      className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {tr ? "Fotoğrafı kaldır" : "Remove photo"}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -245,4 +337,37 @@ function InfoCard({ label, value }: { label: string; value: string }) {
       <p className="mt-2 font-medium text-white">{value}</p>
     </div>
   );
+}
+
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      image.src = String(reader.result);
+    };
+
+    reader.onerror = () => reject(new Error("File could not be read."));
+
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      const maxSize = 320;
+      const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Image could not be processed."));
+        return;
+      }
+
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.78));
+    };
+
+    image.onerror = () => reject(new Error("Image could not be loaded."));
+    reader.readAsDataURL(file);
+  });
 }
