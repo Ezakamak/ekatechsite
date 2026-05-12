@@ -62,7 +62,7 @@ export function OffPage() {
         balance: "Bakiye",
         lifetime: "Toplam kazanılan",
         currency: "Para birimi",
-        fixedReward: "Tech Duel kazanan ödülü: +50 Tech Coin",
+        fixedRewardLabel: "Tech Duel kazanan ödülü",
       }
     : {
         loading: "Checking OFF access...",
@@ -88,7 +88,7 @@ export function OffPage() {
         balance: "Balance",
         lifetime: "Lifetime earned",
         currency: "Currency",
-        fixedReward: "Tech Duel winner reward: +50 Tech Coin",
+        fixedRewardLabel: "Tech Duel winner reward",
       };
 
   useEffect(() => {
@@ -217,7 +217,10 @@ export function OffPage() {
               <CoinIcon size="sm" tone="cyan" />
               <div>
                 <p className="text-sm text-white/40">Reward rule</p>
-                <h2 className="text-2xl font-medium text-white">{copy.fixedReward}</h2>
+                <h2 className="flex flex-wrap items-center gap-2 text-2xl font-medium text-white">
+                  <span>{copy.fixedRewardLabel}:</span>
+                  <CoinAmount amount={50} locale={tr ? "tr-TR" : "en-US"} size="md" tone="cyan" />
+                </h2>
               </div>
             </div>
             <p className="mt-4 text-sm leading-6 text-white/50">{copy.minesRemoved}</p>
@@ -235,10 +238,9 @@ export function OffPage() {
 }
 
 function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy: any; locale: string }) {
-  const balance = new Intl.NumberFormat(locale).format(wallet?.balance || 0);
-  const lifetime = new Intl.NumberFormat(locale).format(wallet?.lifetime_earned || 0);
+  const balance = Number(wallet?.balance || 0);
+  const lifetime = Number(wallet?.lifetime_earned || 0);
   const currency = wallet?.currency || "Tech Coin";
-  const symbol = wallet?.symbol || "TC";
 
   return (
     <div className="relative overflow-hidden rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.08] p-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl sm:p-6">
@@ -246,8 +248,10 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
       <div className="relative flex items-start justify-between gap-4">
         <div>
           <p className="text-sm uppercase tracking-[0.2em] text-amber-100/60">{copy.walletTitle}</p>
-          <h2 className="mt-3 text-5xl font-semibold tracking-tight text-white">{balance}</h2>
-          <p className="mt-2 text-sm text-amber-100/80">{symbol} · {currency}</p>
+          <div className="mt-3">
+            <CoinAmount amount={balance} locale={locale} size="xl" tone="amber" />
+          </div>
+          <p className="mt-2 text-sm text-amber-100/80">{currency}</p>
         </div>
         <CoinIcon size="lg" tone="amber" />
       </div>
@@ -258,28 +262,51 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
         </div>
         <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-white/35">{copy.lifetime}</p>
-          <p className="mt-2 text-lg font-medium text-white">{lifetime} {symbol}</p>
+          <div className="mt-2">
+            <CoinAmount amount={lifetime} locale={locale} size="sm" tone="amber" />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function CoinIcon({ size, tone }: { size: "sm" | "lg"; tone: "cyan" | "amber" }) {
-  const wrapperSize = size === "lg" ? "h-16 w-16 rounded-full" : "h-12 w-12 rounded-full";
-  const imageSize = size === "lg" ? "h-[132%] w-[132%]" : "h-[136%] w-[136%]";
+function CoinAmount({ amount, locale, size, tone }: { amount: number; locale: string; size: "sm" | "md" | "xl"; tone: "cyan" | "amber" }) {
+  const formatted = new Intl.NumberFormat(locale).format(amount || 0);
+  const textSize = size === "xl" ? "text-5xl" : size === "md" ? "text-2xl" : "text-lg";
+  const iconSize = size === "xl" ? "md" : "xs";
+
+  return (
+    <span className={`inline-flex items-center gap-2 font-semibold tracking-tight text-white ${textSize}`}>
+      <span>{formatted}</span>
+      <CoinIcon size={iconSize} tone={tone} />
+    </span>
+  );
+}
+
+function CoinIcon({ size, tone }: { size: "xs" | "sm" | "md" | "lg"; tone: "cyan" | "amber" }) {
+  const wrapperSize =
+    size === "lg" ? "h-16 w-16 rounded-full" :
+    size === "md" ? "h-10 w-10 rounded-full" :
+    size === "sm" ? "h-12 w-12 rounded-full" :
+    "h-6 w-6 rounded-full";
+  const imageSize =
+    size === "lg" ? "h-[132%] w-[132%]" :
+    size === "md" ? "h-[138%] w-[138%]" :
+    size === "sm" ? "h-[136%] w-[136%]" :
+    "h-[145%] w-[145%]";
   const glow = tone === "amber" ? "shadow-amber-500/20" : "shadow-cyan-500/20";
   const ring = tone === "amber" ? "border-amber-300/25" : "border-cyan-300/25";
   const drop = tone === "amber" ? "drop-shadow-[0_0_18px_rgba(251,191,36,0.5)]" : "drop-shadow-[0_0_14px_rgba(34,211,238,0.45)]";
 
   return (
-    <div className={`flex ${wrapperSize} shrink-0 items-center justify-center overflow-hidden border ${ring} bg-black/30 shadow-2xl ${glow}`}>
+    <span className={`inline-flex ${wrapperSize} shrink-0 items-center justify-center overflow-hidden border ${ring} bg-black/30 shadow-2xl ${glow}`}>
       <img
         src={coinIcon}
         alt="Tech Coin"
         className={`${imageSize} max-w-none rounded-full object-cover mix-blend-multiply ${drop}`}
       />
-    </div>
+    </span>
   );
 }
 
