@@ -84,18 +84,18 @@ export function Navbar() {
   const closeMobile = () => setMobileOpen(false);
 
   const refreshAccounts = () => {
-    fetch("/api/account-switch", { credentials: "same-origin" })
+    fetch("/api/account-switch", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => (response.ok ? response.json() : null))
       .then((data) => setAccounts(data?.accounts || []))
       .catch(() => setAccounts([]));
   };
 
   const refreshUser = () => {
-    fetch("/api/me", { credentials: "same-origin" })
+    fetch("/api/me", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => (response.ok ? response.json() : null))
       .then((data) => {
-        setUser(data?.user || null);
-        if (data?.user) refreshAccounts();
+        setUser(data?.loggedIn ? data.user : null);
+        if (data?.loggedIn && data?.user) refreshAccounts();
         else setAccounts([]);
       })
       .catch(() => {
@@ -146,6 +146,30 @@ export function Navbar() {
     }
   };
 
+  const goToAddAccount = async (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    closeMobile();
+    setAccountMenuOpen(false);
+    window.dispatchEvent(new Event("ekatech-transition-start"));
+
+    try {
+      await fetch("/api/account-switch", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+    } catch {
+      // Hesap ekle ekranına geçiş API çağrısı başarısız olsa bile açılmalı.
+    }
+
+    window.history.pushState({}, "", "/signin?add=1");
+    window.dispatchEvent(new Event("ekatech-route-change"));
+    window.setTimeout(() => window.dispatchEvent(new Event("ekatech-transition-end")), 350);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const switchAccount = async (userId: number) => {
     if (switchingAccountId) return;
 
@@ -157,6 +181,7 @@ export function Navbar() {
       const response = await fetch("/api/account-switch", {
         method: "POST",
         credentials: "same-origin",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),
       });
@@ -310,7 +335,8 @@ export function Navbar() {
                     </div>
 
                     <a
-                      href="/api/start-account-add"
+                      href="/signin?add=1"
+                      onClick={goToAddAccount}
                       className="mt-2 block rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-white/[0.1]"
                     >
                       + {nav.addAccount}
@@ -380,7 +406,7 @@ export function Navbar() {
                     <Avatar size="medium" />
                     <span className="font-medium">{nav.account}</span>
                   </a>
-                  <a href="/api/start-account-add" className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center font-medium text-white">
+                  <a href="/signin?add=1" onClick={goToAddAccount} className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center font-medium text-white">
                     + {nav.addAccount}
                   </a>
                 </>
