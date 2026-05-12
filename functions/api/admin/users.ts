@@ -28,18 +28,25 @@ export async function onRequestPatch(context: any) {
     const userId = Number(body?.userId);
     const role = String(body?.role || "");
 
-    if (!userId || !["admin", "client"].includes(role)) {
+    if (!userId || !["admin", "client", "blocked"].includes(role)) {
       return Response.json({ error: "Geçersiz kullanıcı veya rol." }, { status: 400 });
     }
 
     if (userId === admin.user.id && role !== "admin") {
-      return Response.json({ error: "Kendi admin yetkini kaldıramazsın." }, { status: 400 });
+      return Response.json({ error: "Kendi admin yetkini kaldıramazsın veya kendini engelleyemezsin." }, { status: 400 });
     }
 
     await context.env.DB
       .prepare("UPDATE users SET role = ? WHERE id = ?")
       .bind(role, userId)
       .run();
+
+    if (role === "blocked") {
+      await context.env.DB
+        .prepare("DELETE FROM sessions WHERE user_id = ?")
+        .bind(userId)
+        .run();
+    }
 
     return Response.json({ success: true, message: "Rol güncellendi." });
   } catch (error) {
@@ -66,6 +73,10 @@ async function requireAdmin(context: any) {
 
   if (!user) {
     return { ok: false, status: 401, error: "Oturum geçersiz." };
+  }
+
+  if (user.role === "blocked") {
+    return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   }
 
   if (user.role !== "admin") {
