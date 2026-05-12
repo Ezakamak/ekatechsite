@@ -52,6 +52,10 @@ async function requireUser(context: any) {
     return { ok: false, status: 401, error: "Oturum geçersiz." };
   }
 
+  if (user.role === "blocked") {
+    return { ok: false, status: 403, error: "Bu hesap engellendiği için proje talebi gönderemez." };
+  }
+
   return { ok: true, user };
 }
 
