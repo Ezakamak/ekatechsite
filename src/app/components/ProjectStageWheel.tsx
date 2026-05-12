@@ -7,6 +7,10 @@ type ProjectRequest = {
   description: string;
   status: string;
   created_at?: string;
+  assigned_admin_id?: number | null;
+  assigned_admin_name?: string | null;
+  assigned_admin_email?: string | null;
+  assigned_admin_avatar_url?: string | null;
 };
 
 type Stage = {
@@ -33,6 +37,16 @@ const legacyStatusMap: Record<string, string> = {
   accepted: "waiting_approval",
 };
 
+function getInitials(name?: string | null, email?: string | null) {
+  const source = name || email || "EA";
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "EA";
+}
+
 export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
   const normalizedStatus = legacyStatusMap[request.status] || request.status || "received";
   const isRejected = normalizedStatus === "rejected";
@@ -47,6 +61,7 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference * (1 - visualProgress / 100);
   const gradientId = `stage-gradient-${request.id}`;
+  const hasAssignedAdmin = Boolean(request.assigned_admin_id && request.assigned_admin_name);
 
   return (
     <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-black/35 p-5 shadow-2xl shadow-cyan-500/5 sm:p-6">
@@ -66,6 +81,33 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
           {activeStage.label}
         </div>
       </div>
+
+      {hasAssignedAdmin && (
+        <div className="mt-5 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 overflow-hidden rounded-full border border-white/15 bg-white text-black">
+              {request.assigned_admin_avatar_url ? (
+                <img src={request.assigned_admin_avatar_url} alt="Admin" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-sm font-semibold">
+                  {getInitials(request.assigned_admin_name, request.assigned_admin_email)}
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-cyan-100/55">Sorumlu admin</p>
+              <p className="font-medium text-white">{request.assigned_admin_name}</p>
+              {request.assigned_admin_email && <p className="text-sm text-white/40">{request.assigned_admin_email}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!hasAssignedAdmin && !isRejected && (
+        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white/45">
+          Proje henüz bir admin tarafından alınmadı. İnceleme başladığında sorumlu admin burada görünecek.
+        </div>
+      )}
 
       {isRejected && (
         <div className="mt-5 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm text-red-100">
