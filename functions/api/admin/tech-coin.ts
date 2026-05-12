@@ -19,7 +19,8 @@ export async function onRequestGet(context: any) {
           tech_coin_wallets.best_round,
           tech_coin_wallets.perfect_clears,
           tech_coin_wallets.total_rounds,
-          tech_coin_wallets.lifetime_earned
+          tech_coin_wallets.lifetime_earned,
+          COALESCE(tech_coin_wallets.lifetime_spent, 0) AS lifetime_spent
         FROM tech_coin_wallets
         JOIN users ON tech_coin_wallets.user_id = users.id
         WHERE lower(users.email) = ? OR COALESCE(users.role, 'client') = 'admin'
@@ -43,23 +44,35 @@ export async function onRequestPost(context: any) {
   try {
     const body = await context.request.json().catch(() => null);
     const eventType = String(body?.eventType || "reward").trim();
-    const amount = clampNumber(Number(body?.amount || 0), 0, 500);
+    const rawAmount = Number(body?.amount || 0);
     const roundGain = clampNumber(Number(body?.roundGain || 0), 0, 5000);
     const perfect = Boolean(body?.perfect);
     const details = String(body?.details || "").slice(0, 240);
 
-    const allowedEvents = ["safe_cell", "perfect_clear", "round_end", "bonus"];
+    const allowedEvents = ["cell_cost", "safe_cell", "perfect_clear", "round_end", "bonus"];
     if (!allowedEvents.includes(eventType)) {
       return json({ error: "Geçersiz Tech Coin olayı." }, 400);
     }
 
+    const amount = eventType === "cell_cost"
+      ? clampNumber(rawAmount, -100, -1)
+      : clampNumber(rawAmount, 0, 500);
+
     await ensureWallet(context, admin.user.id);
 
     const current = await getWallet(context, admin.user.id);
-    const nextBalance = Number(current.balance || 0) + amount;
+    const currentBalance = Number(current.balance || 0);
+    const nextBalance = currentBalance + amount;
+
+    if (eventType === "cell_cost" && nextBalance < 0) {
+      return json({ error: "Yeterli Tech Coin yok." }, 402);
+    }
+
     const nextBestRound = Math.max(Number(current.best_round || 0), roundGain);
     const addRound = eventType === "round_end" || eventType === "perfect_clear" ? 1 : 0;
     const addPerfect = perfect || eventType === "perfect_clear" ? 1 : 0;
+    const earnedDelta = Math.max(0, amount);
+    const spentDelta = Math.max(0, -amount);
 
     await context.env.DB
       .prepare(`
@@ -67,13 +80,14 @@ export async function onRequestPost(context: any) {
         SET
           balance = ?,
           lifetime_earned = COALESCE(lifetime_earned, 0) + ?,
+          lifetime_spent = COALESCE(lifetime_spent, 0) + ?,
           best_round = ?,
           perfect_clears = COALESCE(perfect_clears, 0) + ?,
           total_rounds = COALESCE(total_rounds, 0) + ?,
           updated_at = datetime('now')
         WHERE user_id = ?
       `)
-      .bind(nextBalance, amount, nextBestRound, addPerfect, addRound, admin.user.id)
+      .bind(nextBalance, earnedDelta, spentDelta, nextBestRound, addPerfect, addRound, admin.user.id)
       .run();
 
     await context.env.DB
@@ -95,8 +109,8 @@ export async function onRequestPost(context: any) {
 async function ensureWallet(context: any, userId: number) {
   await context.env.DB
     .prepare(`
-      INSERT OR IGNORE INTO tech_coin_wallets (user_id, balance, lifetime_earned, best_round, perfect_clears, total_rounds)
-      VALUES (?, 100, 0, 0, 0, 0)
+      INSERT OR IGNORE INTO tech_coin_wallets (user_id, balance, lifetime_earned, lifetime_spent, best_round, perfect_clears, total_rounds)
+      VALUES (?, 100, 0, 0, 0, 0, 0)
     `)
     .bind(userId)
     .run();
@@ -109,6 +123,7 @@ async function getWallet(context: any, userId: number) {
         user_id,
         COALESCE(balance, 100) AS balance,
         COALESCE(lifetime_earned, 0) AS lifetime_earned,
+        COALESCE(lifetime_spent, 0) AS lifetime_spent,
         COALESCE(best_round, 0) AS best_round,
         COALESCE(perfect_clears, 0) AS perfect_clears,
         COALESCE(total_rounds, 0) AS total_rounds,
