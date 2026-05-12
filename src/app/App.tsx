@@ -21,16 +21,17 @@ import { ScrollProgress } from "./components/ScrollProgress";
 import { CommandMenu } from "./components/CommandMenu";
 import { BackToTop } from "./components/BackToTop";
 import { CookieConsent } from "./components/CookieConsent";
-import { AuthPanel } from "./components/AuthPanel";
 import { AdminPanel } from "./components/AdminPanel";
 import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
+import { AuthPage } from "./components/AuthPage";
 
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [languageLoading, setLanguageLoading] = useState(false);
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setLoading(false), 3600);
+    const timer = window.setTimeout(() => setLoading(false), 1600);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -50,6 +51,10 @@ export default function App() {
     };
   }, []);
 
+  const isSignIn = path === "/signin";
+  const isSignUp = path === "/signup";
+  const isAdmin = path === "/admin";
+
   return (
     <LanguageProvider>
       <Loader show={loading || languageLoading} />
@@ -59,26 +64,35 @@ export default function App() {
       <CookieConsent />
       <div className="min-h-screen bg-black dark">
         <Navbar />
-        <Hero />
-        <AuthPanel />
-        <ProjectRequestPanel />
-        <AdminPanel />
-        <About />
-        <ServiceDetails />
-        <Projects />
-        <BeforeAfter />
-        <div id="automation">
-          <AutomationSimulator />
-        </div>
-        <SystemStatus />
-        <ProjectEstimator />
-        <HowWeWork />
-        <TechStack />
-        <CTA />
-        <ReactionTime />
-        <FAQAccordion />
-        <Contact />
-        <Footer />
+
+        {isSignIn ? (
+          <AuthPage mode="login" />
+        ) : isSignUp ? (
+          <AuthPage mode="signup" />
+        ) : isAdmin ? (
+          <AdminPanel />
+        ) : (
+          <>
+            <Hero />
+            <ProjectRequestPanel />
+            <About />
+            <ServiceDetails />
+            <Projects />
+            <BeforeAfter />
+            <div id="automation">
+              <AutomationSimulator />
+            </div>
+            <SystemStatus />
+            <ProjectEstimator />
+            <HowWeWork />
+            <TechStack />
+            <CTA />
+            <ReactionTime />
+            <FAQAccordion />
+            <Contact />
+            <Footer />
+          </>
+        )}
       </div>
     </LanguageProvider>
   );
