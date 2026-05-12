@@ -27,17 +27,9 @@ export async function onRequestPost(context: any) {
       return Response.json({ error: "Bu lobby'ye başka biri katılmış." }, { status: 409 });
     }
 
-    await context.env.DB
-      .prepare(`
-        INSERT OR IGNORE INTO duel_rounds (lobby_id, round_number, signal_at, status)
-        VALUES (?, 1, datetime('now', '+5 seconds'), 'active')
-      `)
-      .bind(lobbyId)
-      .run();
-
-    return Response.json({ success: true, message: "Düelloya katıldın. Round 1 iki oyuncu için aynı anda başlayacak.", lobby_id: lobbyId });
+    return Response.json({ success: true, message: "Düelloya katıldın. Roundlar iki oyuncu da maça girince başlayacak.", lobby_id: lobbyId });
   } catch (error) {
-    return Response.json({ error: "Lobby'ye katılınamadı. duel_rounds tablosunu oluşturduğundan emin ol." }, { status: 500 });
+    return Response.json({ error: "Lobby'ye katılınamadı." }, { status: 500 });
   }
 }
 
