@@ -1,5 +1,7 @@
+const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+
 export async function onRequestGet(context: any) {
-  const admin = await requireAdmin(context);
+  const admin = await requireAdminOrOwner(context);
 
   if (!admin.ok) {
     return Response.json({ error: admin.error }, { status: admin.status });
@@ -26,11 +28,11 @@ export async function onRequestGet(context: any) {
         FROM project_requests
         JOIN users ON project_requests.user_id = users.id
         LEFT JOIN users AS assigned_admin ON project_requests.assigned_admin_id = assigned_admin.id
-        WHERE project_requests.assigned_admin_id IS NULL OR project_requests.assigned_admin_id = ?
+        WHERE project_requests.assigned_admin_id IS NULL OR project_requests.assigned_admin_id = ? OR ? = 'owner'
         ORDER BY project_requests.id DESC
         LIMIT 100
       `)
-      .bind(admin.user.id)
+      .bind(admin.user.id, admin.user.role)
       .all();
 
     return Response.json({ requests: requests?.results || [] });
@@ -40,7 +42,7 @@ export async function onRequestGet(context: any) {
 }
 
 export async function onRequestPatch(context: any) {
-  const admin = await requireAdmin(context);
+  const admin = await requireAdminOrOwner(context);
 
   if (!admin.ok) {
     return Response.json({ error: admin.error }, { status: admin.status });
@@ -79,7 +81,7 @@ export async function onRequestPatch(context: any) {
       return Response.json({ error: "Proje talebi bulunamadı." }, { status: 404 });
     }
 
-    if (current.assigned_admin_id && Number(current.assigned_admin_id) !== Number(admin.user.id)) {
+    if (admin.user.role !== "owner" && current.assigned_admin_id && Number(current.assigned_admin_id) !== Number(admin.user.id)) {
       return Response.json({ error: "Bu proje başka bir admin tarafından alınmış." }, { status: 409 });
     }
 
@@ -95,7 +97,7 @@ export async function onRequestPatch(context: any) {
     return Response.json({
       success: true,
       message: nextAssignedAdminId
-        ? "Talep durumu güncellendi ve proje bu admin hesabına atandı."
+        ? "Talep durumu güncellendi ve proje sorumlu admin hesabına atandı."
         : "Talep ilk aşamaya alındı ve tüm adminlere açıldı.",
     });
   } catch (error) {
@@ -103,7 +105,7 @@ export async function onRequestPatch(context: any) {
   }
 }
 
-async function requireAdmin(context: any) {
+async function requireAdminOrOwner(context: any) {
   const token = getCookie(context.request.headers.get("Cookie") || "", "session");
 
   if (!token) {
@@ -112,19 +114,26 @@ async function requireAdmin(context: any) {
 
   const user = await context.env.DB
     .prepare(`
-      SELECT users.id, users.name, users.email, COALESCE(users.role, 'client') AS role
+      SELECT
+        users.id,
+        users.name,
+        users.email,
+        CASE
+          WHEN lower(users.email) = ? THEN 'owner'
+          ELSE COALESCE(users.role, 'client')
+        END AS role
       FROM sessions
       JOIN users ON sessions.user_id = users.id
       WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
     `)
-    .bind(token)
+    .bind(OWNER_EMAIL, token)
     .first();
 
   if (!user) {
     return { ok: false, status: 401, error: "Oturum geçersiz." };
   }
 
-  if (user.role !== "admin") {
+  if (user.role !== "admin" && user.role !== "owner") {
     return { ok: false, status: 403, error: "Bu alan sadece yöneticiler içindir." };
   }
 
