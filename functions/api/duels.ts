@@ -1,6 +1,7 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
-const REWARD_OPTIONS = [25, 50, 100];
+const FIXED_REWARD_AMOUNT = 50;
 const ROUND_OPTIONS = [3, 5, 7];
+const MODE_OPTIONS = ["classic", "best_focus", "what_the_hold"];
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
@@ -15,6 +16,7 @@ export async function onRequestGet(context: any) {
           duel_lobbies.id,
           duel_lobbies.creator_user_id,
           duel_lobbies.opponent_user_id,
+          COALESCE(duel_lobbies.mode, 'classic') AS mode,
           duel_lobbies.reward_amount,
           duel_lobbies.round_count,
           duel_lobbies.status,
@@ -43,6 +45,7 @@ export async function onRequestGet(context: any) {
           duel_lobbies.id,
           duel_lobbies.creator_user_id,
           duel_lobbies.opponent_user_id,
+          COALESCE(duel_lobbies.mode, 'classic') AS mode,
           duel_lobbies.reward_amount,
           duel_lobbies.round_count,
           duel_lobbies.status,
@@ -73,7 +76,7 @@ export async function onRequestGet(context: any) {
 
     return Response.json({ user: auth.user, open: open?.results || [], mine: mine?.results || [] });
   } catch (error) {
-    return Response.json({ error: "Tech Duel verileri alınamadı. duel_lobbies ve duel_results tablolarını kontrol et." }, { status: 500 });
+    return Response.json({ error: "Tech Duel verileri alınamadı. duel_lobbies tablosunda mode kolonu olduğundan emin ol." }, { status: 500 });
   }
 }
 
@@ -83,11 +86,11 @@ export async function onRequestPost(context: any) {
 
   try {
     const body = await context.request.json().catch(() => null);
-    const rewardAmount = Number(body?.reward_amount || 50);
     const roundCount = Number(body?.round_count || 5);
+    const mode = String(body?.mode || "classic").trim();
 
-    if (!REWARD_OPTIONS.includes(rewardAmount)) {
-      return Response.json({ error: "Ödül 25, 50 veya 100 olabilir." }, { status: 400 });
+    if (!MODE_OPTIONS.includes(mode)) {
+      return Response.json({ error: "Oyun modu classic, best_focus veya what_the_hold olabilir." }, { status: 400 });
     }
 
     if (!ROUND_OPTIONS.includes(roundCount)) {
@@ -110,15 +113,15 @@ export async function onRequestPost(context: any) {
 
     const result = await context.env.DB
       .prepare(`
-        INSERT INTO duel_lobbies (creator_user_id, reward_amount, round_count, status)
-        VALUES (?, ?, ?, 'open')
+        INSERT INTO duel_lobbies (creator_user_id, mode, reward_amount, round_count, status)
+        VALUES (?, ?, ?, ?, 'open')
       `)
-      .bind(auth.user.id, rewardAmount, roundCount)
+      .bind(auth.user.id, mode, FIXED_REWARD_AMOUNT, roundCount)
       .run();
 
     return Response.json({ success: true, message: "Tech Duel lobby oluşturuldu.", lobby_id: result?.meta?.last_row_id });
   } catch (error) {
-    return Response.json({ error: "Lobby oluşturulamadı." }, { status: 500 });
+    return Response.json({ error: "Lobby oluşturulamadı. duel_lobbies tablosuna mode kolonu eklediğinden emin ol." }, { status: 500 });
   }
 }
 
