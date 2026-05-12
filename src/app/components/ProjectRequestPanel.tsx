@@ -73,8 +73,8 @@ export function ProjectRequestPanel() {
           </h2>
           <p className="text-lg leading-8 text-white/55">
             {tr
-              ? "Giriş yapan kullanıcılar buradan proje talebi bırakır. Admin panelinde görünür."
-              : "Signed-in users can submit project requests here. They appear in the admin panel."}
+              ? "Giriş yapan kullanıcılar buradan proje talebi bırakır. Teslim hedefini takvimden seçersin; önceliği admin belirler."
+              : "Signed-in users can submit project requests here. Choose a target date from the calendar; priority is assigned by admin."}
           </p>
           {!user && (
             <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
@@ -112,7 +112,16 @@ export function ProjectRequestPanel() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={tr ? "Bütçe aralığı" : "Budget range"} value={budgetRange} onChange={setBudgetRange} disabled={!user} />
-            <Field label={tr ? "Teslim hedefi" : "Target date"} value={deadline} onChange={setDeadline} disabled={!user} />
+            <label className="block space-y-2">
+              <span className="text-sm text-white/55">{tr ? "Teslim hedefi" : "Target date"}</span>
+              <input
+                type="date"
+                value={deadline}
+                onChange={(event) => setDeadline(event.target.value)}
+                disabled={!user}
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white outline-none disabled:opacity-50"
+              />
+            </label>
           </div>
 
           <label className="block space-y-2">
