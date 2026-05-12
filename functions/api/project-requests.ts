@@ -12,6 +12,7 @@ export async function onRequestPost(context: any) {
     const budgetRange = String(body?.budgetRange || "").trim();
     const deadline = String(body?.deadline || "").trim();
     const description = String(body?.description || "").trim();
+    const priority = getPriorityFromTargetDate(deadline);
 
     if (!projectName || !projectType || !description) {
       return Response.json({ error: "Proje adı, türü ve açıklama gerekli." }, { status: 400 });
@@ -20,9 +21,9 @@ export async function onRequestPost(context: any) {
     const insertResult = await context.env.DB
       .prepare(`
         INSERT INTO project_requests (user_id, project_name, project_type, budget_range, deadline, target_date, priority, description, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'normal', ?, 'received')
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'received')
       `)
-      .bind(user.user.id, projectName, projectType, budgetRange, deadline, deadline, description)
+      .bind(user.user.id, projectName, projectType, budgetRange, deadline, deadline, priority, description)
       .run();
 
     const projectId = insertResult?.meta?.last_row_id || null;
@@ -33,16 +34,33 @@ export async function onRequestPost(context: any) {
       targetType: "project_request",
       targetId: projectId,
       targetLabel: projectName,
-      details: `${user.user.name} yeni proje talebi oluşturdu. Tür: ${projectType}${budgetRange ? `, Bütçe: ${budgetRange}` : ""}${deadline ? `, Hedef: ${deadline}` : ""}`,
+      details: `${user.user.name} yeni proje talebi oluşturdu. Tür: ${projectType}${budgetRange ? `, Bütçe: ${budgetRange}` : ""}${deadline ? `, Hedef: ${deadline}` : ""}, Öncelik: ${priority}`,
     });
 
-    await notifyAdmins(context, "Yeni proje talebi", `${user.user.name} yeni proje talebi oluşturdu: ${projectName}`, "/admin");
+    await notifyAdmins(context, "Yeni proje talebi", `${user.user.name} yeni proje talebi oluşturdu: ${projectName} (${priority})`, "/admin");
 
-    return Response.json({ success: true, message: "Proje talebi alındı." });
+    return Response.json({ success: true, message: "Proje talebi alındı.", priority });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
     return Response.json({ error: `Proje talebi kaydedilemedi: ${detail}` }, { status: 500 });
   }
+}
+
+function getPriorityFromTargetDate(targetDate: string) {
+  if (!targetDate) return "normal";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const target = new Date(`${targetDate}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return "normal";
+
+  const diffDays = Math.ceil((target.getTime() - today.getTime()) / 86400000);
+
+  if (diffDays <= 3) return "urgent";
+  if (diffDays <= 7) return "high";
+  if (diffDays <= 21) return "normal";
+  return "low";
 }
 
 async function requireUser(context: any) {
