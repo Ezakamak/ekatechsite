@@ -50,6 +50,7 @@ function getCurrentPath() {
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [languageLoading, setLanguageLoading] = useState(false);
+  const [transitionLoading, setTransitionLoading] = useState(false);
   const [path, setPath] = useState(getCurrentPath);
 
   useEffect(() => {
@@ -85,6 +86,30 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let fallbackTimer: number | undefined;
+
+    const startTransition = () => {
+      setTransitionLoading(true);
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      fallbackTimer = window.setTimeout(() => setTransitionLoading(false), 2200);
+    };
+
+    const endTransition = () => {
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      window.setTimeout(() => setTransitionLoading(false), 450);
+    };
+
+    window.addEventListener("ekatech-transition-start", startTransition);
+    window.addEventListener("ekatech-transition-end", endTransition);
+
+    return () => {
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      window.removeEventListener("ekatech-transition-start", startTransition);
+      window.removeEventListener("ekatech-transition-end", endTransition);
+    };
+  }, []);
+
   const isSignIn = path === "/signin";
   const isSignUp = path === "/signup";
   const isForgotPassword = path === "/forgot-password";
@@ -93,7 +118,7 @@ export default function App() {
 
   return (
     <LanguageProvider>
-      <Loader show={loading || languageLoading} />
+      <Loader show={loading || languageLoading || transitionLoading} />
       <ScrollProgress />
       <CommandMenu />
       <BackToTop />
