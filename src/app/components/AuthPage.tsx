@@ -16,6 +16,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [waitingForCode, setWaitingForCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -27,37 +29,47 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         eyebrow: isSignup ? "Yeni hesap" : "Müşteri girişi",
         title: isSignup ? "EkaTech hesabı oluştur" : "EkaTech hesabına giriş yap",
         subtitle: isSignup
-          ? "Kayıttan sonra e-posta doğrulaması gerekir."
+          ? "Önce e-postana doğrulama kodu gönderilir. Kod doğruysa hesap oluşturulur."
           : "Proje taleplerini ve müşteri panelini yönetmek için giriş yap.",
         name: "Ad Soyad",
         email: "E-posta",
         password: "Şifre",
+        code: "Doğrulama kodu",
+        codeHint: "6 haneli kod",
         passwordHint: "En az 8 karakter",
-        submit: isSignup ? "Doğrulama linki gönder" : "Giriş yap",
+        sendCode: "Doğrulama kodu gönder",
+        completeSignup: "Kodu doğrula ve hesabı oluştur",
+        signin: "Giriş yap",
         switchText: isSignup ? "Zaten hesabın var mı?" : "Hesabın yok mu?",
         switchLink: isSignup ? "Giriş yap" : "Kayıt ol",
         dashboard: "Müşteri paneli",
         welcome: "Hoş geldin",
         logout: "Çıkış yap",
         genericError: "Bir hata oluştu.",
+        changeEmail: "E-postayı değiştir",
       }
     : {
         eyebrow: isSignup ? "New account" : "Client login",
         title: isSignup ? "Create your EkaTech account" : "Sign in to EkaTech",
         subtitle: isSignup
-          ? "Email verification is required after signup."
+          ? "A verification code is sent first. The account is created only after the code is confirmed."
           : "Sign in to manage project requests and client access.",
         name: "Full Name",
         email: "Email",
         password: "Password",
+        code: "Verification code",
+        codeHint: "6-digit code",
         passwordHint: "At least 8 characters",
-        submit: isSignup ? "Send verification link" : "Sign in",
+        sendCode: "Send verification code",
+        completeSignup: "Verify code and create account",
+        signin: "Sign in",
         switchText: isSignup ? "Already have an account?" : "Need an account?",
         switchLink: isSignup ? "Sign in" : "Sign up",
         dashboard: "Client dashboard",
         welcome: "Welcome",
         logout: "Log out",
         genericError: "Something went wrong.",
+        changeEmail: "Change email",
       };
 
   useEffect(() => {
@@ -75,12 +87,48 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     };
   }, []);
 
+  const readJson = async (response: Response) => {
+    const raw = await response.text();
+    let data: any = null;
+
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch {
+      data = null;
+    }
+
+    if (!response.ok) {
+      const fallback = raw?.slice(0, 160) || copy.genericError;
+      throw new Error(data?.error || `HTTP ${response.status}: ${fallback}`);
+    }
+
+    return data;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setStatus(null);
 
     try {
+      if (isSignup && waitingForCode) {
+        const response = await fetch("/api/complete-signup", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, code: verificationCode }),
+        });
+
+        const data = await readJson(response);
+        setUser(data.user);
+        setPassword("");
+        setVerificationCode("");
+        setWaitingForCode(false);
+        window.dispatchEvent(new Event("ekatech-auth-change"));
+        setStatus({ type: "success", message: data?.message || copy.completeSignup });
+        return;
+      }
+
       const endpoint = isSignup ? "/api/signup" : "/api/login";
       const payload = isSignup ? { name, email, password } : { email, password };
 
@@ -91,18 +139,12 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         body: JSON.stringify(payload),
       });
 
-      const raw = await response.text();
-      let data: any = null;
+      const data = await readJson(response);
 
-      try {
-        data = raw ? JSON.parse(raw) : null;
-      } catch {
-        data = null;
-      }
-
-      if (!response.ok) {
-        const fallback = raw?.slice(0, 160) || copy.genericError;
-        throw new Error(data?.error || `HTTP ${response.status}: ${fallback}`);
+      if (isSignup && data?.requiresCode) {
+        setWaitingForCode(true);
+        setStatus({ type: "success", message: data?.message || copy.sendCode });
+        return;
       }
 
       if (data?.user) {
@@ -110,13 +152,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         window.dispatchEvent(new Event("ekatech-auth-change"));
       }
 
-      if (isSignup) {
-        setPassword("");
-      } else {
-        setPassword("");
-      }
-
-      setStatus({ type: "success", message: data?.message || copy.submit });
+      setPassword("");
+      setStatus({ type: "success", message: data?.message || copy.signin });
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : copy.genericError });
     } finally {
@@ -196,7 +233,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5 rounded-[1.5rem] border border-white/10 bg-black/40 p-6">
-              {isSignup && (
+              {isSignup && !waitingForCode && (
                 <label className="block space-y-2">
                   <span className="text-sm text-white/55">{copy.name}</span>
                   <input
@@ -214,24 +251,41 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                 <input
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white outline-none placeholder:text-white/25 focus:border-cyan-200/40"
+                  disabled={waitingForCode}
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white outline-none placeholder:text-white/25 focus:border-cyan-200/40 disabled:opacity-60"
                   placeholder="you@example.com"
                   type="email"
                   autoComplete="email"
                 />
               </label>
 
-              <label className="block space-y-2">
-                <span className="text-sm text-white/55">{copy.password}</span>
-                <input
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white outline-none placeholder:text-white/25 focus:border-cyan-200/40"
-                  placeholder={copy.passwordHint}
-                  type="password"
-                  autoComplete={isSignup ? "new-password" : "current-password"}
-                />
-              </label>
+              {!waitingForCode && (
+                <label className="block space-y-2">
+                  <span className="text-sm text-white/55">{copy.password}</span>
+                  <input
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white outline-none placeholder:text-white/25 focus:border-cyan-200/40"
+                    placeholder={copy.passwordHint}
+                    type="password"
+                    autoComplete={isSignup ? "new-password" : "current-password"}
+                  />
+                </label>
+              )}
+
+              {isSignup && waitingForCode && (
+                <label className="block space-y-2">
+                  <span className="text-sm text-white/55">{copy.code}</span>
+                  <input
+                    value={verificationCode}
+                    onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center text-2xl tracking-[0.35em] text-white outline-none placeholder:text-white/25 focus:border-cyan-200/40"
+                    placeholder={copy.codeHint}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                  />
+                </label>
+              )}
 
               {status && (
                 <div className={`rounded-2xl border px-4 py-3 text-sm ${status.type === "success" ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-red-300/20 bg-red-300/10 text-red-100"}`}>
@@ -239,12 +293,26 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                 </div>
               )}
 
+              {isSignup && waitingForCode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWaitingForCode(false);
+                    setVerificationCode("");
+                    setStatus(null);
+                  }}
+                  className="w-full rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 font-medium text-white transition-all hover:bg-white/[0.1]"
+                >
+                  {copy.changeEmail}
+                </button>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full rounded-full bg-white px-5 py-3 font-medium text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "..." : copy.submit}
+                {loading ? "..." : isSignup ? (waitingForCode ? copy.completeSignup : copy.sendCode) : copy.signin}
               </button>
             </form>
           )}
