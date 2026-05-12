@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 import { useLanguage } from "../i18n";
-import { TechDuel } from "./TechDuel";
+import { TechDuelLive } from "./TechDuelLive";
 
 type User = {
   id: number;
@@ -42,7 +42,7 @@ export function OffPage() {
         open: "Aç",
         backHub: "OFF Hub'a dön",
         duelTitle: "Tech Duel",
-        duelDesc: "Create lobby, Join, Best of 3/5/7 ve refleks tabanlı 1v1 düello. Kazanana sistem coin ödülü verilir; kaybedenden coin kesilmez.",
+        duelDesc: "Aynı anda başlayan roundlar, tur kazananı gösterimi, Best of 3/5/7 ve güvenli sabit ödül sistemi.",
         reactionTitle: "Reaction Lab",
         reactionDesc: "Tek kişilik ms ölçme, günlük rekor ve hafif leaderboard modu.",
         bossTitle: "Boss Rush",
@@ -63,7 +63,7 @@ export function OffPage() {
         open: "Open",
         backHub: "Back to OFF Hub",
         duelTitle: "Tech Duel",
-        duelDesc: "Create lobby, Join, Best of 3/5/7 and reflex-based 1v1 duels. The winner gets system coin rewards; loser coins are not deducted.",
+        duelDesc: "Synchronized rounds, per-round winner reveal, Best of 3/5/7, and safe fixed reward logic.",
         reactionTitle: "Reaction Lab",
         reactionDesc: "Single-player ms tracking, daily records and a lightweight leaderboard mode.",
         bossTitle: "Boss Rush",
@@ -142,7 +142,7 @@ export function OffPage() {
             ← {copy.backHub}
           </button>
         </div>
-        <TechDuel />
+        <TechDuelLive />
       </>
     );
   }
