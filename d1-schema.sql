@@ -81,6 +81,18 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_user_id INTEGER,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id INTEGER,
+  target_label TEXT,
+  details TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (actor_user_id) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
@@ -90,6 +102,9 @@ CREATE INDEX IF NOT EXISTS idx_project_requests_user_id ON project_requests(user
 CREATE INDEX IF NOT EXISTS idx_project_requests_assigned_admin_id ON project_requests(assigned_admin_id);
 CREATE INDEX IF NOT EXISTS idx_announcements_active_expires ON announcements(is_active, expires_at);
 CREATE INDEX IF NOT EXISTS idx_rate_limits_reset_at ON rate_limits(reset_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_user_id ON audit_logs(actor_user_id);
 
 -- Mevcut eski tablolara kolon eklemek için gerekirse tek tek çalıştır:
 -- ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'client';
