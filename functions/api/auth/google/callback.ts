@@ -132,15 +132,14 @@ export async function onRequestGet(context: any) {
       .bind(user.id, token, expiresAt)
       .run();
 
+    const headers = new Headers();
+    headers.set("Location", `${url.origin}/account`);
+    headers.append("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`);
+    headers.append("Set-Cookie", `google_oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+
     return new Response(null, {
       status: 302,
-      headers: {
-        Location: `${url.origin}/account`,
-        "Set-Cookie": [
-          `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`,
-          `google_oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
-        ].join(", "),
-      },
+      headers,
     });
   } catch (error) {
     const origin = new URL(context.request.url).origin;
@@ -150,12 +149,13 @@ export async function onRequestGet(context: any) {
 }
 
 function redirectWithError(origin: string, message: string) {
+  const headers = new Headers();
+  headers.set("Location", `${origin}/signin?error=${encodeURIComponent(message)}`);
+  headers.append("Set-Cookie", `google_oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+
   return new Response(null, {
     status: 302,
-    headers: {
-      Location: `${origin}/signin?error=${encodeURIComponent(message)}`,
-      "Set-Cookie": `google_oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
-    },
+    headers,
   });
 }
 
