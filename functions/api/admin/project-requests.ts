@@ -16,6 +16,8 @@ export async function onRequestGet(context: any) {
           project_requests.project_type,
           project_requests.budget_range,
           project_requests.deadline,
+          project_requests.target_date,
+          COALESCE(project_requests.priority, 'normal') AS priority,
           project_requests.description,
           project_requests.status,
           project_requests.created_at,
@@ -24,12 +26,23 @@ export async function onRequestGet(context: any) {
           users.email AS user_email,
           assigned_admin.name AS assigned_admin_name,
           assigned_admin.email AS assigned_admin_email,
-          assigned_admin.avatar_url AS assigned_admin_avatar_url
+          assigned_admin.avatar_url AS assigned_admin_avatar_url,
+          feedback.rating AS feedback_rating,
+          feedback.comment AS feedback_comment
         FROM project_requests
         JOIN users ON project_requests.user_id = users.id
         LEFT JOIN users AS assigned_admin ON project_requests.assigned_admin_id = assigned_admin.id
+        LEFT JOIN project_feedback AS feedback ON feedback.project_request_id = project_requests.id
         WHERE project_requests.assigned_admin_id IS NULL OR project_requests.assigned_admin_id = ? OR ? = 'owner'
-        ORDER BY project_requests.id DESC
+        ORDER BY
+          CASE COALESCE(project_requests.priority, 'normal')
+            WHEN 'urgent' THEN 1
+            WHEN 'high' THEN 2
+            WHEN 'normal' THEN 3
+            WHEN 'low' THEN 4
+            ELSE 5
+          END,
+          project_requests.id DESC
         LIMIT 100
       `)
       .bind(admin.user.id, admin.user.role)
@@ -37,7 +50,7 @@ export async function onRequestGet(context: any) {
 
     return Response.json({ requests: requests?.results || [] });
   } catch (error) {
-    return Response.json({ error: "Proje talepleri alınamadı. project_requests tablosunu ve assigned_admin_id kolonunu kontrol et." }, { status: 500 });
+    return Response.json({ error: "Proje talepleri alınamadı. project_requests tablosunda priority/target_date ve project_feedback tablosunu kontrol et." }, { status: 500 });
   }
 }
 
@@ -77,7 +90,7 @@ export async function onRequestPatch(context: any) {
     }
 
     const current = await context.env.DB
-      .prepare("SELECT id, project_name, status, assigned_admin_id FROM project_requests WHERE id = ?")
+      .prepare("SELECT id, user_id, project_name, status, assigned_admin_id FROM project_requests WHERE id = ?")
       .bind(requestId)
       .first();
 
@@ -115,6 +128,8 @@ export async function onRequestPatch(context: any) {
       targetLabel: current.project_name || `Project #${requestId}`,
       details: `${admin.user.name} proje durumunu ${current.status} → ${status} olarak değiştirdi.${nextAssignedAdminId ? " Proje sorumlu admine atandı." : " Proje tekrar tüm adminlere açıldı."}`,
     });
+
+    await notify(context, current.user_id, "Proje durumun güncellendi", `${current.project_name} durumu: ${status}`, "/account");
 
     return Response.json({
       success: true,
@@ -175,6 +190,12 @@ async function requireAdminOrOwner(context: any) {
   }
 
   return { ok: true, user };
+}
+
+async function notify(context: any, userId: number, title: string, body: string, link: string) {
+  try {
+    await context.env.DB.prepare("INSERT INTO notifications (user_id, title, body, link) VALUES (?, ?, ?, ?)").bind(userId, title, body, link).run();
+  } catch {}
 }
 
 async function writeAuditLog(context: any, entry: any) {
