@@ -40,7 +40,7 @@ export default function App() {
   const [path, setPath] = useState(getCurrentPath);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setLoading(false), 1600);
+    const timer = window.setTimeout(() => setLoading(false), 3600);
     return () => window.clearTimeout(timer);
   }, []);
 
