@@ -10,6 +10,11 @@ type User = {
   email: string;
 };
 
+function navigateTo(path: string) {
+  window.history.pushState({}, "", path);
+  window.dispatchEvent(new Event("ekatech-route-change"));
+}
+
 export function AuthPage({ mode }: { mode: AuthMode }) {
   const { language } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
@@ -277,9 +282,13 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
 
               {!isSignup && (
                 <div className="flex justify-end">
-                  <a href="/forgot-password" className="text-sm text-white/55 underline underline-offset-4 transition-colors hover:text-white">
+                  <button
+                    type="button"
+                    onClick={() => navigateTo("/signin?forgot=1")}
+                    className="text-sm text-white/55 underline underline-offset-4 transition-colors hover:text-white"
+                  >
                     {copy.forgotPassword}
-                  </a>
+                  </button>
                 </div>
               )}
 
