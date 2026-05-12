@@ -44,19 +44,26 @@ export async function onRequestPost(context: any) {
       .bind(user.id, token, expiresAt)
       .run();
 
+    const cookieHeader = context.request.headers.get("Cookie") || "";
+    const browser = await ensureBrowserId(context, cookieHeader, token);
+
     return jsonWithSession(
       {
         success: true,
         message: "Giriş başarılı.",
         user: { id: user.id, name: user.name, email: user.email, role: user.role },
       },
-      token
+      token,
+      browser.setCookie
     );
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
     return Response.json({ error: `Sunucu hatası: ${detail}` }, { status: 500 });
   }
 }
+
+const BROWSER_COOKIE = "ekatech_browser_id";
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 async function hashPassword(password: string, salt: string) {
   const encoder = new TextEncoder();
@@ -112,6 +119,40 @@ async function checkSimpleLimit(context: any, key: string, limit: number, window
   }
 }
 
+async function ensureBrowserId(context: any, cookieHeader: string, sessionToken: string) {
+  const existing = getCookie(cookieHeader, BROWSER_COOKIE);
+  const browserId = existing || crypto.randomUUID();
+
+  try {
+    await context.env.DB
+      .prepare(`
+        INSERT OR IGNORE INTO account_switch_sessions (browser_id, session_token, created_at, last_used_at)
+        VALUES (?, ?, datetime('now'), datetime('now'))
+      `)
+      .bind(browserId, sessionToken)
+      .run();
+
+    await context.env.DB
+      .prepare("UPDATE account_switch_sessions SET last_used_at = datetime('now') WHERE browser_id = ? AND session_token = ?")
+      .bind(browserId, sessionToken)
+      .run();
+  } catch {
+    // Tablo yoksa giriş sistemi bozulmasın.
+  }
+
+  return {
+    browserId,
+    setCookie: existing ? "" : `${BROWSER_COOKIE}=${browserId}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${ONE_YEAR_SECONDS}`,
+  };
+}
+
+function getCookie(cookieHeader: string, name: string) {
+  return cookieHeader
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`))
+    ?.split("=")[1];
+}
+
 function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
   bytes.forEach((byte) => {
@@ -120,11 +161,10 @@ function bytesToBase64(bytes: Uint8Array) {
   return btoa(binary);
 }
 
-function jsonWithSession(payload: unknown, token: string) {
-  return new Response(JSON.stringify(payload), {
-    headers: {
-      "Content-Type": "application/json",
-      "Set-Cookie": `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`,
-    },
-  });
+function jsonWithSession(payload: unknown, token: string, browserCookie = "") {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  headers.append("Set-Cookie", `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`);
+  if (browserCookie) headers.append("Set-Cookie", browserCookie);
+
+  return new Response(JSON.stringify(payload), { headers });
 }
