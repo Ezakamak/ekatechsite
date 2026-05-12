@@ -9,7 +9,7 @@ export async function onRequestPost(context: any) {
     }
 
     const user = await context.env.DB
-      .prepare("SELECT id, name, email, password_hash, salt FROM users WHERE email = ?")
+      .prepare("SELECT id, name, email, password_hash, salt, COALESCE(role, 'client') AS role FROM users WHERE email = ?")
       .bind(email)
       .first();
 
@@ -21,6 +21,10 @@ export async function onRequestPost(context: any) {
 
     if (passwordHash !== user.password_hash) {
       return Response.json({ error: "E-posta veya şifre yanlış." }, { status: 401 });
+    }
+
+    if (user.role === "blocked") {
+      return Response.json({ error: "Bu hesap site erişiminden engellendi." }, { status: 403 });
     }
 
     const token = crypto.randomUUID();
@@ -35,7 +39,7 @@ export async function onRequestPost(context: any) {
       {
         success: true,
         message: "Giriş başarılı.",
-        user: { id: user.id, name: user.name, email: user.email },
+        user: { id: user.id, name: user.name, email: user.email, role: user.role },
       },
       token
     );
