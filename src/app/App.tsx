@@ -24,6 +24,7 @@ import { CookieConsent } from "./components/CookieConsent";
 import { AdminPanel } from "./components/AdminPanel";
 import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
 import { AuthPage } from "./components/AuthPage";
+import { AccountPage } from "./components/AccountPage";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -72,6 +73,7 @@ export default function App() {
   const isSignIn = path === "/signin";
   const isSignUp = path === "/signup";
   const isAdmin = path === "/admin";
+  const isAccount = path === "/account";
 
   return (
     <LanguageProvider>
@@ -89,6 +91,8 @@ export default function App() {
           <AuthPage mode="signup" />
         ) : isAdmin ? (
           <AdminPanel />
+        ) : isAccount ? (
+          <AccountPage />
         ) : (
           <>
             <Hero />
