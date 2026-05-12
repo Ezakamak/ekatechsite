@@ -36,13 +36,16 @@ const legacyStatusMap: Record<string, string> = {
 export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
   const normalizedStatus = legacyStatusMap[request.status] || request.status || "received";
   const isRejected = normalizedStatus === "rejected";
-  const stageIndex = Math.max(0, stages.findIndex((stage) => stage.key === normalizedStatus));
-  const activeIndex = isRejected ? 0 : stageIndex >= 0 ? stageIndex : 0;
+  const foundStageIndex = stages.findIndex((stage) => stage.key === normalizedStatus);
+  const activeIndex = isRejected ? 0 : foundStageIndex >= 0 ? foundStageIndex : 0;
   const activeStage = isRejected
     ? { label: "Reddedildi", description: "Proje talebi şu anda onaylanmadı." }
     : stages[activeIndex];
   const progress = isRejected ? 0 : Math.round(((activeIndex + 1) / stages.length) * 100);
-  const progressDeg = progress * 3.6;
+  const radius = 41.5;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - progress / 100);
+  const gradientId = `stage-gradient-${request.id}`;
 
   return (
     <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-black/35 p-5 shadow-2xl shadow-cyan-500/5 sm:p-6">
@@ -71,13 +74,44 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
 
       <div className="mt-8 grid gap-8 xl:grid-cols-[0.95fr_1.05fr] xl:items-center">
         <div className="relative mx-auto aspect-square w-full max-w-[380px]">
-          <div
-            className="absolute inset-4 rounded-full p-[2px] shadow-[0_0_45px_rgba(34,211,238,0.16)]"
-            style={{
-              background: `conic-gradient(from -90deg, rgba(34,211,238,0.95) 0deg, rgba(139,92,246,0.95) ${progressDeg}deg, rgba(255,255,255,0.08) ${progressDeg}deg, rgba(255,255,255,0.08) 360deg)`,
-            }}
-          >
-            <div className="h-full w-full rounded-full bg-black/90" />
+          <div className="absolute inset-4 rounded-full shadow-[0_0_45px_rgba(34,211,238,0.16)]">
+            <svg className="h-full w-full overflow-visible" viewBox="0 0 100 100" aria-hidden="true">
+              <defs>
+                <linearGradient id={gradientId} x1="18" y1="12" x2="82" y2="88" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="rgba(34,211,238,0.98)" />
+                  <stop offset="100%" stopColor="rgba(139,92,246,0.98)" />
+                </linearGradient>
+                <filter id={`${gradientId}-glow`} x="-40%" y="-40%" width="180%" height="180%">
+                  <feGaussianBlur stdDeviation="2.2" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                fill="rgba(0,0,0,0.45)"
+                stroke="rgba(255,255,255,0.08)"
+                strokeWidth="2.2"
+              />
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                fill="none"
+                stroke={`url(#${gradientId})`}
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                transform="rotate(-90 50 50)"
+                filter={`url(#${gradientId}-glow)`}
+                style={{ transition: "stroke-dashoffset 700ms ease" }}
+              />
+            </svg>
           </div>
 
           <div className="absolute inset-[25%] rounded-full border border-dashed border-white/15 bg-white/[0.025]" />
