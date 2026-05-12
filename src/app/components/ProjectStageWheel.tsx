@@ -42,9 +42,10 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
     ? { label: "Reddedildi", description: "Proje talebi şu anda onaylanmadı." }
     : stages[activeIndex];
   const progress = isRejected ? 0 : Math.round(((activeIndex + 1) / stages.length) * 100);
+  const visualProgress = isRejected ? 0 : (activeIndex / (stages.length - 1)) * 100;
   const radius = 41.5;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference * (1 - progress / 100);
+  const strokeDashoffset = circumference * (1 - visualProgress / 100);
   const gradientId = `stage-gradient-${request.id}`;
 
   return (
