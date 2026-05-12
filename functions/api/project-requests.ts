@@ -19,10 +19,10 @@ export async function onRequestPost(context: any) {
 
     const insertResult = await context.env.DB
       .prepare(`
-        INSERT INTO project_requests (user_id, project_name, project_type, budget_range, deadline, description, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'received')
+        INSERT INTO project_requests (user_id, project_name, project_type, budget_range, deadline, target_date, priority, description, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'normal', ?, 'received')
       `)
-      .bind(user.user.id, projectName, projectType, budgetRange, deadline, description)
+      .bind(user.user.id, projectName, projectType, budgetRange, deadline, deadline, description)
       .run();
 
     const projectId = insertResult?.meta?.last_row_id || null;
@@ -36,9 +36,12 @@ export async function onRequestPost(context: any) {
       details: `${user.user.name} yeni proje talebi oluşturdu. Tür: ${projectType}${budgetRange ? `, Bütçe: ${budgetRange}` : ""}${deadline ? `, Hedef: ${deadline}` : ""}`,
     });
 
+    await notifyAdmins(context, "Yeni proje talebi", `${user.user.name} yeni proje talebi oluşturdu: ${projectName}`, "/admin");
+
     return Response.json({ success: true, message: "Proje talebi alındı." });
   } catch (error) {
-    return Response.json({ error: "Proje talebi kaydedilemedi. D1'de project_requests tablosunu oluşturduğundan emin ol." }, { status: 500 });
+    const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
+    return Response.json({ error: `Proje talebi kaydedilemedi: ${detail}` }, { status: 500 });
   }
 }
 
@@ -68,6 +71,17 @@ async function requireUser(context: any) {
   }
 
   return { ok: true, user };
+}
+
+async function notifyAdmins(context: any, title: string, body: string, link: string) {
+  try {
+    const admins = await context.env.DB.prepare("SELECT id FROM users WHERE role IN ('admin', 'owner')").all();
+    for (const admin of admins?.results || []) {
+      await context.env.DB.prepare("INSERT INTO notifications (user_id, title, body, link) VALUES (?, ?, ?, ?)").bind(admin.id, title, body, link).run();
+    }
+  } catch {
+    // Bildirim tablosu yoksa proje talebi bozulmasın.
+  }
 }
 
 async function writeAuditLog(context: any, entry: any) {
