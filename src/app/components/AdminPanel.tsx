@@ -6,7 +6,7 @@ type User = {
   id: number;
   name: string;
   email: string;
-  role: "admin" | "client" | string;
+  role: "admin" | "client" | "blocked" | string;
   created_at?: string;
 };
 
@@ -167,12 +167,13 @@ export function AdminPanel() {
         body: JSON.stringify({ userId, role }),
       });
 
-      if (!response.ok) throw new Error(t.error);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || t.error);
 
       setStatus({ type: "success", message: t.saved });
       await loadAdminData();
-    } catch {
-      setStatus({ type: "error", message: t.error });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : t.error });
     }
   };
 
@@ -283,6 +284,7 @@ export function AdminPanel() {
                     >
                       <option value="client">client</option>
                       <option value="admin">admin</option>
+                      <option value="blocked">blocked</option>
                     </select>
                   </div>
                 </div>
