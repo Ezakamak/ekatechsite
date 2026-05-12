@@ -9,6 +9,7 @@ type User = {
   name: string;
   email: string;
   role?: string;
+  avatar_url?: string;
 };
 
 export function Navbar() {
@@ -105,6 +106,16 @@ export function Navbar() {
     }
   };
 
+  const Avatar = ({ size = "small" }: { size?: "small" | "medium" }) => (
+    <span className={`${size === "medium" ? "h-10 w-10" : "h-9 w-9"} flex overflow-hidden items-center justify-center rounded-full bg-white text-sm font-semibold text-black`}>
+      {user?.avatar_url ? (
+        <img src={user.avatar_url} alt="Profile" className="h-full w-full object-cover" />
+      ) : (
+        initials
+      )}
+    </span>
+  );
+
   return (
     <motion.nav
       initial={{ y: -100 }}
@@ -155,9 +166,7 @@ export function Navbar() {
               className="flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.06] py-1 pl-1 pr-3 text-white transition-all duration-300 hover:bg-white/[0.1]"
               aria-label={nav.account}
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">
-                {initials}
-              </span>
+              <Avatar />
               <span className="hidden max-w-28 truncate text-sm font-medium sm:block">{user.name}</span>
             </a>
           ) : (
@@ -217,9 +226,7 @@ export function Navbar() {
                   onClick={(event) => navigate(event, "/account")}
                   className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white"
                 >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">
-                    {initials}
-                  </span>
+                  <Avatar size="medium" />
                   <span className="font-medium">{nav.account}</span>
                 </a>
               ) : (
