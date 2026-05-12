@@ -14,6 +14,16 @@ CREATE TABLE IF NOT EXISTS duel_lobbies (
   FOREIGN KEY (winner_user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS duel_round_ready (
+  lobby_id INTEGER NOT NULL,
+  round_number INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  ready_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (lobby_id, round_number, user_id),
+  FOREIGN KEY (lobby_id) REFERENCES duel_lobbies(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS duel_rounds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   lobby_id INTEGER NOT NULL,
@@ -78,6 +88,8 @@ CREATE INDEX IF NOT EXISTS idx_duel_lobbies_status ON duel_lobbies(status);
 CREATE INDEX IF NOT EXISTS idx_duel_lobbies_creator ON duel_lobbies(creator_user_id);
 CREATE INDEX IF NOT EXISTS idx_duel_lobbies_opponent ON duel_lobbies(opponent_user_id);
 CREATE INDEX IF NOT EXISTS idx_duel_lobbies_mode ON duel_lobbies(mode);
+CREATE INDEX IF NOT EXISTS idx_duel_round_ready_lobby_round ON duel_round_ready(lobby_id, round_number);
+CREATE INDEX IF NOT EXISTS idx_duel_round_ready_user ON duel_round_ready(user_id);
 CREATE INDEX IF NOT EXISTS idx_duel_rounds_lobby ON duel_rounds(lobby_id);
 CREATE INDEX IF NOT EXISTS idx_duel_rounds_status ON duel_rounds(status);
 CREATE INDEX IF NOT EXISTS idx_duel_round_submissions_lobby_round ON duel_round_submissions(lobby_id, round_number);
@@ -91,5 +103,6 @@ CREATE INDEX IF NOT EXISTS idx_coin_transactions_reason ON coin_transactions(rea
 -- ALTER TABLE duel_lobbies ADD COLUMN mode TEXT DEFAULT 'classic';
 -- UPDATE duel_lobbies SET mode = 'classic' WHERE mode IS NULL;
 -- UPDATE duel_lobbies SET reward_amount = 50 WHERE reward_amount IS NULL OR reward_amount != 50;
+-- CREATE TABLE IF NOT EXISTS duel_round_ready (...);
 -- DROP INDEX IF EXISTS idx_coin_transactions_reason;
 -- CREATE INDEX IF NOT EXISTS idx_coin_transactions_reason ON coin_transactions(reason);
