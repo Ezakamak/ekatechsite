@@ -20,6 +20,10 @@ type ProjectRequest = {
   description: string;
   status: string;
   created_at?: string;
+  assigned_admin_id?: number | null;
+  assigned_admin_name?: string | null;
+  assigned_admin_email?: string | null;
+  assigned_admin_avatar_url?: string | null;
 };
 
 export function AccountPage() {
@@ -34,6 +38,7 @@ export function AccountPage() {
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const tr = language === "tr";
+  const canUseAdmin = user?.role === "admin" || user?.role === "owner";
 
   const initials = useMemo(() => {
     const source = user?.name || user?.email || "E";
@@ -245,11 +250,11 @@ export function AccountPage() {
             <InfoCard label={tr ? "Oturum" : "Session"} value={user ? (tr ? "Aktif" : "Active") : "-"} />
           </div>
 
-          <div className={`mt-8 grid gap-3 ${user?.role === "admin" ? "sm:grid-cols-2" : "sm:grid-cols-1"}`}>
+          <div className={`mt-8 grid gap-3 ${canUseAdmin ? "sm:grid-cols-2" : "sm:grid-cols-1"}`}>
             <a href="/" className="rounded-2xl border border-white/10 bg-white/[0.035] px-5 py-4 text-center font-medium text-white/80 transition-all hover:bg-white/[0.07]">
               {tr ? "Ana sayfaya dön" : "Back to home"}
             </a>
-            {user?.role === "admin" && (
+            {canUseAdmin && (
               <a href="/admin" className="rounded-2xl border border-white/10 bg-white/[0.035] px-5 py-4 text-center font-medium text-white/80 transition-all hover:bg-white/[0.07]">
                 {tr ? "Admin paneli" : "Admin panel"}
               </a>
