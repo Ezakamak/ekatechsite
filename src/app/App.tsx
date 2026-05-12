@@ -31,6 +31,15 @@ import { ForgotPasswordPage } from "./components/ForgotPasswordPage";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const forgotMode =
+    searchParams.get("forgot") === "1" ||
+    searchParams.get("reset") === "1" ||
+    searchParams.get("mode") === "forgot";
+
+  if (forgotMode) return "/forgot-password";
+
   const pathname = window.location.pathname.replace(/\/+$/, "");
   return pathname || "/";
 }
