@@ -86,7 +86,7 @@ export function TechDuelSync() {
 
   const c = useMemo(() => tr ? {
     title: "Tech Duel",
-    subtitle: "Round geri sayımı sadece iki oyuncu da maça girince başlar. Geç giren oyuncuya 5000ms yazmaz.",
+    subtitle: "Round geri sayımı sadece iki oyuncu da maça girince başlar. Süre sayacı gösterilmez; sadece WAIT ve DRAW görünür.",
     create: "Lobby oluştur",
     createTitle: "Create Lobby",
     active: "Aktif düellolar",
@@ -127,7 +127,7 @@ export function TechDuelSync() {
     login: "Tech Duel için giriş yapman gerekiyor.",
   } : {
     title: "Tech Duel",
-    subtitle: "The countdown starts only after both players enter the match. A late player will not get a 5000ms result.",
+    subtitle: "The countdown starts only after both players enter the match. No countdown number is shown; only WAIT and DRAW appear.",
     create: "Create lobby",
     createTitle: "Create Lobby",
     active: "Active duels",
@@ -311,7 +311,7 @@ export function TechDuelSync() {
       if (!holding) return c.holdStart;
       return signalPassed ? c.releaseNow : c.keepHolding;
     }
-    return signalPassed ? c.clickNow : `${c.dontClick}${secondsLeft ? ` · ${secondsLeft}` : ""}`;
+    return signalPassed ? c.clickNow : c.dontClick;
   };
 
   const clickArena = () => {
