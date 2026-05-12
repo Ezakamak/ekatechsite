@@ -18,73 +18,54 @@ export async function onRequestPost(context: any) {
     }
 
     const existingUser = await context.env.DB
-      .prepare("SELECT id, name, email, COALESCE(email_verified, 0) AS email_verified FROM users WHERE email = ?")
+      .prepare("SELECT id FROM users WHERE email = ?")
       .bind(email)
       .first();
 
-    if (existingUser?.email_verified) {
-      return Response.json({ error: "Bu e-posta zaten kayıtlı." }, { status: 409 });
+    if (existingUser) {
+      return Response.json({ error: "Bu e-posta zaten kayıtlı. Giriş yapmayı dene." }, { status: 409 });
     }
 
-    if (existingUser && !existingUser.email_verified) {
-      await createVerificationAndSend(context, existingUser.id, existingUser.email, existingUser.name);
-      return Response.json({
-        success: true,
-        requiresVerification: true,
-        message: "Bu e-posta kayıtlı ama doğrulanmamış. Yeni doğrulama e-postası gönderdik.",
-      });
-    }
+    const passwordSalt = makeSalt();
+    const passwordHash = await hashValue(password, passwordSalt);
+    const code = makeCode();
+    const codeSalt = makeSalt();
+    const codeHash = await hashValue(code, codeSalt);
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 15).toISOString();
 
-    const salt = makeSalt();
-    const passwordHash = await hashPassword(password, salt);
-
-    const result = await context.env.DB
-      .prepare("INSERT INTO users (name, email, password_hash, salt, email_verified) VALUES (?, ?, ?, ?, 0)")
-      .bind(name, email, passwordHash, salt)
+    await context.env.DB
+      .prepare("DELETE FROM pending_signups WHERE email = ?")
+      .bind(email)
       .run();
 
-    const userId = result.meta.last_row_id;
+    await context.env.DB
+      .prepare(`
+        INSERT INTO pending_signups (name, email, password_hash, password_salt, code_hash, code_salt, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .bind(name, email, passwordHash, passwordSalt, codeHash, codeSalt, expiresAt)
+      .run();
 
-    await createVerificationAndSend(context, userId, email, name);
+    await sendVerificationCode(context, email, name, code);
 
     return Response.json({
       success: true,
-      requiresVerification: true,
-      message: "Kayıt oluşturuldu. Giriş yapmadan önce e-postana gelen doğrulama linkine tıkla.",
+      requiresCode: true,
+      message: "Doğrulama kodu e-postana gönderildi. Hesap, kod doğrulanınca oluşturulacak.",
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
-    return Response.json({ error: `Kayıt tamamlanamadı: ${detail}` }, { status: 500 });
+    return Response.json({ error: `Kayıt başlatılamadı: ${detail}` }, { status: 500 });
   }
 }
 
-async function createVerificationAndSend(context: any, userId: number, email: string, name: string) {
-  const token = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
-
-  await context.env.DB
-    .prepare("DELETE FROM email_verifications WHERE user_id = ?")
-    .bind(userId)
-    .run();
-
-  await context.env.DB
-    .prepare("INSERT INTO email_verifications (user_id, token, expires_at) VALUES (?, ?, ?)")
-    .bind(userId, token, expiresAt)
-    .run();
-
-  await sendVerificationEmail(context, email, name, token);
-}
-
-async function sendVerificationEmail(context: any, email: string, name: string, token: string) {
+async function sendVerificationCode(context: any, email: string, name: string, code: string) {
   const apiKey = context.env.RESEND_API_KEY;
   const from = context.env.EMAIL_FROM || "EkaTech <onboarding@resend.dev>";
 
   if (!apiKey) {
     throw new Error("RESEND_API_KEY eksik. Cloudflare Pages environment variables içine ekle.");
   }
-
-  const origin = new URL(context.request.url).origin;
-  const verifyUrl = `${origin}/api/verify-email?token=${encodeURIComponent(token)}`;
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -96,16 +77,16 @@ async function sendVerificationEmail(context: any, email: string, name: string, 
     body: JSON.stringify({
       from,
       to: email,
-      subject: "EkaTech e-posta doğrulama",
+      subject: "EkaTech doğrulama kodu",
       html: `
         <div style="font-family:Arial,sans-serif;background:#050505;color:#ffffff;padding:32px;border-radius:18px">
-          <h1 style="margin:0 0 12px;font-size:28px">EkaTech hesabını doğrula</h1>
-          <p style="color:#c7c7c7;line-height:1.6">Merhaba ${escapeHtml(name)}, hesabına giriş yapabilmek için e-posta adresini doğrulaman gerekiyor.</p>
-          <a href="${verifyUrl}" style="display:inline-block;margin-top:18px;padding:14px 22px;border-radius:999px;background:#ffffff;color:#000000;text-decoration:none;font-weight:700">E-postamı doğrula</a>
-          <p style="margin-top:22px;color:#888;font-size:13px">Bu link 24 saat geçerlidir. Bu işlemi sen yapmadıysan bu e-postayı yok sayabilirsin.</p>
+          <h1 style="margin:0 0 12px;font-size:28px">EkaTech doğrulama kodu</h1>
+          <p style="color:#c7c7c7;line-height:1.6">Merhaba ${escapeHtml(name)}, hesabını oluşturmak için aşağıdaki kodu kayıt ekranına gir.</p>
+          <div style="font-size:36px;letter-spacing:10px;font-weight:800;background:#ffffff;color:#000000;border-radius:16px;padding:18px 24px;text-align:center;margin:22px 0">${code}</div>
+          <p style="margin-top:22px;color:#888;font-size:13px">Bu kod 15 dakika geçerlidir. Bu işlemi sen yapmadıysan bu e-postayı yok sayabilirsin.</p>
         </div>
       `,
-      text: `EkaTech hesabını doğrulamak için bu linke tıkla: ${verifyUrl}`,
+      text: `EkaTech doğrulama kodun: ${code}`,
     }),
   });
 
@@ -115,17 +96,23 @@ async function sendVerificationEmail(context: any, email: string, name: string, 
   }
 }
 
+function makeCode() {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return String(100000 + (bytes[0] % 900000));
+}
+
 function makeSalt() {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return bytesToBase64(bytes);
 }
 
-async function hashPassword(password: string, salt: string) {
+async function hashValue(value: string, salt: string) {
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(password),
+    encoder.encode(value),
     "PBKDF2",
     false,
     ["deriveBits"]
