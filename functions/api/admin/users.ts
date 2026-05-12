@@ -108,6 +108,15 @@ export async function onRequestPatch(context: any) {
         .bind(approved, userId)
         .run();
 
+      await writeAuditLog(context, {
+        actorUserId: admin.user.id,
+        action: approved ? "admin_avatar_approved" : "admin_avatar_rejected",
+        targetType: "user",
+        targetId: userId,
+        targetLabel: `${target.name} <${target.email}>`,
+        details: approved ? "Owner admin profil fotoğrafını onayladı." : "Owner admin profil fotoğrafı onayını kaldırdı.",
+      });
+
       return Response.json({ success: true, message: approved ? "Admin profil fotoğrafı onaylandı." : "Admin profil fotoğrafı onayı kaldırıldı." });
     }
 
@@ -152,6 +161,15 @@ export async function onRequestPatch(context: any) {
         .bind(userId)
         .run();
     }
+
+    await writeAuditLog(context, {
+      actorUserId: admin.user.id,
+      action: "user_role_changed",
+      targetType: "user",
+      targetId: userId,
+      targetLabel: `${target.name} <${target.email}>`,
+      details: `${admin.user.name} kullanıcı rolünü ${target.role} → ${role} olarak değiştirdi.${role === "blocked" ? " Kullanıcının oturumları kapatıldı." : ""}`,
+    });
 
     return Response.json({ success: true, message: role === "admin" ? "Rol admin yapıldı. Sipariş yönetimi için profil fotoğrafı owner tarafından onaylanmalı." : "Rol güncellendi." });
   } catch (error) {
@@ -207,6 +225,20 @@ async function requireAdminOrOwner(context: any) {
   }
 
   return { ok: true, user };
+}
+
+async function writeAuditLog(context: any, entry: any) {
+  try {
+    await context.env.DB
+      .prepare(`
+        INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, target_label, details)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .bind(entry.actorUserId, entry.action, entry.targetType, entry.targetId, entry.targetLabel, entry.details)
+      .run();
+  } catch {
+    // Log yazılamazsa ana işlem bozulmasın.
+  }
 }
 
 function getCookie(cookieHeader: string, name: string) {
