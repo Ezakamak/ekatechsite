@@ -28,6 +28,7 @@ import { AccountPage } from "./components/AccountPage";
 import { AnnouncementAdmin } from "./components/AnnouncementAdmin";
 import { AnnouncementPopup } from "./components/AnnouncementPopup";
 import { ForgotPasswordPage } from "./components/ForgotPasswordPage";
+import { AdminAvatarApprovals } from "./components/AdminAvatarApprovals";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -109,7 +110,8 @@ export default function App() {
           <>
             <AdminPanel />
             <div className="bg-black px-4 pb-24 sm:px-6">
-              <div className="mx-auto max-w-7xl">
+              <div className="mx-auto max-w-7xl space-y-6">
+                <AdminAvatarApprovals />
                 <AnnouncementAdmin />
               </div>
             </div>
