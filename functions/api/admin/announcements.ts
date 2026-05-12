@@ -1,0 +1,137 @@
+export async function onRequestGet(context: any) {
+  const admin = await requireAdmin(context);
+
+  if (!admin.ok) {
+    return Response.json({ error: admin.error }, { status: admin.status });
+  }
+
+  try {
+    const result = await context.env.DB
+      .prepare(`
+        SELECT id, announcement_type, message, image_url, expires_at, is_active, created_at
+        FROM announcements
+        ORDER BY id DESC
+        LIMIT 50
+      `)
+      .all();
+
+    return Response.json({ announcements: result?.results || [] });
+  } catch (error) {
+    return Response.json({ error: "Duyurular alınamadı. announcements tablosunu oluşturduğundan emin ol." }, { status: 500 });
+  }
+}
+
+export async function onRequestPost(context: any) {
+  const admin = await requireAdmin(context);
+
+  if (!admin.ok) {
+    return Response.json({ error: admin.error }, { status: admin.status });
+  }
+
+  try {
+    const body = await context.request.json().catch(() => null);
+    const announcementType = String(body?.announcement_type || "").trim();
+    const message = String(body?.message || "").trim();
+    const imageUrl = String(body?.image_url || "").trim();
+    const expiresAt = String(body?.expires_at || "").trim();
+
+    if (!["message", "image"].includes(announcementType)) {
+      return Response.json({ error: "Duyuru tipi message veya image olmalı." }, { status: 400 });
+    }
+
+    if (announcementType === "message" && !message) {
+      return Response.json({ error: "Mesaj duyurusu için mesaj gerekli." }, { status: 400 });
+    }
+
+    if (announcementType === "image" && !imageUrl) {
+      return Response.json({ error: "Resim duyurusu için resim gerekli." }, { status: 400 });
+    }
+
+    if (imageUrl && !imageUrl.startsWith("data:image/")) {
+      return Response.json({ error: "Sadece görsel dosyası yükleyebilirsin." }, { status: 400 });
+    }
+
+    if (imageUrl.length > 650000) {
+      return Response.json({ error: "Resim çok büyük. Daha küçük bir görsel seç." }, { status: 413 });
+    }
+
+    if (!expiresAt || Number.isNaN(Date.parse(expiresAt))) {
+      return Response.json({ error: "Geçerli bir bitiş zamanı gerekli." }, { status: 400 });
+    }
+
+    await context.env.DB
+      .prepare(`
+        INSERT INTO announcements (announcement_type, message, image_url, expires_at, is_active)
+        VALUES (?, ?, ?, ?, 1)
+      `)
+      .bind(announcementType, message, imageUrl, expiresAt)
+      .run();
+
+    return Response.json({ success: true, message: "Duyuru oluşturuldu." });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
+    return Response.json({ error: `Duyuru oluşturulamadı: ${detail}` }, { status: 500 });
+  }
+}
+
+export async function onRequestPatch(context: any) {
+  const admin = await requireAdmin(context);
+
+  if (!admin.ok) {
+    return Response.json({ error: admin.error }, { status: admin.status });
+  }
+
+  try {
+    const body = await context.request.json().catch(() => null);
+    const id = Number(body?.id);
+    const isActive = body?.is_active ? 1 : 0;
+
+    if (!id) {
+      return Response.json({ error: "Duyuru id gerekli." }, { status: 400 });
+    }
+
+    await context.env.DB
+      .prepare("UPDATE announcements SET is_active = ? WHERE id = ?")
+      .bind(isActive, id)
+      .run();
+
+    return Response.json({ success: true, message: "Duyuru güncellendi." });
+  } catch (error) {
+    return Response.json({ error: "Duyuru güncellenemedi." }, { status: 500 });
+  }
+}
+
+async function requireAdmin(context: any) {
+  const token = getCookie(context.request.headers.get("Cookie") || "", "session");
+
+  if (!token) {
+    return { ok: false, status: 401, error: "Giriş yapman gerekiyor." };
+  }
+
+  const user = await context.env.DB
+    .prepare(`
+      SELECT users.id, users.name, users.email, COALESCE(users.role, 'client') AS role
+      FROM sessions
+      JOIN users ON sessions.user_id = users.id
+      WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
+    `)
+    .bind(token)
+    .first();
+
+  if (!user) {
+    return { ok: false, status: 401, error: "Oturum geçersiz." };
+  }
+
+  if (user.role !== "admin") {
+    return { ok: false, status: 403, error: "Bu alan sadece yöneticiler içindir." };
+  }
+
+  return { ok: true, user };
+}
+
+function getCookie(cookieHeader: string, name: string) {
+  return cookieHeader
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`))
+    ?.split("=")[1];
+}
