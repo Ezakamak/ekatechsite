@@ -17,13 +17,24 @@ export async function onRequestPost(context: any) {
       return Response.json({ error: "Proje adı, türü ve açıklama gerekli." }, { status: 400 });
     }
 
-    await context.env.DB
+    const insertResult = await context.env.DB
       .prepare(`
         INSERT INTO project_requests (user_id, project_name, project_type, budget_range, deadline, description, status)
         VALUES (?, ?, ?, ?, ?, ?, 'received')
       `)
       .bind(user.user.id, projectName, projectType, budgetRange, deadline, description)
       .run();
+
+    const projectId = insertResult?.meta?.last_row_id || null;
+
+    await writeAuditLog(context, {
+      actorUserId: user.user.id,
+      action: "project_request_created",
+      targetType: "project_request",
+      targetId: projectId,
+      targetLabel: projectName,
+      details: `${user.user.name} yeni proje talebi oluşturdu. Tür: ${projectType}${budgetRange ? `, Bütçe: ${budgetRange}` : ""}${deadline ? `, Hedef: ${deadline}` : ""}`,
+    });
 
     return Response.json({ success: true, message: "Proje talebi alındı." });
   } catch (error) {
@@ -57,6 +68,20 @@ async function requireUser(context: any) {
   }
 
   return { ok: true, user };
+}
+
+async function writeAuditLog(context: any, entry: any) {
+  try {
+    await context.env.DB
+      .prepare(`
+        INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, target_label, details)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .bind(entry.actorUserId, entry.action, entry.targetType, entry.targetId, entry.targetLabel, entry.details)
+      .run();
+  } catch {
+    // Log yazılamazsa ana işlem bozulmasın.
+  }
 }
 
 function getCookie(cookieHeader: string, name: string) {
