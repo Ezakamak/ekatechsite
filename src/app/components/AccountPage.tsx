@@ -1,6 +1,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useLanguage } from "../i18n";
+import { ProjectStageWheel } from "./ProjectStageWheel";
 
 type User = {
   id: number;
@@ -19,14 +20,6 @@ type ProjectRequest = {
   description: string;
   status: string;
   created_at?: string;
-};
-
-const statusLabels: Record<string, { tr: string; en: string }> = {
-  new: { tr: "Yeni alındı", en: "Received" },
-  reviewed: { tr: "İncelendi", en: "Reviewed" },
-  contacted: { tr: "İletişime geçildi", en: "Contacted" },
-  accepted: { tr: "Onaylandı", en: "Accepted" },
-  rejected: { tr: "Reddedildi", en: "Rejected" },
 };
 
 export function AccountPage() {
@@ -186,7 +179,7 @@ export function AccountPage() {
       <div className="absolute left-1/2 top-28 h-80 w-80 -translate-x-1/2 rounded-full bg-cyan-500/10 blur-3xl" />
       <div className="absolute right-0 top-52 h-72 w-72 rounded-full bg-purple-500/10 blur-3xl" />
 
-      <div className="relative mx-auto max-w-5xl space-y-6">
+      <div className="relative mx-auto max-w-6xl space-y-6">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
@@ -273,7 +266,7 @@ export function AccountPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-sm text-cyan-100/70">{tr ? "Canlı proje takibi" : "Live project tracking"}</p>
-              <h2 className="mt-2 text-3xl font-medium text-white">{tr ? "Müşteri proje durumları" : "Client project status"}</h2>
+              <h2 className="mt-2 text-3xl font-medium text-white">{tr ? "Proje aşamaları" : "Project stages"}</h2>
               <p className="mt-2 text-sm text-white/45">
                 {lastUpdated ? `${tr ? "Son güncelleme" : "Last update"}: ${lastUpdated}` : tr ? "10 saniyede bir otomatik yenilenir." : "Auto-refreshes every 10 seconds."}
               </p>
@@ -293,36 +286,16 @@ export function AccountPage() {
             </div>
           )}
 
-          <div className="mt-6 space-y-3">
+          <div className="mt-6 space-y-5">
             {requests.length === 0 && !requestError && (
               <div className="rounded-2xl border border-white/10 bg-black/30 p-5 text-white/55">
                 {tr ? "Henüz proje talebin yok. Ana sayfadaki proje talebi formundan yeni talep gönderebilirsin." : "You do not have any project requests yet. Submit one from the project request form on the home page."}
               </div>
             )}
 
-            {requests.map((request) => {
-              const label = statusLabels[request.status]?.[tr ? "tr" : "en"] || request.status;
-
-              return (
-                <div key={request.id} className="rounded-2xl border border-white/10 bg-black/30 p-5">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-[0.22em] text-white/35">{request.project_type}</p>
-                      <h3 className="text-xl font-medium text-white">{request.project_name}</h3>
-                      <p className="text-sm leading-6 text-white/55">{request.description}</p>
-                      <div className="flex flex-wrap gap-2 text-xs text-white/45">
-                        {request.budget_range && <span className="rounded-full bg-white/[0.06] px-3 py-1">{tr ? "Bütçe" : "Budget"}: {request.budget_range}</span>}
-                        {request.deadline && <span className="rounded-full bg-white/[0.06] px-3 py-1">{tr ? "Hedef" : "Target"}: {request.deadline}</span>}
-                        {request.created_at && <span className="rounded-full bg-white/[0.06] px-3 py-1">{request.created_at}</span>}
-                      </div>
-                    </div>
-                    <div className="rounded-full border border-white/10 bg-white px-4 py-2 text-sm font-medium text-black">
-                      {label}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {requests.map((request) => (
+              <ProjectStageWheel key={request.id} request={request} />
+            ))}
           </div>
         </motion.section>
       </div>
