@@ -7,81 +7,137 @@ export async function onRequestPost(context: any) {
   try {
     const body = await context.request.json().catch(() => null);
     const lobbyId = Number(body?.lobby_id);
-    const rounds = Array.isArray(body?.rounds) ? body.rounds : [];
+    const roundNumber = Number(body?.round_number);
+    const msValue = body?.ms === null || body?.ms === undefined ? null : Math.max(0, Math.min(5000, Number(body.ms)));
+    const tooEarly = Boolean(body?.tooEarly);
 
-    if (!lobbyId) return Response.json({ error: "Lobby seçilmedi." }, { status: 400 });
+    if (!lobbyId || !roundNumber) return Response.json({ error: "Lobby ve round gerekli." }, { status: 400 });
 
-    const lobby = await context.env.DB
-      .prepare("SELECT id, creator_user_id, opponent_user_id, round_count, reward_amount, status FROM duel_lobbies WHERE id = ?")
-      .bind(lobbyId)
-      .first();
-
+    const lobby = await getLobby(context, lobbyId);
     if (!lobby) return Response.json({ error: "Lobby bulunamadı." }, { status: 404 });
     if (lobby.status !== "in_progress") return Response.json({ error: "Bu düello aktif değil." }, { status: 409 });
+    if (!isParticipant(lobby, auth.user.id)) return Response.json({ error: "Bu düellonun oyuncusu değilsin." }, { status: 403 });
 
-    const isParticipant = Number(lobby.creator_user_id) === Number(auth.user.id) || Number(lobby.opponent_user_id) === Number(auth.user.id);
-    if (!isParticipant) return Response.json({ error: "Bu düellonun oyuncusu değilsin." }, { status: 403 });
+    const round = await context.env.DB
+      .prepare("SELECT * FROM duel_rounds WHERE lobby_id = ? AND round_number = ?")
+      .bind(lobbyId, roundNumber)
+      .first();
 
-    if (!rounds.length || rounds.length !== Number(lobby.round_count)) {
-      return Response.json({ error: `Bu düello ${lobby.round_count} round sonuç bekliyor.` }, { status: 400 });
-    }
+    if (!round) return Response.json({ error: "Round bulunamadı." }, { status: 404 });
+    if (round.status !== "active") return Response.json({ error: "Bu round artık aktif değil." }, { status: 409 });
 
-    const normalized = rounds.map((round: any) => ({
-      ms: round?.ms === null || round?.ms === undefined ? null : Math.max(0, Math.min(5000, Number(round.ms))),
-      tooEarly: Boolean(round?.tooEarly),
-    }));
+    const scoreMs = tooEarly ? 9999 : Number.isFinite(msValue) ? Number(msValue) : 9999;
 
-    const validMs = normalized.filter((round: any) => !round.tooEarly && Number.isFinite(round.ms)).map((round: any) => Number(round.ms));
-    const tooEarlyCount = normalized.filter((round: any) => round.tooEarly).length;
-    const averageMs = validMs.length ? Math.round(validMs.reduce((sum: number, value: number) => sum + value, 0) / validMs.length) : 9999;
-    const bestMs = validMs.length ? Math.min(...validMs) : 9999;
-    const scoreMs = averageMs + tooEarlyCount * 1000;
-
-    await context.env.DB
+    const inserted = await context.env.DB
       .prepare(`
-        INSERT OR REPLACE INTO duel_results (lobby_id, user_id, average_ms, best_ms, too_early_count, score_ms, rounds_json, submitted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        INSERT OR IGNORE INTO duel_round_submissions (lobby_id, round_number, user_id, ms, too_early, score_ms, submitted_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
       `)
-      .bind(lobbyId, auth.user.id, averageMs, bestMs, tooEarlyCount, scoreMs, JSON.stringify(normalized))
+      .bind(lobbyId, roundNumber, auth.user.id, msValue, tooEarly ? 1 : 0, scoreMs)
       .run();
 
-    const results = await context.env.DB
-      .prepare("SELECT user_id, average_ms, best_ms, too_early_count, score_ms FROM duel_results WHERE lobby_id = ?")
-      .bind(lobbyId)
+    if (Number(inserted?.meta?.changes || 0) === 0) {
+      return Response.json({ error: "Bu round için sonucun zaten kaydedildi." }, { status: 409 });
+    }
+
+    const submissions = await context.env.DB
+      .prepare("SELECT * FROM duel_round_submissions WHERE lobby_id = ? AND round_number = ? ORDER BY submitted_at ASC")
+      .bind(lobbyId, roundNumber)
       .all();
 
-    const players = results?.results || [];
-    let completed = false;
-    let winner: number | null = null;
+    const items = submissions?.results || [];
+    if (items.length >= 2) {
+      const winner = decideRoundWinner(items[0], items[1]);
 
-    if (players.length >= 2) {
-      const [a, b] = players;
-      winner = Number(a.user_id);
-      if (Number(b.score_ms) < Number(a.score_ms)) winner = Number(b.user_id);
-      if (Number(b.score_ms) === Number(a.score_ms) && Number(b.best_ms) < Number(a.best_ms)) winner = Number(b.user_id);
-
-      const update = await context.env.DB
-        .prepare("UPDATE duel_lobbies SET status = 'completed', winner_user_id = ?, updated_at = datetime('now') WHERE id = ? AND status = 'in_progress'")
-        .bind(winner, lobbyId)
+      await context.env.DB
+        .prepare("UPDATE duel_rounds SET status = 'completed', winner_user_id = ?, completed_at = datetime('now') WHERE lobby_id = ? AND round_number = ? AND status = 'active'")
+        .bind(winner, lobbyId, roundNumber)
         .run();
 
-      completed = Number(update?.meta?.changes || 0) > 0;
+      await syncDuelResultRows(context, lobbyId, Number(lobby.creator_user_id), Number(lobby.opponent_user_id));
 
-      if (completed) {
-        await awardSystemCoins(context, winner, Number(lobby.reward_amount || 0), lobbyId);
+      const score = await getScore(context, lobbyId);
+      const targetWins = Math.floor(Number(lobby.round_count) / 2) + 1;
+      const creatorWins = Number(score[lobby.creator_user_id] || 0);
+      const opponentWins = Number(score[lobby.opponent_user_id] || 0);
+
+      if (creatorWins >= targetWins || opponentWins >= targetWins || roundNumber >= Number(lobby.round_count)) {
+        const matchWinner = creatorWins > opponentWins ? Number(lobby.creator_user_id) : Number(lobby.opponent_user_id);
+        await completeLobby(context, lobby, matchWinner);
       }
     }
 
-    return Response.json({
-      success: true,
-      completed,
-      winner_user_id: winner,
-      message: completed
-        ? `Düello tamamlandı. Kazanan ${lobby.reward_amount} sistem coin ödülü aldı.`
-        : "Sonucun kaydedildi. Rakibin sonucu bekleniyor.",
-    });
+    return Response.json({ success: true, message: items.length >= 2 ? "Round tamamlandı." : "Sonucun kaydedildi. Rakip bekleniyor." });
   } catch (error) {
-    return Response.json({ error: "Düello sonucu kaydedilemedi." }, { status: 500 });
+    return Response.json({ error: "Round sonucu kaydedilemedi. duel_round_submissions tablosunu kontrol et." }, { status: 500 });
+  }
+}
+
+function decideRoundWinner(a: any, b: any) {
+  const aEarly = Number(a.too_early) === 1;
+  const bEarly = Number(b.too_early) === 1;
+  if (aEarly && !bEarly) return Number(b.user_id);
+  if (!aEarly && bEarly) return Number(a.user_id);
+  if (Number(a.score_ms) < Number(b.score_ms)) return Number(a.user_id);
+  if (Number(b.score_ms) < Number(a.score_ms)) return Number(b.user_id);
+  return Number(a.submitted_at || "") <= Number(b.submitted_at || "") ? Number(a.user_id) : Number(b.user_id);
+}
+
+async function getLobby(context: any, lobbyId: number) {
+  return await context.env.DB
+    .prepare("SELECT * FROM duel_lobbies WHERE id = ?")
+    .bind(lobbyId)
+    .first();
+}
+
+async function syncDuelResultRows(context: any, lobbyId: number, creatorId: number, opponentId: number) {
+  for (const userId of [creatorId, opponentId]) {
+    const subs = await context.env.DB
+      .prepare("SELECT * FROM duel_round_submissions WHERE lobby_id = ? AND user_id = ? ORDER BY round_number ASC")
+      .bind(lobbyId, userId)
+      .all();
+
+    const rounds = subs?.results || [];
+    const valid = rounds.filter((item: any) => Number(item.too_early) !== 1 && Number.isFinite(Number(item.ms))).map((item: any) => Number(item.ms));
+    const tooEarlyCount = rounds.filter((item: any) => Number(item.too_early) === 1).length;
+    const averageMs = valid.length ? Math.round(valid.reduce((sum: number, value: number) => sum + value, 0) / valid.length) : 9999;
+    const bestMs = valid.length ? Math.min(...valid) : 9999;
+    const roundWinsRow = await context.env.DB
+      .prepare("SELECT COUNT(*) AS wins FROM duel_rounds WHERE lobby_id = ? AND winner_user_id = ?")
+      .bind(lobbyId, userId)
+      .first();
+    const roundWins = Number(roundWinsRow?.wins || 0);
+    const scoreMs = averageMs + tooEarlyCount * 1000 - roundWins * 50;
+
+    await context.env.DB
+      .prepare(`
+        INSERT OR REPLACE INTO duel_results (lobby_id, user_id, average_ms, best_ms, too_early_count, round_wins, score_ms, rounds_json, submitted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `)
+      .bind(lobbyId, userId, averageMs, bestMs, tooEarlyCount, roundWins, scoreMs, JSON.stringify(rounds))
+      .run();
+  }
+}
+
+async function getScore(context: any, lobbyId: number) {
+  const rows = await context.env.DB
+    .prepare("SELECT winner_user_id, COUNT(*) AS wins FROM duel_rounds WHERE lobby_id = ? AND status = 'completed' AND winner_user_id IS NOT NULL GROUP BY winner_user_id")
+    .bind(lobbyId)
+    .all();
+
+  const score: Record<string, number> = {};
+  for (const row of rows?.results || []) score[String(row.winner_user_id)] = Number(row.wins || 0);
+  return score;
+}
+
+async function completeLobby(context: any, lobby: any, winner: number) {
+  const update = await context.env.DB
+    .prepare("UPDATE duel_lobbies SET status = 'completed', winner_user_id = ?, updated_at = datetime('now') WHERE id = ? AND status = 'in_progress'")
+    .bind(winner, lobby.id)
+    .run();
+
+  if (Number(update?.meta?.changes || 0) > 0) {
+    await awardSystemCoins(context, winner, Number(lobby.reward_amount || 50), Number(lobby.id));
   }
 }
 
@@ -89,11 +145,7 @@ async function awardSystemCoins(context: any, userId: number, amount: number, lo
   if (!amount || amount < 1) return;
 
   try {
-    const existing = await context.env.DB
-      .prepare("SELECT id FROM coin_transactions WHERE reason = ? LIMIT 1")
-      .bind(`tech_duel:${lobbyId}`)
-      .first();
-
+    const existing = await context.env.DB.prepare("SELECT id FROM coin_transactions WHERE reason = ? LIMIT 1").bind(`tech_duel:${lobbyId}`).first();
     if (existing) return;
 
     await context.env.DB
@@ -108,13 +160,14 @@ async function awardSystemCoins(context: any, userId: number, amount: number, lo
       .bind(userId, amount, amount)
       .run();
 
-    await context.env.DB
-      .prepare("INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)")
-      .bind(userId, amount, `tech_duel:${lobbyId}`)
-      .run();
+    await context.env.DB.prepare("INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)").bind(userId, amount, `tech_duel:${lobbyId}`).run();
   } catch {
-    // Coin tabloları yoksa düello sonucu bozulmasın. Migration sonrası ödüller çalışır.
+    // Coin tabloları yoksa düello sonucu bozulmasın.
   }
+}
+
+function isParticipant(lobby: any, userId: number) {
+  return Number(lobby.creator_user_id) === Number(userId) || Number(lobby.opponent_user_id) === Number(userId);
 }
 
 async function requireUser(context: any) {
