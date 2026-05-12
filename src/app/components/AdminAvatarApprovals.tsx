@@ -40,7 +40,6 @@ export function AdminAvatarApprovals() {
         refresh: "Yenile",
         empty: "Onaylanacak admin bulunamadı.",
         error: "Profil fotoğrafları alınamadı.",
-        rejectConfirm: "Bu profil fotoğrafı reddedilecek ve admin yeniden fotoğraf yüklemek zorunda kalacak. Emin misin?",
       }
     : {
         title: "Admin profile photo approvals",
@@ -53,7 +52,6 @@ export function AdminAvatarApprovals() {
         refresh: "Refresh",
         empty: "No admins to review.",
         error: "Could not load profile photos.",
-        rejectConfirm: "This profile photo will be rejected and removed. The admin will need to upload a new one. Are you sure?",
       };
 
   const loadAdmins = async () => {
@@ -80,8 +78,6 @@ export function AdminAvatarApprovals() {
   };
 
   const updateApproval = async (userId: number, action: "approve" | "reject") => {
-    if (action === "reject" && !window.confirm(copy.rejectConfirm)) return;
-
     setMessage(null);
 
     try {
