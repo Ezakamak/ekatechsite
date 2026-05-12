@@ -214,9 +214,7 @@ export function OffPage() {
           <CoinWalletCard wallet={wallet} copy={copy} locale={tr ? "tr-TR" : "en-US"} />
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-1.5">
-                <img src={coinIcon} alt="Tech Coin" className="h-full w-full object-contain drop-shadow-[0_0_14px_rgba(34,211,238,0.35)]" />
-              </div>
+              <CoinIcon size="sm" tone="cyan" />
               <div>
                 <p className="text-sm text-white/40">Reward rule</p>
                 <h2 className="text-2xl font-medium text-white">{copy.fixedReward}</h2>
@@ -251,9 +249,7 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
           <h2 className="mt-3 text-5xl font-semibold tracking-tight text-white">{balance}</h2>
           <p className="mt-2 text-sm text-amber-100/80">{symbol} · {currency}</p>
         </div>
-        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl border border-amber-300/25 bg-black/25 p-2 shadow-2xl shadow-amber-500/20">
-          <img src={coinIcon} alt="Tech Coin" className="h-full w-full object-contain drop-shadow-[0_0_18px_rgba(251,191,36,0.5)]" />
-        </div>
+        <CoinIcon size="lg" tone="amber" />
       </div>
       <div className="relative mt-6 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
@@ -265,6 +261,24 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
           <p className="mt-2 text-lg font-medium text-white">{lifetime} {symbol}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CoinIcon({ size, tone }: { size: "sm" | "lg"; tone: "cyan" | "amber" }) {
+  const wrapperSize = size === "lg" ? "h-16 w-16 rounded-full" : "h-12 w-12 rounded-full";
+  const imageSize = size === "lg" ? "h-[132%] w-[132%]" : "h-[136%] w-[136%]";
+  const glow = tone === "amber" ? "shadow-amber-500/20" : "shadow-cyan-500/20";
+  const ring = tone === "amber" ? "border-amber-300/25" : "border-cyan-300/25";
+  const drop = tone === "amber" ? "drop-shadow-[0_0_18px_rgba(251,191,36,0.5)]" : "drop-shadow-[0_0_14px_rgba(34,211,238,0.45)]";
+
+  return (
+    <div className={`flex ${wrapperSize} shrink-0 items-center justify-center overflow-hidden border ${ring} bg-black/30 shadow-2xl ${glow}`}>
+      <img
+        src={coinIcon}
+        alt="Tech Coin"
+        className={`${imageSize} max-w-none rounded-full object-cover mix-blend-multiply ${drop}`}
+      />
     </div>
   );
 }
