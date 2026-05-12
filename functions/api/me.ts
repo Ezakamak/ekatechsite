@@ -5,7 +5,7 @@ export async function onRequestGet(context: any) {
     const token = getCookie(context.request.headers.get("Cookie") || "", "session");
 
     if (!token) {
-      return Response.json({ loggedIn: false }, { status: 401 });
+      return json({ loggedIn: false, user: null });
     }
 
     const user = await context.env.DB
@@ -25,16 +25,21 @@ export async function onRequestGet(context: any) {
           END AS avatar_approved
         FROM sessions
         JOIN users ON sessions.user_id = users.id
-        WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
+        WHERE sessions.token = ?
+          AND datetime(replace(substr(sessions.expires_at, 1, 19), 'T', ' ')) > datetime('now')
       `)
       .bind(OWNER_EMAIL, OWNER_EMAIL, token)
       .first();
 
     if (!user) {
-      return Response.json({ loggedIn: false }, { status: 401 });
+      return json({ loggedIn: false, user: null });
     }
 
-    return Response.json({
+    if (user.role === "blocked") {
+      return json({ loggedIn: false, user: null, blocked: true });
+    }
+
+    return json({
       loggedIn: true,
       user: {
         id: user.id,
@@ -46,8 +51,18 @@ export async function onRequestGet(context: any) {
       },
     });
   } catch (error) {
-    return Response.json({ error: "Sunucu hatası. users tablosunda avatar_url ve avatar_approved kolonları olduğundan ve D1 binding adının DB olduğundan emin ol." }, { status: 500 });
+    return json({ loggedIn: false, user: null, error: "Auth kontrolü yapılamadı." }, 500);
   }
+}
+
+function json(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
+  });
 }
 
 function getCookie(cookieHeader: string, name: string) {
