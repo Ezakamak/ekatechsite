@@ -48,6 +48,10 @@ export async function onRequestPatch(context: any) {
     return Response.json({ error: admin.error }, { status: admin.status });
   }
 
+  if (admin.user.role === "admin" && (!admin.user.avatar_url || Number(admin.user.avatar_approved || 0) !== 1)) {
+    return Response.json({ error: "Sipariş yönetmek için profil fotoğrafı yüklemeli ve owner onayı almalısın. Şimdilik paneli sadece görüntüleyebilirsin." }, { status: 403 });
+  }
+
   try {
     const body = await context.request.json().catch(() => null);
     const requestId = Number(body?.requestId);
@@ -101,7 +105,7 @@ export async function onRequestPatch(context: any) {
         : "Talep ilk aşamaya alındı ve tüm adminlere açıldı.",
     });
   } catch (error) {
-    return Response.json({ error: "Talep güncellenemedi. assigned_admin_id kolonunu kontrol et." }, { status: 500 });
+    return Response.json({ error: "Talep güncellenemedi. assigned_admin_id ve avatar_approved kolonlarını kontrol et." }, { status: 500 });
   }
 }
 
@@ -118,6 +122,8 @@ async function requireAdminOrOwner(context: any) {
         users.id,
         users.name,
         users.email,
+        users.avatar_url,
+        COALESCE(users.avatar_approved, 0) AS avatar_approved,
         CASE
           WHEN lower(users.email) = ? THEN 'owner'
           ELSE COALESCE(users.role, 'client')
