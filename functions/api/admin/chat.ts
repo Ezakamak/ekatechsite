@@ -70,6 +70,8 @@ export async function onRequestPost(context: any) {
       .bind(admin.user.id, message)
       .run();
 
+    await clearTyping(context, admin.user.id);
+
     return Response.json({ success: true, message: "Mesaj gönderildi." });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Bilinmeyen hata";
@@ -174,6 +176,17 @@ async function checkSimpleLimit(context: any, key: string, limit: number, window
     return { ok: true };
   } catch {
     return { ok: true };
+  }
+}
+
+async function clearTyping(context: any, userId: number) {
+  try {
+    await context.env.DB
+      .prepare("DELETE FROM admin_chat_typing WHERE user_id = ?")
+      .bind(userId)
+      .run();
+  } catch {
+    // Typing tablosu yoksa mesaj gönderme bozulmasın.
   }
 }
 
