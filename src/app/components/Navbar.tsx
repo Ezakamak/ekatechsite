@@ -3,6 +3,7 @@ import logo from "../../imports/View_recent_photos.png";
 import { motion, AnimatePresence } from "motion/react";
 import { Menu, X, ChevronDown } from "lucide-react";
 import { useLanguage } from "../i18n";
+import { NotificationBell } from "./NotificationBell";
 
 type User = {
   id: number;
@@ -241,6 +242,8 @@ export function Navbar() {
               TR
             </button>
           </div>
+
+          {user && <NotificationBell />}
 
           {user ? (
             <div className="relative" data-account-menu>
