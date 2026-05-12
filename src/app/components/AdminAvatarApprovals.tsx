@@ -25,6 +25,7 @@ export function AdminAvatarApprovals() {
   const tr = language === "tr";
   const [admins, setAdmins] = useState<AdminAvatar[]>([]);
   const [loading, setLoading] = useState(false);
+  const [ownerOnlyVisible, setOwnerOnlyVisible] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const copy = tr
@@ -61,7 +62,13 @@ export function AdminAvatarApprovals() {
       const response = await fetch("/api/admin/avatar-approval", { credentials: "same-origin" });
       const data = await response.json().catch(() => null);
 
+      if (response.status === 401 || response.status === 403) {
+        setOwnerOnlyVisible(false);
+        return;
+      }
+
       if (!response.ok) throw new Error(data?.error || copy.error);
+      setOwnerOnlyVisible(true);
       setAdmins(data?.admins || []);
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : copy.error });
@@ -93,6 +100,8 @@ export function AdminAvatarApprovals() {
   useEffect(() => {
     loadAdmins();
   }, [language]);
+
+  if (!ownerOnlyVisible) return null;
 
   return (
     <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
