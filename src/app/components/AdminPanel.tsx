@@ -21,6 +21,10 @@ type ProjectRequest = {
   created_at?: string;
   user_name: string;
   user_email: string;
+  assigned_admin_id?: number | null;
+  assigned_admin_name?: string | null;
+  assigned_admin_email?: string | null;
+  assigned_admin_avatar_url?: string | null;
 };
 
 type Overview = {
@@ -57,6 +61,16 @@ function getStatusLabel(status: string) {
   return requestStatuses.find((item) => item.value === status)?.label || legacyStatusLabels[status] || status;
 }
 
+function getInitials(name?: string | null, email?: string | null) {
+  const source = name || email || "A";
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "A";
+}
+
 export function AdminPanel() {
   const { language } = useLanguage();
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -80,7 +94,7 @@ export function AdminPanel() {
             activeSessions: "Aktif oturum",
             allUsers: "Kullanıcı yönetimi",
             requests: "Proje talepleri",
-            noRequests: "Henüz proje talebi yok.",
+            noRequests: "Sana atanmış veya henüz alınmamış proje talebi yok.",
             budget: "Bütçe",
             deadline: "Deadline",
             saved: "Güncellendi.",
@@ -89,6 +103,9 @@ export function AdminPanel() {
             gateSubtitle: "Bu sayfa sadece role değeri admin olan hesaplarda açılır.",
             signIn: "Giriş yap",
             home: "Ana sayfa",
+            unassigned: "Tüm adminlere açık",
+            assignedToYou: "Sana atanmış",
+            assignedAdmin: "Sorumlu admin",
           }
         : {
             eyebrow: "Admin panel",
@@ -100,7 +117,7 @@ export function AdminPanel() {
             activeSessions: "Active sessions",
             allUsers: "User management",
             requests: "Project requests",
-            noRequests: "No project requests yet.",
+            noRequests: "No unassigned or assigned-to-you project requests yet.",
             budget: "Budget",
             deadline: "Deadline",
             saved: "Updated.",
@@ -109,6 +126,9 @@ export function AdminPanel() {
             gateSubtitle: "This page opens only for accounts whose role value is admin.",
             signIn: "Sign in",
             home: "Home",
+            unassigned: "Open to all admins",
+            assignedToYou: "Assigned to you",
+            assignedAdmin: "Assigned admin",
           },
     [language]
   );
@@ -194,7 +214,7 @@ export function AdminPanel() {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || t.error);
 
-      setStatus({ type: "success", message: t.saved });
+      setStatus({ type: "success", message: data?.message || t.saved });
       await loadAdminData();
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : t.error });
@@ -301,37 +321,62 @@ export function AdminPanel() {
           <Panel title={t.requests}>
             <div className="space-y-3">
               {requests.length === 0 && <p className="text-white/45">{t.noRequests}</p>}
-              {requests.map((request) => (
-                <div key={request.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.22em] text-white/35">{request.project_type}</p>
-                        <h3 className="mt-1 text-xl font-medium text-white">{request.project_name}</h3>
-                      </div>
-                      <p className="text-sm text-white/45">
-                        {request.user_name} · {request.user_email}
-                      </p>
-                      <p className="text-sm leading-6 text-white/60">{request.description}</p>
-                      <div className="flex flex-wrap gap-2 text-xs text-white/45">
-                        {request.budget_range && <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.budget}: {request.budget_range}</span>}
-                        {request.deadline && <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.deadline}: {request.deadline}</span>}
-                        <span className="rounded-full bg-white/[0.06] px-3 py-1">Durum: {getStatusLabel(request.status)}</span>
-                      </div>
-                    </div>
+              {requests.map((request) => {
+                const isAssigned = Boolean(request.assigned_admin_id);
 
-                    <select
-                      value={request.status}
-                      onChange={(event) => updateRequestStatus(request.id, event.target.value)}
-                      className="rounded-full border border-white/10 bg-black px-4 py-2 text-sm text-white outline-none"
-                    >
-                      {requestStatuses.map((item) => (
-                        <option key={item.value} value={item.value}>{item.label}</option>
-                      ))}
-                    </select>
+                return (
+                  <div key={request.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.22em] text-white/35">{request.project_type}</p>
+                          <h3 className="mt-1 text-xl font-medium text-white">{request.project_name}</h3>
+                        </div>
+                        <p className="text-sm text-white/45">
+                          {request.user_name} · {request.user_email}
+                        </p>
+                        <p className="text-sm leading-6 text-white/60">{request.description}</p>
+                        <div className="flex flex-wrap gap-2 text-xs text-white/45">
+                          {request.budget_range && <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.budget}: {request.budget_range}</span>}
+                          {request.deadline && <span className="rounded-full bg-white/[0.06] px-3 py-1">{t.deadline}: {request.deadline}</span>}
+                          <span className="rounded-full bg-white/[0.06] px-3 py-1">Durum: {getStatusLabel(request.status)}</span>
+                          <span className={`rounded-full px-3 py-1 ${isAssigned ? "bg-purple-300/15 text-purple-100" : "bg-cyan-300/10 text-cyan-100"}`}>
+                            {isAssigned ? t.assignedToYou : t.unassigned}
+                          </span>
+                        </div>
+
+                        {isAssigned && (
+                          <div className="inline-flex items-center gap-3 rounded-2xl border border-purple-300/20 bg-purple-300/[0.08] p-3">
+                            <div className="h-10 w-10 overflow-hidden rounded-full border border-white/15 bg-white text-black">
+                              {request.assigned_admin_avatar_url ? (
+                                <img src={request.assigned_admin_avatar_url} alt="Admin" className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-sm font-semibold">
+                                  {getInitials(request.assigned_admin_name, request.assigned_admin_email)}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-xs text-white/35">{t.assignedAdmin}</p>
+                              <p className="text-sm font-medium text-white">{request.assigned_admin_name || "Admin"}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <select
+                        value={request.status}
+                        onChange={(event) => updateRequestStatus(request.id, event.target.value)}
+                        className="rounded-full border border-white/10 bg-black px-4 py-2 text-sm text-white outline-none"
+                      >
+                        {requestStatuses.map((item) => (
+                          <option key={item.value} value={item.value}>{item.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Panel>
         </div>
