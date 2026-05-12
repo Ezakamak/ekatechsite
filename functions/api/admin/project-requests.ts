@@ -48,7 +48,7 @@ export async function onRequestPatch(context: any) {
     return Response.json({ error: admin.error }, { status: admin.status });
   }
 
-  if (admin.user.role === "admin" && (!admin.user.avatar_url || Number(admin.user.avatar_approved || 0) !== 1)) {
+  if (!canMutateAdminData(admin.user)) {
     return Response.json({ error: "Sipariş yönetmek için profil fotoğrafı yüklemeli ve owner onayı almalısın. Şimdilik paneli sadece görüntüleyebilirsin." }, { status: 403 });
   }
 
@@ -93,10 +93,19 @@ export async function onRequestPatch(context: any) {
     const shouldRelease = firstStageStatuses.includes(status);
     const nextAssignedAdminId = shouldRelease ? null : current.assigned_admin_id || admin.user.id;
 
-    await context.env.DB
-      .prepare("UPDATE project_requests SET status = ?, assigned_admin_id = ? WHERE id = ?")
-      .bind(status, nextAssignedAdminId, requestId)
+    const updateResult = await context.env.DB
+      .prepare(`
+        UPDATE project_requests
+        SET status = ?, assigned_admin_id = ?
+        WHERE id = ?
+          AND (? = 'owner' OR assigned_admin_id IS NULL OR assigned_admin_id = ?)
+      `)
+      .bind(status, nextAssignedAdminId, requestId, admin.user.role, admin.user.id)
       .run();
+
+    if (updateResult?.meta?.changes === 0) {
+      return Response.json({ error: "Bu proje aynı anda başka bir admin tarafından alınmış veya artık sana atanmış değil." }, { status: 409 });
+    }
 
     return Response.json({
       success: true,
@@ -107,6 +116,12 @@ export async function onRequestPatch(context: any) {
   } catch (error) {
     return Response.json({ error: "Talep güncellenemedi. assigned_admin_id ve avatar_approved kolonlarını kontrol et." }, { status: 500 });
   }
+}
+
+function canMutateAdminData(user: any) {
+  if (user.role === "owner") return true;
+  if (user.role !== "admin") return false;
+  return Boolean(user.avatar_url) && Number(user.avatar_approved || 0) === 1;
 }
 
 async function requireAdminOrOwner(context: any) {
@@ -123,7 +138,10 @@ async function requireAdminOrOwner(context: any) {
         users.name,
         users.email,
         users.avatar_url,
-        COALESCE(users.avatar_approved, 0) AS avatar_approved,
+        CASE
+          WHEN lower(users.email) = ? THEN 1
+          ELSE COALESCE(users.avatar_approved, 0)
+        END AS avatar_approved,
         CASE
           WHEN lower(users.email) = ? THEN 'owner'
           ELSE COALESCE(users.role, 'client')
@@ -132,11 +150,15 @@ async function requireAdminOrOwner(context: any) {
       JOIN users ON sessions.user_id = users.id
       WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
     `)
-    .bind(OWNER_EMAIL, token)
+    .bind(OWNER_EMAIL, OWNER_EMAIL, token)
     .first();
 
   if (!user) {
     return { ok: false, status: 401, error: "Oturum geçersiz." };
+  }
+
+  if (user.role === "blocked") {
+    return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   }
 
   if (user.role !== "admin" && user.role !== "owner") {
