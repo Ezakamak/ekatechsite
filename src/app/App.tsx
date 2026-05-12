@@ -36,6 +36,7 @@ import { AdminProjectTools } from "./components/AdminProjectTools";
 import { MaintenancePanel } from "./components/MaintenancePanel";
 import { MaintenanceGate } from "./components/MaintenanceGate";
 import { OffPage } from "./components/OffPage";
+import { TechDuel } from "./components/TechDuel";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -121,6 +122,7 @@ export default function App() {
   const isAdmin = path === "/admin";
   const isAccount = path === "/account";
   const isOff = path === "/off";
+  const isDuel = path === "/duel";
 
   return (
     <LanguageProvider>
@@ -159,6 +161,8 @@ export default function App() {
           <AccountPage />
         ) : isOff ? (
           <OffPage />
+        ) : isDuel ? (
+          <TechDuel />
         ) : (
           <>
             <Hero />
