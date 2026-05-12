@@ -1,5 +1,7 @@
+const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+
 export async function onRequestGet(context: any) {
-  const admin = await requireAdmin(context);
+  const admin = await requireAdminOrOwner(context);
 
   if (!admin.ok) {
     return Response.json({ error: admin.error }, { status: admin.status });
@@ -10,20 +12,42 @@ export async function onRequestGet(context: any) {
       .prepare("SELECT COUNT(*) AS count FROM users")
       .first();
 
+    const ownerUsers = await context.env.DB
+      .prepare("SELECT COUNT(*) AS count FROM users WHERE lower(email) = ?")
+      .bind(OWNER_EMAIL)
+      .first();
+
     const adminUsers = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'")
+      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND lower(email) != ?")
+      .bind(OWNER_EMAIL)
       .first();
 
     const clientUsers = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'client' OR role IS NULL")
+      .prepare("SELECT COUNT(*) AS count FROM users WHERE (role = 'client' OR role IS NULL) AND lower(email) != ?")
+      .bind(OWNER_EMAIL)
       .first();
 
     const blockedUsers = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'blocked'")
+      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'blocked' AND lower(email) != ?")
+      .bind(OWNER_EMAIL)
       .first();
 
     const recentUsers = await context.env.DB
-      .prepare("SELECT id, name, email, COALESCE(role, 'client') AS role, created_at FROM users ORDER BY id DESC LIMIT 6")
+      .prepare(`
+        SELECT
+          id,
+          name,
+          email,
+          CASE
+            WHEN lower(email) = ? THEN 'owner'
+            ELSE COALESCE(role, 'client')
+          END AS role,
+          created_at
+        FROM users
+        ORDER BY id DESC
+        LIMIT 6
+      `)
+      .bind(OWNER_EMAIL)
       .all();
 
     const activeSessions = await context.env.DB
@@ -34,6 +58,7 @@ export async function onRequestGet(context: any) {
       admin: admin.user,
       stats: {
         totalUsers: totalUsers?.count || 0,
+        ownerUsers: ownerUsers?.count || 0,
         adminUsers: adminUsers?.count || 0,
         clientUsers: clientUsers?.count || 0,
         blockedUsers: blockedUsers?.count || 0,
@@ -46,7 +71,7 @@ export async function onRequestGet(context: any) {
   }
 }
 
-async function requireAdmin(context: any) {
+async function requireAdminOrOwner(context: any) {
   const token = getCookie(context.request.headers.get("Cookie") || "", "session");
 
   if (!token) {
@@ -55,12 +80,19 @@ async function requireAdmin(context: any) {
 
   const user = await context.env.DB
     .prepare(`
-      SELECT users.id, users.name, users.email, COALESCE(users.role, 'client') AS role
+      SELECT
+        users.id,
+        users.name,
+        users.email,
+        CASE
+          WHEN lower(users.email) = ? THEN 'owner'
+          ELSE COALESCE(users.role, 'client')
+        END AS role
       FROM sessions
       JOIN users ON sessions.user_id = users.id
       WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
     `)
-    .bind(token)
+    .bind(OWNER_EMAIL, token)
     .first();
 
   if (!user) {
@@ -71,7 +103,7 @@ async function requireAdmin(context: any) {
     return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   }
 
-  if (user.role !== "admin") {
+  if (user.role !== "admin" && user.role !== "owner") {
     return { ok: false, status: 403, error: "Bu alan sadece yöneticiler içindir." };
   }
 
