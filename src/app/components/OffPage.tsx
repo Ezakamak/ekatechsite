@@ -15,6 +15,7 @@ type User = {
 type Wallet = {
   balance: number;
   lifetime_earned: number;
+  lifetime_spent: number;
   best_round: number;
   perfect_clears: number;
   total_rounds: number;
@@ -43,6 +44,7 @@ type GameState = {
 
 const TOTAL_CELLS = 25;
 const BASE_SAFE_POINTS = 5;
+const CELL_OPEN_COST = 3;
 
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
@@ -100,9 +102,9 @@ function getDifficultyBonus(mineCount: number, openedSafe: number) {
   const safeCells = TOTAL_CELLS - mineCount;
   const safeRatio = safeCells / TOTAL_CELLS;
   const progressRatio = openedSafe / Math.max(1, safeCells);
-  const riskBase = 1 / Math.max(0.25, safeRatio);
+  const difficultyBase = 1 / Math.max(0.25, safeRatio);
   const progressBoost = 1 + progressRatio * 0.65;
-  const bonus = riskBase * progressBoost;
+  const bonus = difficultyBase * progressBoost;
 
   return Math.min(5, Math.max(1, bonus));
 }
@@ -124,10 +126,11 @@ export function OffPage() {
   const [loading, setLoading] = useState(true);
   const [walletLoading, setWalletLoading] = useState(false);
   const [walletError, setWalletError] = useState("");
-  const [wallet, setWallet] = useState<Wallet>({ balance: 100, lifetime_earned: 0, best_round: 0, perfect_clears: 0, total_rounds: 0 });
+  const [wallet, setWallet] = useState<Wallet>({ balance: 100, lifetime_earned: 0, lifetime_spent: 0, best_round: 0, perfect_clears: 0, total_rounds: 0 });
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
   const [mineCount, setMineCount] = useState(5);
   const [game, setGame] = useState<GameState>(() => createGame(5));
+  const [busyCell, setBusyCell] = useState<number | null>(null);
 
   const difficultyBonus = useMemo(() => getDifficultyBonus(mineCount, game.openedSafe), [mineCount, game.openedSafe]);
   const nextPoints = Math.round(BASE_SAFE_POINTS * difficultyBonus);
@@ -142,21 +145,22 @@ export function OffPage() {
         balanceNote: "Tech Coin sadece site içi eğlence puanıdır; gerçek para, ödeme veya transfer değildir.",
         coinDesc: "EkaTech içi eğlence puanı.",
         gameTitle: "EkaMines",
-        gameDesc: "Mayın sayısına göre zorluk bonusu kullanan admin mini oyunu.",
+        gameDesc: "Her kutuyu açmak küçük bir Tech Coin harcar. Güvenli kutu açarsan zorluk bonusuna göre puan kazanırsın.",
         bestRound: "En iyi tur",
         perfectClear: "Perfect clear",
         mines: "Mayın",
         safeOpened: "Güvenli açılan",
         difficultyBonus: "Zorluk bonusu",
         nextPoints: "Sıradaki puan",
+        openCost: "Kutu açma bedeli",
         roundPoints: "Tur puanı",
         newRound: "Yeni tur",
         leaderboard: "Sıralama",
-        lifetimeEarned: "Toplam kazanılan",
-        totalRounds: "Tur sayısı",
-        statusPlaying: "Oynanıyor. Kutuları aç, puan topla.",
-        statusLost: "Mayına bastın, tur bitti. Puanların eksilmedi.",
+        lifetimeSpent: "Toplam harcanan",
+        statusPlaying: "Oynanıyor. Her kutu açılışı küçük bir Tech Coin harcar.",
+        statusLost: "Mayına bastın, tur bitti. Sadece açma bedeli harcandı.",
         statusPerfect: "Perfect Clear! Tüm güvenli kutular açıldı.",
+        notEnough: "Yeterli Tech Coin yok. Yeni kutu açmak için puan gerekli.",
         accessDeniedTitle: "Yetkili erişimi gerekli",
         accessDeniedDesc: "Bu sayfa sadece admin ve owner hesapları için açık.",
         signIn: "Yetkili giriş",
@@ -173,21 +177,22 @@ export function OffPage() {
         balanceNote: "Tech Coin is only an internal fun score; not real money, payment, or transfer.",
         coinDesc: "Internal EkaTech fun points.",
         gameTitle: "EkaMines",
-        gameDesc: "An admin mini-game with a difficulty bonus based on mine count.",
+        gameDesc: "Opening each cell costs a small amount of Tech Coin. Safe cells earn points based on the difficulty bonus.",
         bestRound: "Best round",
         perfectClear: "Perfect clear",
         mines: "Mines",
         safeOpened: "Safe opened",
         difficultyBonus: "Difficulty bonus",
         nextPoints: "Next points",
+        openCost: "Cell open cost",
         roundPoints: "Round points",
         newRound: "New round",
         leaderboard: "Leaderboard",
-        lifetimeEarned: "Lifetime earned",
-        totalRounds: "Total rounds",
-        statusPlaying: "Playing. Open cells and collect points.",
-        statusLost: "Mine opened. Round over. Your points were not reduced.",
+        lifetimeSpent: "Lifetime spent",
+        statusPlaying: "Playing. Every cell opening spends a small Tech Coin cost.",
+        statusLost: "Mine opened. Round over. Only the open cost was spent.",
         statusPerfect: "Perfect Clear! All safe cells opened.",
+        notEnough: "Not enough Tech Coin. You need points to open another cell.",
         accessDeniedTitle: "Authorized access required",
         accessDeniedDesc: "This page is available only to admin and owner accounts.",
         signIn: "Authorized login",
@@ -205,7 +210,7 @@ export function OffPage() {
       const response = await fetch("/api/admin/tech-coin", { credentials: "same-origin", cache: "no-store" });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Tech Coin failed");
-      if (data?.wallet) setWallet(data.wallet);
+      if (data?.wallet) setWallet({ lifetime_spent: 0, ...data.wallet });
       setLeaderboard(data?.leaderboard || []);
     } catch (error) {
       setWalletError(error instanceof Error ? error.message : "Tech Coin failed");
@@ -215,18 +220,15 @@ export function OffPage() {
   };
 
   const recordTechCoin = async (eventType: string, amount: number, roundPoints: number, perfect = false) => {
-    if (amount > 0) {
-      setWallet((current) => ({
-        ...current,
-        balance: current.balance + amount,
-        lifetime_earned: current.lifetime_earned + amount,
-        best_round: Math.max(current.best_round, roundPoints),
-        perfect_clears: current.perfect_clears + (perfect ? 1 : 0),
-        total_rounds: current.total_rounds + (eventType === "perfect_clear" || eventType === "round_end" ? 1 : 0),
-      }));
-    } else if (eventType === "round_end") {
-      setWallet((current) => ({ ...current, best_round: Math.max(current.best_round, roundPoints), total_rounds: current.total_rounds + 1 }));
-    }
+    setWallet((current) => ({
+      ...current,
+      balance: current.balance + amount,
+      lifetime_earned: current.lifetime_earned + Math.max(0, amount),
+      lifetime_spent: current.lifetime_spent + Math.max(0, -amount),
+      best_round: Math.max(current.best_round, roundPoints),
+      perfect_clears: current.perfect_clears + (perfect ? 1 : 0),
+      total_rounds: current.total_rounds + (eventType === "perfect_clear" || eventType === "round_end" ? 1 : 0),
+    }));
 
     try {
       const response = await fetch("/api/admin/tech-coin", {
@@ -239,10 +241,13 @@ export function OffPage() {
 
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Tech Coin update failed");
-      if (data?.wallet) setWallet(data.wallet);
+      if (data?.wallet) setWallet({ lifetime_spent: 0, ...data.wallet });
       if (eventType === "perfect_clear" || eventType === "round_end") loadWallet();
+      return true;
     } catch (error) {
       setWalletError(error instanceof Error ? error.message : "Tech Coin update failed");
+      await loadWallet();
+      return false;
     }
   };
 
@@ -274,10 +279,25 @@ export function OffPage() {
   const startNewRound = (nextMineCount = mineCount) => {
     setMineCount(nextMineCount);
     setGame(createGame(nextMineCount));
+    setWalletError("");
   };
 
-  const revealCell = (index: number) => {
-    if (game.status !== "playing" || game.cells[index] !== "hidden") return;
+  const revealCell = async (index: number) => {
+    if (game.status !== "playing" || game.cells[index] !== "hidden" || busyCell !== null) return;
+
+    if (wallet.balance < CELL_OPEN_COST) {
+      setWalletError(copy.notEnough);
+      return;
+    }
+
+    setBusyCell(index);
+    setWalletError("");
+
+    const spent = await recordTechCoin("cell_cost", -CELL_OPEN_COST, game.roundPoints, false);
+    if (!spent) {
+      setBusyCell(null);
+      return;
+    }
 
     const isMine = game.mineIndexes.includes(index);
     const nextCells = [...game.cells];
@@ -287,7 +307,8 @@ export function OffPage() {
         nextCells[mineIndex] = "mine";
       });
       setGame({ ...game, cells: nextCells, status: "lost" });
-      recordTechCoin("round_end", 0, game.roundPoints, false);
+      await recordTechCoin("round_end", 0, game.roundPoints, false);
+      setBusyCell(null);
       return;
     }
 
@@ -301,12 +322,14 @@ export function OffPage() {
       const totalAdded = points + perfectBonus;
       const finalRoundPoints = nextRoundPoints + perfectBonus;
       setGame({ ...game, cells: nextCells, openedSafe: nextOpenedSafe, roundPoints: finalRoundPoints, status: "perfect" });
-      recordTechCoin("perfect_clear", totalAdded, finalRoundPoints, true);
+      await recordTechCoin("perfect_clear", totalAdded, finalRoundPoints, true);
+      setBusyCell(null);
       return;
     }
 
     setGame({ ...game, cells: nextCells, openedSafe: nextOpenedSafe, roundPoints: nextRoundPoints, status: "playing" });
-    recordTechCoin("safe_cell", points, nextRoundPoints, false);
+    await recordTechCoin("safe_cell", points, nextRoundPoints, false);
+    setBusyCell(null);
   };
 
   const canAccess = user?.role === "admin" || user?.role === "owner";
@@ -372,6 +395,10 @@ export function OffPage() {
               <p className="text-sm text-white/45">{copy.balance}</p>
               <div className="mt-4"><CoinAmount amount={wallet.balance} /></div>
               <p className="mt-4 text-sm leading-6 text-white/40">{copy.balanceNote}</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-white/40">
+                <span>{copy.lifetimeSpent}: {wallet.lifetime_spent || 0}</span>
+                <span>{copy.openCost}: {CELL_OPEN_COST}</span>
+              </div>
               {walletLoading && <p className="mt-3 text-xs text-cyan-100/70">{copy.walletLoading}</p>}
               {walletError && <p className="mt-3 text-xs leading-5 text-red-100">{walletError} · {copy.d1Hint}</p>}
             </div>
@@ -379,7 +406,7 @@ export function OffPage() {
         </motion.section>
 
         <div className="grid gap-5 md:grid-cols-3">
-          <StatCard icon={<Coins className="h-5 w-5" />} title={copy.roundPoints} value={<CoinAmount amount={game.roundPoints} size="small" />} desc={`${copy.nextPoints}: +${nextPoints}`} />
+          <StatCard icon={<Coins className="h-5 w-5" />} title={copy.roundPoints} value={<CoinAmount amount={game.roundPoints} size="small" />} desc={`${copy.openCost}: -${CELL_OPEN_COST} · ${copy.nextPoints}: +${nextPoints}`} />
           <StatCard icon={<Trophy className="h-5 w-5" />} title={copy.bestRound} value={<CoinAmount amount={wallet.best_round} size="small" />} desc={`${copy.perfectClear}: ${wallet.perfect_clears}`} />
           <StatCard icon={<Sparkles className="h-5 w-5" />} title={copy.difficultyBonus} value={`${difficultyBonus.toFixed(2)}x`} desc={`${copy.mines}: ${mineCount} · ${copy.safeOpened}: ${game.openedSafe}/${safeTarget}`} />
         </div>
@@ -405,8 +432,8 @@ export function OffPage() {
                 />
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                   <Metric label={copy.difficultyBonus} value={`${difficultyBonus.toFixed(2)}x`} />
+                  <Metric label={copy.openCost} value={`-${CELL_OPEN_COST}`} />
                   <Metric label={copy.nextPoints} value={`+${nextPoints}`} />
-                  <Metric label={copy.roundPoints} value={`${game.roundPoints}`} />
                   <Metric label={copy.safeOpened} value={`${game.openedSafe}/${safeTarget}`} />
                 </div>
               </div>
@@ -424,22 +451,25 @@ export function OffPage() {
               {game.cells.map((cell, index) => {
                 const revealedMine = cell === "mine";
                 const revealedSafe = cell === "safe";
+                const disabled = game.status !== "playing" || cell !== "hidden" || busyCell !== null || wallet.balance < CELL_OPEN_COST;
 
                 return (
                   <button
                     key={index}
                     type="button"
                     onClick={() => revealCell(index)}
-                    disabled={game.status !== "playing" || cell !== "hidden"}
-                    className={`aspect-square rounded-2xl border text-lg font-semibold transition-all sm:text-2xl ${
+                    disabled={disabled}
+                    className={`aspect-square rounded-2xl border text-lg font-semibold transition-all sm:text-2xl disabled:cursor-not-allowed ${
                       revealedMine
                         ? "border-red-300/30 bg-red-400/20 text-red-100 shadow-[0_0_22px_rgba(248,113,113,0.22)]"
                         : revealedSafe
                           ? "border-cyan-300/30 bg-cyan-300/15 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.18)]"
-                          : "border-white/10 bg-white/[0.045] text-white/35 hover:border-purple-200/30 hover:bg-purple-300/10 hover:text-white"
+                          : busyCell === index
+                            ? "border-purple-200/40 bg-purple-300/15 text-purple-100"
+                            : "border-white/10 bg-white/[0.045] text-white/35 hover:border-purple-200/30 hover:bg-purple-300/10 hover:text-white disabled:opacity-45"
                     }`}
                   >
-                    {revealedMine ? "✕" : revealedSafe ? "+" : ""}
+                    {revealedMine ? "✕" : revealedSafe ? "+" : busyCell === index ? "…" : ""}
                   </button>
                 );
               })}
