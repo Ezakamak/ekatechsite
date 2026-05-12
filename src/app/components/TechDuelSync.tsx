@@ -29,6 +29,7 @@ type Round = {
   winner_name?: string | null;
 };
 type Submission = { user_id: number; ms?: number | null; too_early?: number; score_ms?: number; name?: string };
+type ReadyRow = { user_id: number; name?: string };
 type RoundPayload = {
   server_time: string;
   lobby: Lobby;
@@ -38,6 +39,9 @@ type RoundPayload = {
   my_submission?: Submission | null;
   score: Record<string, number>;
   target_wins: number;
+  ready?: ReadyRow[];
+  ready_count?: number;
+  pending_round_number?: number;
 };
 
 const FIXED_REWARD = 50;
@@ -82,7 +86,7 @@ export function TechDuelSync() {
 
   const c = useMemo(() => tr ? {
     title: "Tech Duel",
-    subtitle: "Senkron round sistemi. İki oyuncu aynı roundu oynar; iki sonuç gelince turun kazananı görünür.",
+    subtitle: "Round geri sayımı sadece iki oyuncu da maça girince başlar. Geç giren oyuncuya 5000ms yazmaz.",
     create: "Lobby oluştur",
     createTitle: "Create Lobby",
     active: "Aktif düellolar",
@@ -94,6 +98,9 @@ export function TechDuelSync() {
     join: "Join",
     enter: "Maça gir",
     refresh: "Yenile",
+    ready: "Hazır",
+    readyWaiting: "Hazırsın · rakip bekleniyor",
+    waitingBoth: "İki oyuncu da maça girince round başlayacak",
     wait: "WAIT...",
     draw: "DRAW!",
     release: "RELEASE!",
@@ -107,7 +114,7 @@ export function TechDuelSync() {
     releaseNow: "Şimdi bırak",
     waitingOpponent: "Rakibin sonucu bekleniyor",
     roundWinner: "Tur kazananı",
-    nextRound: "Sonraki roundu başlat",
+    nextRound: "Sonraki round için hazır ol",
     matchOver: "Maç tamamlandı",
     score: "Skor",
     player2: "Player 2",
@@ -120,7 +127,7 @@ export function TechDuelSync() {
     login: "Tech Duel için giriş yapman gerekiyor.",
   } : {
     title: "Tech Duel",
-    subtitle: "Synchronized rounds. Both players play the same round; the winner is shown after both results arrive.",
+    subtitle: "The countdown starts only after both players enter the match. A late player will not get a 5000ms result.",
     create: "Create lobby",
     createTitle: "Create Lobby",
     active: "Active duels",
@@ -132,6 +139,9 @@ export function TechDuelSync() {
     join: "Join",
     enter: "Enter match",
     refresh: "Refresh",
+    ready: "Ready",
+    readyWaiting: "Ready · waiting for opponent",
+    waitingBoth: "Round starts after both players enter the match",
     wait: "WAIT...",
     draw: "DRAW!",
     release: "RELEASE!",
@@ -145,7 +155,7 @@ export function TechDuelSync() {
     releaseNow: "Release now",
     waitingOpponent: "Waiting for opponent result",
     roundWinner: "Round winner",
-    nextRound: "Start next round",
+    nextRound: "Ready for next round",
     matchOver: "Match completed",
     score: "Score",
     player2: "Player 2",
@@ -191,9 +201,9 @@ export function TechDuelSync() {
 
   useEffect(() => {
     loadDuels();
-    const a = window.setInterval(() => setNow(Date.now()), 100);
-    const b = window.setInterval(() => activeLobby ? loadRound(activeLobby.id, true) : loadDuels(true), 1200);
-    return () => { window.clearInterval(a); window.clearInterval(b); };
+    const tickTimer = window.setInterval(() => setNow(Date.now()), 100);
+    const pollTimer = window.setInterval(() => activeLobby ? loadRound(activeLobby.id, true) : loadDuels(true), 1200);
+    return () => { window.clearInterval(tickTimer); window.clearInterval(pollTimer); };
   }, [language, activeLobby?.id]);
 
   const createLobby = async (event: FormEvent<HTMLFormElement>) => {
@@ -221,10 +231,16 @@ export function TechDuelSync() {
       await loadDuels(true);
       const lobby = [...openLobbies, ...myLobbies].find((x) => x.id === id);
       if (lobby) setActiveLobby({ ...lobby, status: "in_progress" });
-      await loadRound(id, true);
     } catch (e) {
       setNotice({ type: "error", text: e instanceof Error ? e.message : "Düelloya katılınamadı." });
     } finally { setBusy(false); }
+  };
+
+  const enterMatch = async (lobby: Lobby) => {
+    setActiveLobby(lobby);
+    setHolding(false);
+    setRoundPayload(null);
+    await loadRound(lobby.id, false);
   };
 
   const submit = async (tooEarly: boolean, ms: number | null) => {
@@ -240,7 +256,7 @@ export function TechDuelSync() {
     } finally { setSubmitting(false); }
   };
 
-  const nextRound = async () => {
+  const readyForNextRound = async () => {
     if (!roundPayload?.lobby) return;
     setBusy(true);
     setHolding(false);
@@ -269,9 +285,13 @@ export function TechDuelSync() {
   const secondsLeft = current && !signalPassed ? Math.max(0, Math.ceil((signalAt - serverNow) / 1000)) : 0;
   const creatorWins = Number(roundPayload?.score?.[String(lobby?.creator_user_id || "")] || 0);
   const opponentWins = Number(roundPayload?.score?.[String(lobby?.opponent_user_id || "")] || 0);
+  const readyRows = roundPayload?.ready || [];
+  const pendingRoundNumber = Number(roundPayload?.pending_round_number || 1);
+  const selfReady = Boolean(user && readyRows.some((row) => Number(row.user_id) === Number(user.id)));
+  const readyLabel = `${readyRows.length}/2 ${c.ready}`;
 
   const arenaText = () => {
-    if (!current) return c.waitingPlayer;
+    if (!current) return selfReady ? c.readyWaiting : c.waitingBoth;
     if (roundCompleted) return current.winner_name ? `${c.roundWinner}: ${current.winner_name}` : c.roundWinner;
     if (submitted) return c.waitingOpponent;
     if (currentMode === "what_the_hold") {
@@ -284,7 +304,7 @@ export function TechDuelSync() {
   };
 
   const arenaHint = () => {
-    if (!current) return "";
+    if (!current) return `${c.round} ${pendingRoundNumber} · ${readyLabel}`;
     if (roundCompleted) return c.roundWinner;
     if (submitted) return c.waitingOpponent;
     if (currentMode === "what_the_hold") {
@@ -321,11 +341,11 @@ export function TechDuelSync() {
 
       {activeLobby && lobby ? <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 backdrop-blur-xl sm:p-8">
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="space-y-4"><p className="text-sm uppercase tracking-[0.22em] text-white/35">{current ? `${c.round} ${current.round_number} / ${lobby.round_count}` : c.waitingPlayer}</p><h2 className="text-3xl font-medium text-white">#{lobby.id} · {modeTitle(currentMode)}</h2><div className="grid grid-cols-3 items-center gap-3 rounded-3xl border border-white/10 bg-black/35 p-4"><Player name={lobby.creator_name} email={lobby.creator_email} avatarUrl={lobby.creator_avatar_url} wins={creatorWins} target={roundPayload?.target_wins || 0} /><div className="text-center"><p className="text-2xl font-semibold text-white/35">VS</p><p className="mt-2 text-sm text-white/45">{c.score}: {creatorWins}-{opponentWins}</p></div><Player name={lobby.opponent_name || c.player2} email={lobby.opponent_email || ""} avatarUrl={lobby.opponent_avatar_url || ""} wins={opponentWins} target={roundPayload?.target_wins || 0} /></div><RoundHistory rounds={roundPayload?.rounds || []} /></div>
+          <div className="space-y-4"><p className="text-sm uppercase tracking-[0.22em] text-white/35">{current ? `${c.round} ${current.round_number} / ${lobby.round_count}` : `${c.round} ${pendingRoundNumber} · ${readyLabel}`}</p><h2 className="text-3xl font-medium text-white">#{lobby.id} · {modeTitle(currentMode)}</h2><div className="grid grid-cols-3 items-center gap-3 rounded-3xl border border-white/10 bg-black/35 p-4"><Player name={lobby.creator_name} email={lobby.creator_email} avatarUrl={lobby.creator_avatar_url} wins={creatorWins} target={roundPayload?.target_wins || 0} /><div className="text-center"><p className="text-2xl font-semibold text-white/35">VS</p><p className="mt-2 text-sm text-white/45">{c.score}: {creatorWins}-{opponentWins}</p></div><Player name={lobby.opponent_name || c.player2} email={lobby.opponent_email || ""} avatarUrl={lobby.opponent_avatar_url || ""} wins={opponentWins} target={roundPayload?.target_wins || 0} /></div><RoundHistory rounds={roundPayload?.rounds || []} /></div>
           <button type="button" onClick={clickArena} onPointerDown={currentMode === "what_the_hold" ? holdStart : undefined} onPointerUp={currentMode === "what_the_hold" ? holdEnd : undefined} onPointerCancel={currentMode === "what_the_hold" ? holdEnd : undefined} disabled={!current || roundCompleted || submitted || lobby.status === "completed"} className={`min-h-[320px] touch-none select-none rounded-[2rem] border p-8 text-center transition-all ${signalPassed && !roundCompleted ? "border-cyan-300/40 bg-cyan-300/10 shadow-2xl shadow-cyan-500/20" : roundCompleted ? "border-emerald-300/30 bg-emerald-300/10" : submitted ? "border-white/10 bg-white/[0.035]" : "border-white/10 bg-black/50"}`}><p className={`text-5xl font-semibold tracking-tight sm:text-7xl ${roundCompleted ? "text-emerald-100" : signalPassed ? "text-cyan-100" : "text-white"}`}>{arenaText()}</p><p className="mt-6 text-sm uppercase tracking-[0.28em] text-white/35">{arenaHint()}</p>{roundPayload?.my_submission && <p className="mt-6 text-sm text-white/55">{Number(roundPayload.my_submission.too_early) === 1 ? c.tooEarly : `${roundPayload.my_submission.ms}ms`}</p>}</button>
         </div>
-        <div className="mt-6 flex flex-wrap gap-3">{roundCompleted && lobby.status !== "completed" && <button onClick={nextRound} disabled={busy} className="rounded-full bg-white px-6 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-50">{busy ? "..." : c.nextRound}</button>}{lobby.status === "completed" && <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-6 py-3 text-sm font-medium text-emerald-100">{c.matchOver}: {lobby.winner_name}</span>}<button onClick={() => { setActiveLobby(null); setRoundPayload(null); setHolding(false); loadDuels(true); }} className="rounded-full border border-white/10 bg-white/[0.06] px-6 py-3 text-sm font-medium text-white hover:bg-white/[0.1]">Lobby</button></div>
-      </section> : <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]"><section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 backdrop-blur-xl"><h2 className="text-2xl font-medium text-white">{c.createTitle}</h2><form onSubmit={createLobby} className="mt-5 space-y-4"><div><p className="mb-2 text-sm text-white/45">{c.mode}</p><div className="space-y-2">{[{ v: "classic", t: "Classic Mode", d: c.classic }, { v: "best_focus", t: "Best Focus", d: c.focus }, { v: "what_the_hold", t: "What The Hold", d: c.what }].map((x) => <button key={x.v} type="button" onClick={() => setMode(x.v as DuelMode)} className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition-all ${mode === x.v ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.04] text-white/60 hover:bg-white/[0.07]"}`}><span className="block font-medium text-white">{x.t}</span><span className="mt-1 block text-xs text-white/45">{x.d}</span></button>)}</div></div><div><p className="mb-2 text-sm text-white/45">{c.round}</p><div className="grid grid-cols-3 gap-2">{[3, 5, 7].map((v) => <button key={v} type="button" onClick={() => setRoundCount(v)} className={`rounded-2xl border px-4 py-3 text-sm font-medium ${roundCount === v ? "border-purple-300/30 bg-purple-300/10 text-purple-100" : "border-white/10 bg-white/[0.04] text-white/60"}`}>Best of {v}</button>)}</div></div><div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">{c.fixed}</div><button type="submit" disabled={busy || !user} className="w-full rounded-full bg-white px-6 py-3 font-medium text-black hover:bg-gray-200 disabled:opacity-50">{busy ? "..." : c.create}</button></form></section><section className="space-y-6"><LobbyList title={c.active} empty={c.empty} lobbies={openLobbies} user={user} c={c} onJoin={joinLobby} onPlay={(x) => setActiveLobby(x)} /><LobbyList title={c.mine} empty={c.emptyMine} lobbies={myLobbies} user={user} c={c} onJoin={joinLobby} onPlay={(x) => setActiveLobby(x)} mine /></section></div>}
+        <div className="mt-6 flex flex-wrap gap-3">{roundCompleted && lobby.status !== "completed" && <button onClick={readyForNextRound} disabled={busy || selfReady} className="rounded-full bg-white px-6 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-50">{busy ? "..." : selfReady ? c.readyWaiting : c.nextRound}</button>}{!current && <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-6 py-3 text-sm font-medium text-cyan-100">{readyLabel}</span>}{lobby.status === "completed" && <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-6 py-3 text-sm font-medium text-emerald-100">{c.matchOver}: {lobby.winner_name}</span>}<button onClick={() => { setActiveLobby(null); setRoundPayload(null); setHolding(false); loadDuels(true); }} className="rounded-full border border-white/10 bg-white/[0.06] px-6 py-3 text-sm font-medium text-white hover:bg-white/[0.1]">Lobby</button></div>
+      </section> : <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]"><section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 backdrop-blur-xl"><h2 className="text-2xl font-medium text-white">{c.createTitle}</h2><form onSubmit={createLobby} className="mt-5 space-y-4"><div><p className="mb-2 text-sm text-white/45">{c.mode}</p><div className="space-y-2">{[{ v: "classic", t: "Classic Mode", d: c.classic }, { v: "best_focus", t: "Best Focus", d: c.focus }, { v: "what_the_hold", t: "What The Hold", d: c.what }].map((x) => <button key={x.v} type="button" onClick={() => setMode(x.v as DuelMode)} className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition-all ${mode === x.v ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.04] text-white/60 hover:bg-white/[0.07]"}`}><span className="block font-medium text-white">{x.t}</span><span className="mt-1 block text-xs text-white/45">{x.d}</span></button>)}</div></div><div><p className="mb-2 text-sm text-white/45">{c.round}</p><div className="grid grid-cols-3 gap-2">{[3, 5, 7].map((v) => <button key={v} type="button" onClick={() => setRoundCount(v)} className={`rounded-2xl border px-4 py-3 text-sm font-medium ${roundCount === v ? "border-purple-300/30 bg-purple-300/10 text-purple-100" : "border-white/10 bg-white/[0.04] text-white/60"}`}>Best of {v}</button>)}</div></div><div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">{c.fixed}</div><button type="submit" disabled={busy || !user} className="w-full rounded-full bg-white px-6 py-3 font-medium text-black hover:bg-gray-200 disabled:opacity-50">{busy ? "..." : c.create}</button></form></section><section className="space-y-6"><LobbyList title={c.active} empty={c.empty} lobbies={openLobbies} user={user} c={c} onJoin={joinLobby} onPlay={enterMatch} /><LobbyList title={c.mine} empty={c.emptyMine} lobbies={myLobbies} user={user} c={c} onJoin={joinLobby} onPlay={enterMatch} mine /></section></div>}
     </div>
   </main>;
 }
