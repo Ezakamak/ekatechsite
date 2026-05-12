@@ -27,13 +27,13 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         eyebrow: isSignup ? "Yeni hesap" : "Müşteri girişi",
         title: isSignup ? "EkaTech hesabı oluştur" : "EkaTech hesabına giriş yap",
         subtitle: isSignup
-          ? "Proje talepleri ve müşteri paneli için hesabını oluştur."
+          ? "Kayıttan sonra e-posta doğrulaması gerekir."
           : "Proje taleplerini ve müşteri panelini yönetmek için giriş yap.",
         name: "Ad Soyad",
         email: "E-posta",
         password: "Şifre",
         passwordHint: "En az 8 karakter",
-        submit: isSignup ? "Hesap oluştur" : "Giriş yap",
+        submit: isSignup ? "Doğrulama linki gönder" : "Giriş yap",
         switchText: isSignup ? "Zaten hesabın var mı?" : "Hesabın yok mu?",
         switchLink: isSignup ? "Giriş yap" : "Kayıt ol",
         dashboard: "Müşteri paneli",
@@ -45,13 +45,13 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         eyebrow: isSignup ? "New account" : "Client login",
         title: isSignup ? "Create your EkaTech account" : "Sign in to EkaTech",
         subtitle: isSignup
-          ? "Create your account for project requests and client access."
+          ? "Email verification is required after signup."
           : "Sign in to manage project requests and client access.",
         name: "Full Name",
         email: "Email",
         password: "Password",
         passwordHint: "At least 8 characters",
-        submit: isSignup ? "Create account" : "Sign in",
+        submit: isSignup ? "Send verification link" : "Sign in",
         switchText: isSignup ? "Already have an account?" : "Need an account?",
         switchLink: isSignup ? "Sign in" : "Sign up",
         dashboard: "Client dashboard",
@@ -105,8 +105,17 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         throw new Error(data?.error || `HTTP ${response.status}: ${fallback}`);
       }
 
-      setUser(data.user);
-      setPassword("");
+      if (data?.user) {
+        setUser(data.user);
+        window.dispatchEvent(new Event("ekatech-auth-change"));
+      }
+
+      if (isSignup) {
+        setPassword("");
+      } else {
+        setPassword("");
+      }
+
       setStatus({ type: "success", message: data?.message || copy.submit });
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : copy.genericError });
@@ -122,6 +131,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     try {
       await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
       setUser(null);
+      window.dispatchEvent(new Event("ekatech-auth-change"));
       setStatus({ type: "success", message: tr ? "Çıkış yapıldı." : "Logged out." });
     } catch {
       setStatus({ type: "error", message: copy.genericError });
@@ -171,8 +181,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                 <a href="/" className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-center font-medium text-white/80 transition-all hover:bg-white/[0.1]">
                   Home
                 </a>
-                <a href="/admin" className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-center font-medium text-white/80 transition-all hover:bg-white/[0.1]">
-                  Admin
+                <a href="/account" className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-center font-medium text-white/80 transition-all hover:bg-white/[0.1]">
+                  Account
                 </a>
               </div>
               <button
