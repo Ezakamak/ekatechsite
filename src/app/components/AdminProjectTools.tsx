@@ -33,13 +33,29 @@ type ProjectLink = {
 };
 
 const priorityOptions = ["low", "normal", "high", "urgent"];
-const statusOptions = ["all", "received", "reviewing", "offer_ready", "waiting_approval", "development_started", "revision", "delivered", "completed", "rejected"];
+const statusOptions = ["all", "received", "reviewing", "offer_ready", "waiting_approval", "development_started", "revision", "delivered"];
 
 function priorityLabel(value: string, tr: boolean) {
   const labels: Record<string, string> = tr
     ? { low: "Düşük", normal: "Normal", high: "Yüksek", urgent: "Acil" }
     : { low: "Low", normal: "Normal", high: "High", urgent: "Urgent" };
   return labels[value] || value;
+}
+
+function getPriorityFromTargetDate(targetDate: string) {
+  if (!targetDate) return "normal";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const target = new Date(`${targetDate}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return "normal";
+
+  const diffDays = Math.ceil((target.getTime() - today.getTime()) / 86400000);
+  if (diffDays <= 3) return "urgent";
+  if (diffDays <= 7) return "high";
+  if (diffDays <= 21) return "normal";
+  return "low";
 }
 
 export function AdminProjectTools() {
@@ -52,20 +68,22 @@ export function AdminProjectTools() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
-  const [priority, setPriority] = useState("normal");
   const [targetDate, setTargetDate] = useState("");
   const [customerMessage, setCustomerMessage] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const copy = tr
     ? {
         title: "Gelişmiş proje yönetimi",
-        subtitle: "Proje ara/filtrele, müşteriye proje mesajı gönder, link ekle, öncelik ve hedef tarihi ayarla.",
+        subtitle: "Proje ara/filtrele, müşteriye mesaj gönder, link ekle ve hedef tarihe göre otomatik öncelik belirle.",
         search: "Proje, müşteri veya e-posta ara...",
         status: "Durum",
         priority: "Öncelik",
+        autoPriority: "Otomatik öncelik",
         all: "Tümü",
         targetDate: "Hedef tarih",
         savePlan: "Planı kaydet",
@@ -79,13 +97,17 @@ export function AdminProjectTools() {
         feedback: "Müşteri puanı",
         selectProject: "Bir proje seç",
         refresh: "Yenile",
+        noProjects: "Filtreye uyan aktif proje yok.",
+        noMessages: "Henüz mesaj yok.",
+        noLinks: "Henüz link yok.",
       }
     : {
         title: "Advanced project management",
-        subtitle: "Search/filter projects, send client messages, add links, set priority and target dates.",
+        subtitle: "Search/filter projects, send client messages, add links and calculate priority from target date.",
         search: "Search project, client or email...",
         status: "Status",
         priority: "Priority",
+        autoPriority: "Auto priority",
         all: "All",
         targetDate: "Target date",
         savePlan: "Save plan",
@@ -99,9 +121,13 @@ export function AdminProjectTools() {
         feedback: "Customer rating",
         selectProject: "Select a project",
         refresh: "Refresh",
+        noProjects: "No active projects match the filters.",
+        noMessages: "No messages yet.",
+        noLinks: "No links yet.",
       };
 
   const selectedProject = projects.find((item) => item.id === selectedId) || null;
+  const calculatedPriority = getPriorityFromTargetDate(targetDate || selectedProject?.target_date || selectedProject?.deadline || "");
 
   const filteredProjects = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -113,29 +139,41 @@ export function AdminProjectTools() {
     });
   }, [projects, search, statusFilter, priorityFilter]);
 
-  const loadProjects = async () => {
+  const loadProjects = async (preferredId = selectedId) => {
+    setLoading(true);
     setNotice(null);
     try {
-      const response = await fetch("/api/admin/project-requests", { credentials: "same-origin" });
+      const response = await fetch("/api/admin/project-requests", { credentials: "same-origin", cache: "no-store" });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Projects failed");
-      setProjects(data?.requests || []);
-      if (!selectedId && data?.requests?.[0]?.id) setSelectedId(data.requests[0].id);
+
+      const nextProjects: ProjectRequest[] = data?.requests || [];
+      setProjects(nextProjects);
+
+      const preferredStillExists = preferredId && nextProjects.some((project) => project.id === preferredId);
+      const nextSelectedId = preferredStillExists ? preferredId : nextProjects[0]?.id || null;
+      setSelectedId(nextSelectedId);
+
+      return nextSelectedId;
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "Projects failed" });
+      return null;
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadTools = async (projectId: number) => {
     try {
-      const response = await fetch(`/api/admin/project-tools?projectId=${projectId}`, { credentials: "same-origin" });
+      const response = await fetch(`/api/admin/project-tools?projectId=${projectId}`, { credentials: "same-origin", cache: "no-store" });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Tools failed");
       setMessages(data?.messages || []);
       setLinks(data?.links || []);
-    } catch {
+    } catch (error) {
       setMessages([]);
       setLinks([]);
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Tools failed" });
     }
   };
 
@@ -144,16 +182,21 @@ export function AdminProjectTools() {
   }, []);
 
   useEffect(() => {
-    if (!selectedProject) return;
-    setPriority(selectedProject.priority || "normal");
+    if (!selectedProject) {
+      setTargetDate("");
+      setMessages([]);
+      setLinks([]);
+      return;
+    }
+
     setTargetDate(selectedProject.target_date || selectedProject.deadline || "");
     loadTools(selectedProject.id);
-  }, [selectedId, projects.length]);
+  }, [selectedId, selectedProject?.target_date, selectedProject?.deadline]);
 
   const saveMeta = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedProject) return;
-    await sendAction({ action: "meta", projectId: selectedProject.id, priority, targetDate });
+    await sendAction({ action: "meta", projectId: selectedProject.id, priority: "auto", targetDate });
   };
 
   const sendCustomerMessage = async (event: FormEvent) => {
@@ -175,22 +218,29 @@ export function AdminProjectTools() {
 
   const sendAction = async (payload: Record<string, unknown>) => {
     setNotice(null);
+    setActionLoading(true);
+
+    const currentProjectId = Number(payload.projectId || selectedProject?.id || 0);
+
     try {
       const response = await fetch("/api/admin/project-tools", {
         method: "POST",
         credentials: "same-origin",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Action failed");
       setNotice({ type: "success", text: data?.message || "OK" });
-      await loadProjects();
-      if (selectedProject) await loadTools(selectedProject.id);
+      const nextSelectedId = await loadProjects(currentProjectId || selectedId);
+      if (nextSelectedId) await loadTools(nextSelectedId);
       return true;
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "Action failed" });
       return false;
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -201,7 +251,7 @@ export function AdminProjectTools() {
           <h3 className="flex items-center gap-2 text-2xl font-medium text-white"><SlidersHorizontal className="h-5 w-5" /> {copy.title}</h3>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">{copy.subtitle}</p>
         </div>
-        <button type="button" onClick={loadProjects} className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/80 hover:bg-white/[0.1]">{copy.refresh}</button>
+        <button type="button" onClick={() => loadProjects()} className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/80 hover:bg-white/[0.1]">{loading ? "..." : copy.refresh}</button>
       </div>
 
       {notice && <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${notice.type === "success" ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-red-300/20 bg-red-300/10 text-red-100"}`}>{notice.text}</div>}
@@ -223,12 +273,14 @@ export function AdminProjectTools() {
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="max-h-[560px] space-y-2 overflow-y-auto rounded-3xl border border-white/10 bg-black/25 p-3">
+          {filteredProjects.length === 0 && <p className="p-4 text-sm text-white/45">{copy.noProjects}</p>}
           {filteredProjects.map((project) => (
             <button key={project.id} type="button" onClick={() => setSelectedId(project.id)} className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${selectedId === project.id ? "border-cyan-300/30 bg-cyan-300/10" : "border-white/10 bg-white/[0.035] hover:bg-white/[0.06]"}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate font-medium text-white">{project.project_name}</p>
                   <p className="mt-1 truncate text-xs text-white/45">{project.user_name} · {project.user_email}</p>
+                  {(project.target_date || project.deadline) && <p className="mt-1 text-xs text-white/30">{copy.targetDate}: {project.target_date || project.deadline}</p>}
                 </div>
                 <span className="rounded-full bg-white/[0.06] px-2 py-1 text-xs text-white/45">{priorityLabel(project.priority || "normal", tr)}</span>
               </div>
@@ -248,20 +300,21 @@ export function AdminProjectTools() {
                 {selectedProject.feedback_rating && <p className="mt-2 text-sm text-amber-100">{copy.feedback}: {selectedProject.feedback_rating}/5 {selectedProject.feedback_comment ? `· ${selectedProject.feedback_comment}` : ""}</p>}
               </div>
 
-              <form onSubmit={saveMeta} className="grid gap-3 sm:grid-cols-[0.6fr_1fr_auto]">
-                <select value={priority} onChange={(event) => setPriority(event.target.value)} className="rounded-2xl border border-white/10 bg-black px-4 py-3 text-white outline-none">
-                  {priorityOptions.map((value) => <option key={value} value={value}>{priorityLabel(value, tr)}</option>)}
-                </select>
+              <form onSubmit={saveMeta} className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
                 <input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} className="rounded-2xl border border-white/10 bg-black px-4 py-3 text-white outline-none" />
-                <button type="submit" className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-black hover:bg-gray-200">{copy.savePlan}</button>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-sm text-white/75">
+                  {copy.autoPriority}: <span className="text-cyan-100">{priorityLabel(calculatedPriority, tr)}</span>
+                </div>
+                <button type="submit" disabled={actionLoading} className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-60">{actionLoading ? "..." : copy.savePlan}</button>
               </form>
 
               <form onSubmit={sendCustomerMessage} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
                 <h5 className="mb-3 flex items-center gap-2 font-medium text-white"><MessageSquare className="h-4 w-4" /> {copy.message}</h5>
                 <textarea value={customerMessage} onChange={(event) => setCustomerMessage(event.target.value.slice(0, 1200))} rows={3} className="w-full resize-none rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-white outline-none placeholder:text-white/25" />
-                <button type="submit" className="mt-3 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200">{copy.send}</button>
+                <button type="submit" disabled={actionLoading || !customerMessage.trim()} className="mt-3 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-60">{actionLoading ? "..." : copy.send}</button>
                 <div className="mt-4 space-y-2">
                   <p className="text-sm font-medium text-white/65">{copy.messages}</p>
+                  {messages.length === 0 && <p className="text-sm text-white/35">{copy.noMessages}</p>}
                   {messages.map((item) => <div key={item.id} className="rounded-xl bg-black/30 p-3 text-sm text-white/65"><span className="text-white/35">{item.sender_name}: </span>{item.message}</div>)}
                 </div>
               </form>
@@ -271,9 +324,10 @@ export function AdminProjectTools() {
                 <div className="grid gap-3 sm:grid-cols-[0.7fr_1fr_auto]">
                   <input value={linkLabel} onChange={(event) => setLinkLabel(event.target.value)} placeholder={copy.linkLabel} className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-white outline-none placeholder:text-white/25" />
                   <input value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder={copy.linkUrl} className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-white outline-none placeholder:text-white/25" />
-                  <button type="submit" className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-black hover:bg-gray-200">{copy.addLink}</button>
+                  <button type="submit" disabled={actionLoading || !linkLabel.trim() || !linkUrl.trim()} className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-60">{actionLoading ? "..." : copy.addLink}</button>
                 </div>
                 <div className="mt-4 space-y-2">
+                  {links.length === 0 && <p className="text-sm text-white/35">{copy.noLinks}</p>}
                   {links.map((link) => <a key={link.id} href={link.url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl bg-black/30 px-3 py-2 text-sm text-white/65 hover:bg-white/[0.05]"><span>{link.label}</span><ExternalLink className="h-4 w-4" /></a>)}
                 </div>
               </form>
