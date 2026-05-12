@@ -23,6 +23,7 @@ import { BackToTop } from "./components/BackToTop";
 import { CookieConsent } from "./components/CookieConsent";
 import { AuthPanel } from "./components/AuthPanel";
 import { AdminPanel } from "./components/AdminPanel";
+import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -60,6 +61,7 @@ export default function App() {
         <Navbar />
         <Hero />
         <AuthPanel />
+        <ProjectRequestPanel />
         <AdminPanel />
         <About />
         <ServiceDetails />
