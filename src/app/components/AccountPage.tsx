@@ -2,6 +2,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useLanguage } from "../i18n";
 import { ProjectStageWheel } from "./ProjectStageWheel";
+import { CustomerProjectDetails } from "./CustomerProjectDetails";
 
 type User = {
   id: number;
@@ -17,6 +18,8 @@ type ProjectRequest = {
   project_type: string;
   budget_range?: string;
   deadline?: string;
+  target_date?: string;
+  priority?: string;
   description: string;
   status: string;
   created_at?: string;
@@ -24,6 +27,8 @@ type ProjectRequest = {
   assigned_admin_name?: string | null;
   assigned_admin_email?: string | null;
   assigned_admin_avatar_url?: string | null;
+  feedback_rating?: number | null;
+  feedback_comment?: string | null;
 };
 
 export function AccountPage() {
@@ -334,7 +339,14 @@ export function AccountPage() {
             )}
 
             {requests.map((request) => (
-              <ProjectStageWheel key={request.id} request={request} />
+              <div key={request.id} className="rounded-[2rem] border border-white/10 bg-black/20 p-4">
+                <ProjectStageWheel request={request} />
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/45">
+                  <span className="rounded-full bg-white/[0.06] px-3 py-1">Öncelik: {request.priority || "normal"}</span>
+                  {(request.target_date || request.deadline) && <span className="rounded-full bg-white/[0.06] px-3 py-1">Hedef: {request.target_date || request.deadline}</span>}
+                </div>
+                <CustomerProjectDetails projectId={request.id} status={request.status} />
+              </div>
             ))}
           </div>
         </motion.section>
