@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS duel_lobbies (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   creator_user_id INTEGER NOT NULL,
   opponent_user_id INTEGER,
+  mode TEXT DEFAULT 'classic',
   reward_amount INTEGER NOT NULL DEFAULT 50,
   round_count INTEGER NOT NULL DEFAULT 5,
   status TEXT NOT NULL DEFAULT 'open',
@@ -48,7 +49,15 @@ CREATE TABLE IF NOT EXISTS coin_transactions (
 CREATE INDEX IF NOT EXISTS idx_duel_lobbies_status ON duel_lobbies(status);
 CREATE INDEX IF NOT EXISTS idx_duel_lobbies_creator ON duel_lobbies(creator_user_id);
 CREATE INDEX IF NOT EXISTS idx_duel_lobbies_opponent ON duel_lobbies(opponent_user_id);
+CREATE INDEX IF NOT EXISTS idx_duel_lobbies_mode ON duel_lobbies(mode);
 CREATE INDEX IF NOT EXISTS idx_duel_results_lobby ON duel_results(lobby_id);
 CREATE INDEX IF NOT EXISTS idx_duel_results_user ON duel_results(user_id);
 CREATE INDEX IF NOT EXISTS idx_coin_transactions_user ON coin_transactions(user_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_coin_transactions_reason ON coin_transactions(reason);
+CREATE INDEX IF NOT EXISTS idx_coin_transactions_reason ON coin_transactions(reason);
+
+-- Existing DB migration checklist:
+-- ALTER TABLE duel_lobbies ADD COLUMN mode TEXT DEFAULT 'classic';
+-- UPDATE duel_lobbies SET mode = 'classic' WHERE mode IS NULL;
+-- UPDATE duel_lobbies SET reward_amount = 50 WHERE reward_amount IS NULL OR reward_amount != 50;
+-- DROP INDEX IF EXISTS idx_coin_transactions_reason;
+-- CREATE INDEX IF NOT EXISTS idx_coin_transactions_reason ON coin_transactions(reason);
