@@ -6,7 +6,7 @@ type User = {
   id: number;
   name: string;
   email: string;
-  role: "admin" | "client" | "blocked" | string;
+  role: "owner" | "admin" | "client" | "blocked" | string;
   created_at?: string;
 };
 
@@ -31,8 +31,10 @@ type Overview = {
   admin: User;
   stats: {
     totalUsers: number;
+    ownerUsers?: number;
     adminUsers: number;
     clientUsers: number;
+    blockedUsers?: number;
     activeSessions: number;
   };
   recentUsers: User[];
@@ -81,6 +83,8 @@ export function AdminPanel() {
   const [gateMessage, setGateMessage] = useState("");
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
+  const isOwner = overview?.admin?.role === "owner";
+
   const t = useMemo(
     () =>
       language === "tr"
@@ -89,6 +93,7 @@ export function AdminPanel() {
             title: "EkaTech kontrol merkezi",
             subtitle: "Kullanıcıları, oturumları ve proje taleplerini tek yerden yönet.",
             totalUsers: "Toplam kullanıcı",
+            owners: "Owner",
             admins: "Admin",
             clients: "Client",
             activeSessions: "Aktif oturum",
@@ -100,18 +105,20 @@ export function AdminPanel() {
             saved: "Güncellendi.",
             error: "İşlem başarısız.",
             gateTitle: "Admin erişimi gerekli",
-            gateSubtitle: "Bu sayfa sadece role değeri admin olan hesaplarda açılır.",
+            gateSubtitle: "Bu sayfa sadece admin veya owner hesaplarda açılır.",
             signIn: "Giriş yap",
             home: "Ana sayfa",
             unassigned: "Tüm adminlere açık",
             assignedToYou: "Sana atanmış",
             assignedAdmin: "Sorumlu admin",
+            protectedOwner: "Korunan owner hesabı",
           }
         : {
             eyebrow: "Admin panel",
             title: "EkaTech control center",
             subtitle: "Manage users, sessions and project requests from one place.",
             totalUsers: "Total users",
+            owners: "Owner",
             admins: "Admins",
             clients: "Clients",
             activeSessions: "Active sessions",
@@ -123,12 +130,13 @@ export function AdminPanel() {
             saved: "Updated.",
             error: "Action failed.",
             gateTitle: "Admin access required",
-            gateSubtitle: "This page opens only for accounts whose role value is admin.",
+            gateSubtitle: "This page opens only for admin or owner accounts.",
             signIn: "Sign in",
             home: "Home",
             unassigned: "Open to all admins",
             assignedToYou: "Assigned to you",
             assignedAdmin: "Assigned admin",
+            protectedOwner: "Protected owner account",
           },
     [language]
   );
@@ -195,7 +203,7 @@ export function AdminPanel() {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || t.error);
 
-      setStatus({ type: "success", message: t.saved });
+      setStatus({ type: "success", message: data?.message || t.saved });
       await loadAdminData();
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : t.error });
@@ -288,33 +296,42 @@ export function AdminPanel() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label={t.totalUsers} value={overview?.stats.totalUsers ?? 0} />
+          <StatCard label={t.owners} value={overview?.stats.ownerUsers ?? 0} />
           <StatCard label={t.admins} value={overview?.stats.adminUsers ?? 0} />
-          <StatCard label={t.clients} value={overview?.stats.clientUsers ?? 0} />
           <StatCard label={t.activeSessions} value={overview?.stats.activeSessions ?? 0} />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <Panel title={t.allUsers}>
             <div className="space-y-3">
-              {users.map((user) => (
-                <div key={user.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-medium text-white">{user.name}</p>
-                      <p className="text-sm text-white/45">{user.email}</p>
+              {users.map((user) => {
+                const targetIsOwner = user.role === "owner";
+                const targetIsAdmin = user.role === "admin";
+                const canEditTarget = !targetIsOwner && (isOwner || !targetIsAdmin);
+
+                return (
+                  <div key={user.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="font-medium text-white">{user.name}</p>
+                        <p className="text-sm text-white/45">{user.email}</p>
+                        {targetIsOwner && <p className="mt-1 text-xs text-purple-100/70">{t.protectedOwner}</p>}
+                      </div>
+                      <select
+                        value={user.role || "client"}
+                        onChange={(event) => updateRole(user.id, event.target.value)}
+                        disabled={!canEditTarget}
+                        className="rounded-full border border-white/10 bg-black px-4 py-2 text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        {targetIsOwner && <option value="owner">owner</option>}
+                        <option value="client">client</option>
+                        <option value="admin" disabled={!isOwner}>admin</option>
+                        <option value="blocked">blocked</option>
+                      </select>
                     </div>
-                    <select
-                      value={user.role || "client"}
-                      onChange={(event) => updateRole(user.id, event.target.value)}
-                      className="rounded-full border border-white/10 bg-black px-4 py-2 text-sm text-white outline-none"
-                    >
-                      <option value="client">client</option>
-                      <option value="admin">admin</option>
-                      <option value="blocked">blocked</option>
-                    </select>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Panel>
 
