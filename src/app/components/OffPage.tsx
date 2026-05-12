@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Coins, Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
+import { Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
+import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSync";
 
@@ -213,8 +214,8 @@ export function OffPage() {
           <CoinWalletCard wallet={wallet} copy={copy} locale={tr ? "tr-TR" : "en-US"} />
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
-                <Sparkles className="h-6 w-6" />
+              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-1.5">
+                <img src={coinIcon} alt="Tech Coin" className="h-full w-full object-contain drop-shadow-[0_0_14px_rgba(34,211,238,0.35)]" />
               </div>
               <div>
                 <p className="text-sm text-white/40">Reward rule</p>
@@ -242,18 +243,19 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
   const symbol = wallet?.symbol || "TC";
 
   return (
-    <div className="rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.08] p-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl sm:p-6">
-      <div className="flex items-start justify-between gap-4">
+    <div className="relative overflow-hidden rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.08] p-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl sm:p-6">
+      <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-amber-300/10 blur-3xl" />
+      <div className="relative flex items-start justify-between gap-4">
         <div>
           <p className="text-sm uppercase tracking-[0.2em] text-amber-100/60">{copy.walletTitle}</p>
           <h2 className="mt-3 text-5xl font-semibold tracking-tight text-white">{balance}</h2>
           <p className="mt-2 text-sm text-amber-100/80">{symbol} · {currency}</p>
         </div>
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-300/25 bg-amber-300/10 text-amber-100">
-          <Coins className="h-7 w-7" />
+        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl border border-amber-300/25 bg-black/25 p-2 shadow-2xl shadow-amber-500/20">
+          <img src={coinIcon} alt="Tech Coin" className="h-full w-full object-contain drop-shadow-[0_0_18px_rgba(251,191,36,0.5)]" />
         </div>
       </div>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+      <div className="relative mt-6 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-white/35">{copy.currency}</p>
           <p className="mt-2 text-lg font-medium text-white">{currency}</p>
