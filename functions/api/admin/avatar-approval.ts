@@ -47,7 +47,7 @@ export async function onRequestPatch(context: any) {
 
     const target = await context.env.DB
       .prepare(`
-        SELECT id, email, role, avatar_url
+        SELECT id, name, email, role, avatar_url
         FROM users
         WHERE id = ?
       `)
@@ -76,6 +76,15 @@ export async function onRequestPatch(context: any) {
         .bind(userId)
         .run();
 
+      await writeAuditLog(context, {
+        actorUserId: owner.user.id,
+        action: "admin_avatar_approved",
+        targetType: "user",
+        targetId: userId,
+        targetLabel: `${target.name} <${target.email}>`,
+        details: "Owner admin profil fotoğrafını onayladı.",
+      });
+
       return Response.json({ success: true, message: "Admin profil fotoğrafı onaylandı." });
     }
 
@@ -83,6 +92,15 @@ export async function onRequestPatch(context: any) {
       .prepare("UPDATE users SET avatar_url = '', avatar_approved = 0 WHERE id = ?")
       .bind(userId)
       .run();
+
+    await writeAuditLog(context, {
+      actorUserId: owner.user.id,
+      action: "admin_avatar_rejected",
+      targetType: "user",
+      targetId: userId,
+      targetLabel: `${target.name} <${target.email}>`,
+      details: "Owner admin profil fotoğrafını reddetti. Fotoğraf silindi.",
+    });
 
     return Response.json({ success: true, message: "Admin profil fotoğrafı reddedildi. Adminin yeniden fotoğraf yüklemesi gerekiyor." });
   } catch (error) {
@@ -116,6 +134,20 @@ async function requireOwner(context: any) {
   }
 
   return { ok: true, user };
+}
+
+async function writeAuditLog(context: any, entry: any) {
+  try {
+    await context.env.DB
+      .prepare(`
+        INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, target_label, details)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .bind(entry.actorUserId, entry.action, entry.targetType, entry.targetId, entry.targetLabel, entry.details)
+      .run();
+  } catch {
+    // Log yazılamazsa ana işlem bozulmasın.
+  }
 }
 
 function getCookie(cookieHeader: string, name: string) {
