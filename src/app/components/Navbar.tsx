@@ -1,12 +1,20 @@
-import { MouseEvent, useState } from "react";
+import { MouseEvent, useEffect, useMemo, useState } from "react";
 import logo from "../../imports/View_recent_photos.png";
 import { motion, AnimatePresence } from "motion/react";
 import { Menu, X } from "lucide-react";
 import { useLanguage } from "../i18n";
 
+type User = {
+  id: number;
+  name: string;
+  email: string;
+  role?: string;
+};
+
 export function Navbar() {
   const { language, setLanguage } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
   const nav =
     language === "tr"
@@ -17,6 +25,7 @@ export function Navbar() {
           admin: "Admin",
           signin: "Sign In",
           signup: "Sign Up",
+          account: "Hesabım",
           estimator: "Hesaplayıcı",
           faq: "SSS",
           contact: "İletişim",
@@ -30,12 +39,23 @@ export function Navbar() {
           admin: "Admin",
           signin: "Sign In",
           signup: "Sign Up",
+          account: "Account",
           estimator: "Estimator",
           faq: "FAQ",
           contact: "Contact",
           cta: "Get Started",
           menu: "Menu",
         };
+
+  const initials = useMemo(() => {
+    const source = user?.name || user?.email || "E";
+    return source
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "E";
+  }, [user]);
 
   const links = [
     { href: "/#about", label: nav.about },
@@ -48,6 +68,25 @@ export function Navbar() {
   ];
 
   const closeMobile = () => setMobileOpen(false);
+
+  const refreshUser = () => {
+    fetch("/api/me", { credentials: "same-origin" })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((data) => setUser(data?.user || null))
+      .catch(() => setUser(null));
+  };
+
+  useEffect(() => {
+    refreshUser();
+
+    window.addEventListener("ekatech-auth-change", refreshUser);
+    window.addEventListener("focus", refreshUser);
+
+    return () => {
+      window.removeEventListener("ekatech-auth-change", refreshUser);
+      window.removeEventListener("focus", refreshUser);
+    };
+  }, []);
 
   const navigate = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
     closeMobile();
@@ -109,21 +148,37 @@ export function Navbar() {
             </button>
           </div>
 
-          <a
-            href="/signin"
-            onClick={(event) => navigate(event, "/signin")}
-            className="hidden rounded-full border border-white/10 bg-white/[0.06] px-5 py-2 font-medium text-white transition-all duration-300 hover:bg-white/[0.1] sm:block"
-          >
-            {nav.signin}
-          </a>
+          {user ? (
+            <a
+              href="/account"
+              onClick={(event) => navigate(event, "/account")}
+              className="flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.06] py-1 pl-1 pr-3 text-white transition-all duration-300 hover:bg-white/[0.1]"
+              aria-label={nav.account}
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">
+                {initials}
+              </span>
+              <span className="hidden max-w-28 truncate text-sm font-medium sm:block">{user.name}</span>
+            </a>
+          ) : (
+            <>
+              <a
+                href="/signin"
+                onClick={(event) => navigate(event, "/signin")}
+                className="hidden rounded-full border border-white/10 bg-white/[0.06] px-5 py-2 font-medium text-white transition-all duration-300 hover:bg-white/[0.1] sm:block"
+              >
+                {nav.signin}
+              </a>
 
-          <a
-            href="/signup"
-            onClick={(event) => navigate(event, "/signup")}
-            className="hidden rounded-full bg-white px-5 py-2 font-medium text-black transition-all duration-300 hover:bg-gray-200 sm:block"
-          >
-            {nav.signup}
-          </a>
+              <a
+                href="/signup"
+                onClick={(event) => navigate(event, "/signup")}
+                className="hidden rounded-full bg-white px-5 py-2 font-medium text-black transition-all duration-300 hover:bg-gray-200 sm:block"
+              >
+                {nav.signup}
+              </a>
+            </>
+          )}
 
           <button
             type="button"
@@ -156,14 +211,27 @@ export function Navbar() {
                   {link.label}
                 </a>
               ))}
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <a href="/signin" onClick={(event) => navigate(event, "/signin")} className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center font-medium text-white">
-                  {nav.signin}
+              {user ? (
+                <a
+                  href="/account"
+                  onClick={(event) => navigate(event, "/account")}
+                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">
+                    {initials}
+                  </span>
+                  <span className="font-medium">{nav.account}</span>
                 </a>
-                <a href="/signup" onClick={(event) => navigate(event, "/signup")} className="rounded-2xl bg-white px-4 py-3 text-center font-medium text-black">
-                  {nav.signup}
-                </a>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <a href="/signin" onClick={(event) => navigate(event, "/signin")} className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center font-medium text-white">
+                    {nav.signin}
+                  </a>
+                  <a href="/signup" onClick={(event) => navigate(event, "/signup")} className="rounded-2xl bg-white px-4 py-3 text-center font-medium text-black">
+                    {nav.signup}
+                  </a>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
