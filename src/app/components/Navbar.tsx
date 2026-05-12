@@ -58,11 +58,13 @@ export function Navbar() {
       .join("") || "E";
   }, [user]);
 
+  const canUseAdmin = user?.role === "admin" || user?.role === "owner";
+
   const links = [
     { href: "/#about", label: nav.about },
     { href: "/#services", label: nav.services },
     { href: "/#projects", label: nav.projects },
-    ...(user?.role === "admin" ? [{ href: "/admin", label: nav.admin }] : []),
+    ...(canUseAdmin ? [{ href: "/admin", label: nav.admin }] : []),
     { href: "/#estimator", label: nav.estimator },
     { href: "/#faq", label: nav.faq },
     { href: "/#contact", label: nav.contact },
