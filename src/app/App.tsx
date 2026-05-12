@@ -30,6 +30,7 @@ import { AnnouncementPopup } from "./components/AnnouncementPopup";
 import { ForgotPasswordPage } from "./components/ForgotPasswordPage";
 import { AdminAvatarApprovals } from "./components/AdminAvatarApprovals";
 import { AdminAuditLogs } from "./components/AdminAuditLogs";
+import { AdminChat } from "./components/AdminChat";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -112,6 +113,7 @@ export default function App() {
             <AdminPanel />
             <div className="bg-black px-4 pb-24 sm:px-6">
               <div className="mx-auto max-w-7xl space-y-6">
+                <AdminChat />
                 <AdminAvatarApprovals />
                 <AnnouncementAdmin />
                 <AdminAuditLogs />
