@@ -14,8 +14,9 @@ export function Navbar() {
           about: "Hakkında",
           services: "Servisler",
           projects: "Projeler",
-          auth: "Giriş",
           admin: "Admin",
+          signin: "Sign In",
+          signup: "Sign Up",
           estimator: "Hesaplayıcı",
           faq: "SSS",
           contact: "İletişim",
@@ -26,8 +27,9 @@ export function Navbar() {
           about: "About",
           services: "Services",
           projects: "Projects",
-          auth: "Sign In",
           admin: "Admin",
+          signin: "Sign In",
+          signup: "Sign Up",
           estimator: "Estimator",
           faq: "FAQ",
           contact: "Contact",
@@ -36,14 +38,13 @@ export function Navbar() {
         };
 
   const links = [
-    { href: "#about", label: nav.about },
-    { href: "#services", label: nav.services },
-    { href: "#projects", label: nav.projects },
-    { href: "#auth", label: nav.auth },
-    { href: "#admin", label: nav.admin },
-    { href: "#estimator", label: nav.estimator },
-    { href: "#faq", label: nav.faq },
-    { href: "#contact", label: nav.contact },
+    { href: "/#about", label: nav.about },
+    { href: "/#services", label: nav.services },
+    { href: "/#projects", label: nav.projects },
+    { href: "/admin", label: nav.admin },
+    { href: "/#estimator", label: nav.estimator },
+    { href: "/#faq", label: nav.faq },
+    { href: "/#contact", label: nav.contact },
   ];
 
   const closeMobile = () => setMobileOpen(false);
@@ -56,7 +57,7 @@ export function Navbar() {
       className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-black/45 backdrop-blur-xl"
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <a href="#" onClick={closeMobile} className="flex items-center gap-3">
+        <a href="/" onClick={closeMobile} className="flex items-center gap-3">
           <img src={logo} alt="EkaTech Logo" className="h-10 w-10 object-contain" />
           <span className="font-medium tracking-tight text-white">EkaTech</span>
         </a>
@@ -91,9 +92,15 @@ export function Navbar() {
             </button>
           </div>
 
-          <a href="#auth" className="hidden sm:block">
+          <a href="/signin" className="hidden sm:block">
+            <button className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-2 font-medium text-white transition-all duration-300 hover:bg-white/[0.1]">
+              {nav.signin}
+            </button>
+          </a>
+
+          <a href="/signup" className="hidden sm:block">
             <button className="rounded-full bg-white px-5 py-2 font-medium text-black transition-all duration-300 hover:bg-gray-200">
-              {nav.auth}
+              {nav.signup}
             </button>
           </a>
 
@@ -128,13 +135,14 @@ export function Navbar() {
                   {link.label}
                 </a>
               ))}
-              <a
-                href="#contact"
-                onClick={closeMobile}
-                className="mt-2 rounded-2xl bg-white px-4 py-3 text-center font-medium text-black"
-              >
-                {nav.cta}
-              </a>
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <a href="/signin" onClick={closeMobile} className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center font-medium text-white">
+                  {nav.signin}
+                </a>
+                <a href="/signup" onClick={closeMobile} className="rounded-2xl bg-white px-4 py-3 text-center font-medium text-black">
+                  {nav.signup}
+                </a>
+              </div>
             </div>
           </motion.div>
         )}
