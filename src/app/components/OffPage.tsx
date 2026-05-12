@@ -213,16 +213,11 @@ export function OffPage() {
         <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
           <CoinWalletCard wallet={wallet} copy={copy} locale={tr ? "tr-TR" : "en-US"} />
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
-            <div className="flex items-center gap-3">
-              <CoinIcon size="sm" tone="cyan" />
-              <div>
-                <p className="text-sm text-white/40">Reward rule</p>
-                <h2 className="flex flex-wrap items-center gap-2 text-2xl font-medium text-white">
-                  <span>{copy.fixedRewardLabel}:</span>
-                  <CoinAmount amount={50} locale={tr ? "tr-TR" : "en-US"} size="md" tone="cyan" />
-                </h2>
-              </div>
-            </div>
+            <p className="text-sm text-white/40">Reward rule</p>
+            <h2 className="mt-2 flex flex-wrap items-center gap-2 text-2xl font-medium text-white">
+              <span>{copy.fixedRewardLabel}:</span>
+              <CoinAmount amount={50} locale={tr ? "tr-TR" : "en-US"} size="md" tone="cyan" />
+            </h2>
             <p className="mt-4 text-sm leading-6 text-white/50">{copy.minesRemoved}</p>
           </div>
         </section>
@@ -245,15 +240,12 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
   return (
     <div className="relative overflow-hidden rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.08] p-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl sm:p-6">
       <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-amber-300/10 blur-3xl" />
-      <div className="relative flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm uppercase tracking-[0.2em] text-amber-100/60">{copy.walletTitle}</p>
-          <div className="mt-3">
-            <CoinAmount amount={balance} locale={locale} size="xl" tone="amber" />
-          </div>
-          <p className="mt-2 text-sm text-amber-100/80">{currency}</p>
+      <div className="relative">
+        <p className="text-sm uppercase tracking-[0.2em] text-amber-100/60">{copy.walletTitle}</p>
+        <div className="mt-3">
+          <CoinAmount amount={balance} locale={locale} size="xl" tone="amber" />
         </div>
-        <CoinIcon size="md" tone="amber" />
+        <p className="mt-2 text-sm text-amber-100/80">{currency}</p>
       </div>
       <div className="relative mt-6 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
