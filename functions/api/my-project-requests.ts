@@ -8,10 +8,23 @@ export async function onRequestGet(context: any) {
 
     const requests = await context.env.DB
       .prepare(`
-        SELECT id, project_name, project_type, budget_range, deadline, description, status, created_at
+        SELECT
+          project_requests.id,
+          project_requests.project_name,
+          project_requests.project_type,
+          project_requests.budget_range,
+          project_requests.deadline,
+          project_requests.description,
+          project_requests.status,
+          project_requests.created_at,
+          project_requests.assigned_admin_id,
+          assigned_admin.name AS assigned_admin_name,
+          assigned_admin.email AS assigned_admin_email,
+          assigned_admin.avatar_url AS assigned_admin_avatar_url
         FROM project_requests
-        WHERE user_id = ?
-        ORDER BY id DESC
+        LEFT JOIN users AS assigned_admin ON project_requests.assigned_admin_id = assigned_admin.id
+        WHERE project_requests.user_id = ?
+        ORDER BY project_requests.id DESC
         LIMIT 50
       `)
       .bind(user.user.id)
@@ -19,7 +32,7 @@ export async function onRequestGet(context: any) {
 
     return Response.json({ requests: requests?.results || [] });
   } catch (error) {
-    return Response.json({ error: "Proje durumları alınamadı. project_requests tablosunu oluşturduğundan emin ol." }, { status: 500 });
+    return Response.json({ error: "Proje durumları alınamadı. project_requests tablosunu ve assigned_admin_id kolonunu kontrol et." }, { status: 500 });
   }
 }
 
