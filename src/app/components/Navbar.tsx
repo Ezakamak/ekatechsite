@@ -14,6 +14,7 @@ export function Navbar() {
           about: "Hakkında",
           services: "Servisler",
           projects: "Projeler",
+          auth: "Giriş",
           estimator: "Hesaplayıcı",
           faq: "SSS",
           contact: "İletişim",
@@ -24,6 +25,7 @@ export function Navbar() {
           about: "About",
           services: "Services",
           projects: "Projects",
+          auth: "Sign In",
           estimator: "Estimator",
           faq: "FAQ",
           contact: "Contact",
@@ -35,6 +37,7 @@ export function Navbar() {
     { href: "#about", label: nav.about },
     { href: "#services", label: nav.services },
     { href: "#projects", label: nav.projects },
+    { href: "#auth", label: nav.auth },
     { href: "#estimator", label: nav.estimator },
     { href: "#faq", label: nav.faq },
     { href: "#contact", label: nav.contact },
@@ -85,9 +88,9 @@ export function Navbar() {
             </button>
           </div>
 
-          <a href="#contact" className="hidden sm:block">
+          <a href="#auth" className="hidden sm:block">
             <button className="rounded-full bg-white px-5 py-2 font-medium text-black transition-all duration-300 hover:bg-gray-200">
-              {nav.cta}
+              {nav.auth}
             </button>
           </a>
 
