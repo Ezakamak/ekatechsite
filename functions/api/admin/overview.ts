@@ -22,6 +22,11 @@ export async function onRequestGet(context: any) {
       .bind(OWNER_EMAIL)
       .first();
 
+    const offUsers = await context.env.DB
+      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'off' AND lower(email) != ?")
+      .bind(OWNER_EMAIL)
+      .first();
+
     const clientUsers = await context.env.DB
       .prepare("SELECT COUNT(*) AS count FROM users WHERE (role = 'client' OR role IS NULL) AND lower(email) != ?")
       .bind(OWNER_EMAIL)
@@ -82,6 +87,7 @@ export async function onRequestGet(context: any) {
         totalUsers: totalUsers?.count || 0,
         ownerUsers: ownerUsers?.count || 0,
         adminUsers: adminUsers?.count || 0,
+        offUsers: offUsers?.count || 0,
         clientUsers: clientUsers?.count || 0,
         blockedUsers: blockedUsers?.count || 0,
         activeSessions: activeSessions?.count || 0,
