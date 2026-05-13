@@ -17,7 +17,7 @@ export async function onRequestGet(context: any) {
     await ensureRoundOneAfterBothReady(context, lobby, auth.user.id);
     return Response.json(await buildRoundPayload(context, lobbyId, auth.user.id));
   } catch (error) {
-    return Response.json({ error: "Round verisi alınamadı. duel_round_ready ve duel_rounds tablolarını kontrol et." }, { status: 500 });
+    return Response.json({ error: "Round verisi alınamadı. duel_round_ready, duel_round_hold_ready ve duel_rounds tablolarını kontrol et." }, { status: 500 });
   }
 }
 
@@ -30,22 +30,45 @@ export async function onRequestPost(context: any) {
     const lobbyId = Number(body?.lobby_id);
     const action = String(body?.action || "next_round");
     if (!lobbyId) return Response.json({ error: "Lobby seçilmedi." }, { status: 400 });
-    if (action !== "next_round") return Response.json({ error: "Geçersiz işlem." }, { status: 400 });
+    if (!["next_round", "hold_ready", "hold_cancel"].includes(action)) return Response.json({ error: "Geçersiz işlem." }, { status: 400 });
 
     const lobby = await getLobby(context, lobbyId);
     if (!lobby) return Response.json({ error: "Lobby bulunamadı." }, { status: 404 });
     if (!isParticipant(lobby, auth.user.id)) return Response.json({ error: "Bu düellonun oyuncusu değilsin." }, { status: 403 });
     if (lobby.status !== "in_progress") return Response.json({ error: "Bu düello aktif değil." }, { status: 409 });
 
-    const currentRound = await context.env.DB
+    let currentRound = await context.env.DB
       .prepare("SELECT * FROM duel_rounds WHERE lobby_id = ? ORDER BY round_number DESC LIMIT 1")
       .bind(lobbyId)
       .first();
 
     if (!currentRound) {
       await ensureRoundOneAfterBothReady(context, lobby, auth.user.id);
+      currentRound = await context.env.DB
+        .prepare("SELECT * FROM duel_rounds WHERE lobby_id = ? ORDER BY round_number DESC LIMIT 1")
+        .bind(lobbyId)
+        .first();
+    }
+
+    if (action === "hold_ready" || action === "hold_cancel") {
+      if (!currentRound) return Response.json(await buildRoundPayload(context, lobbyId, auth.user.id));
+      if (String(lobby.mode || "classic") !== "what_the_hold") return Response.json({ error: "Hold işlemi sadece What The Hold modu için geçerli." }, { status: 400 });
+
+      if (currentRound.status === "waiting_hold") {
+        if (action === "hold_ready") {
+          await markHoldReady(context, lobbyId, Number(currentRound.round_number), auth.user.id);
+          if (await bothPlayersHoldReady(context, lobby, Number(currentRound.round_number))) {
+            await activateHoldRound(context, lobbyId, Number(currentRound.round_number));
+          }
+        } else {
+          await unmarkHoldReady(context, lobbyId, Number(currentRound.round_number), auth.user.id);
+        }
+      }
+
       return Response.json(await buildRoundPayload(context, lobbyId, auth.user.id));
     }
+
+    if (!currentRound) return Response.json(await buildRoundPayload(context, lobbyId, auth.user.id));
 
     if (currentRound.status !== "completed") {
       return Response.json({ error: "Sonraki tura geçmeden önce iki oyuncunun da sonucu gerekli." }, { status: 409 });
@@ -65,12 +88,12 @@ export async function onRequestPost(context: any) {
     const nextRoundNumber = Number(currentRound.round_number) + 1;
     await markReady(context, lobbyId, nextRoundNumber, auth.user.id);
     if (await bothPlayersReady(context, lobby, nextRoundNumber)) {
-      await createRound(context, lobbyId, nextRoundNumber);
+      await createRound(context, lobby, nextRoundNumber);
     }
 
     return Response.json(await buildRoundPayload(context, lobbyId, auth.user.id));
   } catch (error) {
-    return Response.json({ error: "Sonraki tur başlatılamadı. duel_round_ready tablosunu kontrol et." }, { status: 500 });
+    return Response.json({ error: "Sonraki tur başlatılamadı. duel_round_ready ve duel_round_hold_ready tablolarını kontrol et." }, { status: 500 });
   }
 }
 
@@ -107,7 +130,7 @@ async function ensureRoundOneAfterBothReady(context: any, lobby: any, userId: nu
 
   await markReady(context, lobby.id, 1, userId);
   if (await bothPlayersReady(context, lobby, 1)) {
-    await createRound(context, lobby.id, 1);
+    await createRound(context, lobby, 1);
   }
 }
 
@@ -136,12 +159,55 @@ async function bothPlayersReady(context: any, lobby: any, roundNumber: number) {
   return Number(row?.ready_count || 0) >= 2;
 }
 
-async function createRound(context: any, lobbyId: number, roundNumber: number) {
+async function createRound(context: any, lobby: any, roundNumber: number) {
+  const mode = String(lobby.mode || "classic");
+  const status = mode === "what_the_hold" ? "waiting_hold" : "active";
+  const signalOffset = mode === "what_the_hold" ? "+30 minutes" : "+5 seconds";
+
   await context.env.DB
     .prepare(`
       INSERT OR IGNORE INTO duel_rounds (lobby_id, round_number, signal_at, status)
-      VALUES (?, ?, datetime('now', '+5 seconds'), 'active')
+      VALUES (?, ?, datetime('now', ?), ?)
     `)
+    .bind(lobby.id, roundNumber, signalOffset, status)
+    .run();
+}
+
+async function markHoldReady(context: any, lobbyId: number, roundNumber: number, userId: number) {
+  await context.env.DB
+    .prepare(`
+      INSERT OR IGNORE INTO duel_round_hold_ready (lobby_id, round_number, user_id, ready_at)
+      VALUES (?, ?, ?, datetime('now'))
+    `)
+    .bind(lobbyId, roundNumber, userId)
+    .run();
+}
+
+async function unmarkHoldReady(context: any, lobbyId: number, roundNumber: number, userId: number) {
+  await context.env.DB
+    .prepare("DELETE FROM duel_round_hold_ready WHERE lobby_id = ? AND round_number = ? AND user_id = ?")
+    .bind(lobbyId, roundNumber, userId)
+    .run();
+}
+
+async function bothPlayersHoldReady(context: any, lobby: any, roundNumber: number) {
+  if (!lobby.creator_user_id || !lobby.opponent_user_id) return false;
+
+  const row = await context.env.DB
+    .prepare(`
+      SELECT COUNT(DISTINCT user_id) AS ready_count
+      FROM duel_round_hold_ready
+      WHERE lobby_id = ? AND round_number = ? AND user_id IN (?, ?)
+    `)
+    .bind(lobby.id, roundNumber, lobby.creator_user_id, lobby.opponent_user_id)
+    .first();
+
+  return Number(row?.ready_count || 0) >= 2;
+}
+
+async function activateHoldRound(context: any, lobbyId: number, roundNumber: number) {
+  await context.env.DB
+    .prepare("UPDATE duel_rounds SET status = 'active', signal_at = datetime('now', '+5 seconds') WHERE lobby_id = ? AND round_number = ? AND status = 'waiting_hold'")
     .bind(lobbyId, roundNumber)
     .run();
 }
@@ -188,6 +254,18 @@ async function buildRoundPayload(context: any, lobbyId: number, userId: number) 
     .bind(lobbyId, pendingRoundNumber)
     .all();
 
+  const holdReadyRows = currentRound
+    ? await context.env.DB
+        .prepare(`
+          SELECT duel_round_hold_ready.user_id, users.name
+          FROM duel_round_hold_ready
+          JOIN users ON duel_round_hold_ready.user_id = users.id
+          WHERE duel_round_hold_ready.lobby_id = ? AND duel_round_hold_ready.round_number = ?
+        `)
+        .bind(lobbyId, currentRound.round_number)
+        .all()
+    : { results: [] };
+
   const score = await getScore(context, lobbyId);
   const targetWins = lobby ? Math.floor(Number(lobby.round_count) / 2) + 1 : 0;
   const mySubmission = (submissions?.results || []).find((item: any) => Number(item.user_id) === Number(userId)) || null;
@@ -203,6 +281,8 @@ async function buildRoundPayload(context: any, lobbyId: number, userId: number) 
     target_wins: targetWins,
     ready: readyRows?.results || [],
     ready_count: readyRows?.results?.length || 0,
+    hold_ready: holdReadyRows?.results || [],
+    hold_ready_count: holdReadyRows?.results?.length || 0,
     pending_round_number: pendingRoundNumber,
   };
 }
