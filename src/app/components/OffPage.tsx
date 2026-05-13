@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
-import { TechDuelSync } from "./TechDuelSync";
+import { TechDuelSync } from "./TechDuelSyncFixed";
 
 type User = {
   id: number;
