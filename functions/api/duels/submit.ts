@@ -1,4 +1,5 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+const OFF_ROLES = ["off", "admin", "owner"];
 
 export async function onRequestPost(context: any) {
   const auth = await requireUser(context);
@@ -187,6 +188,7 @@ async function requireUser(context: any) {
 
   if (!user) return { ok: false, status: 401, error: "Oturum geçersiz." };
   if (user.role === "blocked") return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
+  if (!OFF_ROLES.includes(String(user.role))) return { ok: false, status: 403, error: "Tech Duel için OFF, admin veya owner rolü gerekiyor." };
   return { ok: true, user };
 }
 
