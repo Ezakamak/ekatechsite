@@ -1,5 +1,5 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
-const ROLES = ["owner", "admin", "client", "blocked"];
+const ROLES = ["owner", "admin", "off", "client", "blocked"];
 
 export async function onRequestGet(context: any) {
   const admin = await requireAdminOrOwner(context);
@@ -171,7 +171,7 @@ export async function onRequestPatch(context: any) {
       details: `${admin.user.name} kullanıcı rolünü ${target.role} → ${role} olarak değiştirdi.${role === "blocked" ? " Kullanıcının oturumları kapatıldı." : ""}`,
     });
 
-    return Response.json({ success: true, message: role === "admin" ? "Rol admin yapıldı. Sipariş yönetimi için profil fotoğrafı owner tarafından onaylanmalı." : "Rol güncellendi." });
+    return Response.json({ success: true, message: role === "admin" ? "Rol admin yapıldı. Sipariş yönetimi için profil fotoğrafı owner tarafından onaylanmalı." : role === "off" ? "Rol OFF yapıldı. Bu kullanıcı OFF Hub ve Tech Duel kullanabilir; admin paneline giremez." : "Rol güncellendi." });
   } catch (error) {
     return Response.json({ error: "Rol veya profil fotoğrafı onayı güncellenemedi." }, { status: 500 });
   }
