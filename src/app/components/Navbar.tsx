@@ -72,12 +72,14 @@ export function Navbar() {
   }, [user]);
 
   const canUseAdmin = user?.role === "admin" || user?.role === "owner";
+  const canUseOff = user?.role === "off" || user?.role === "admin" || user?.role === "owner";
 
   const links = [
     { href: "/#about", label: nav.about },
     { href: "/#services", label: nav.services },
     { href: "/#projects", label: nav.projects },
-    ...(canUseAdmin ? [{ href: "/admin", label: nav.admin }, { href: "/off", label: nav.off }] : []),
+    ...(canUseAdmin ? [{ href: "/admin", label: nav.admin }] : []),
+    ...(canUseOff ? [{ href: "/off", label: nav.off }] : []),
     { href: "/#estimator", label: nav.estimator },
     { href: "/#faq", label: nav.faq },
     { href: "/#contact", label: nav.contact },
