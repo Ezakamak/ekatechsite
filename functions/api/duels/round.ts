@@ -162,15 +162,30 @@ async function bothPlayersReady(context: any, lobby: any, roundNumber: number) {
 async function createRound(context: any, lobby: any, roundNumber: number) {
   const mode = String(lobby.mode || "classic");
   const status = mode === "what_the_hold" ? "waiting_hold" : "active";
-  const signalOffset = mode === "what_the_hold" ? "+30 minutes" : "+5 seconds";
+  const signalAt = getSignalAtForMode(mode);
 
   await context.env.DB
     .prepare(`
       INSERT OR IGNORE INTO duel_rounds (lobby_id, round_number, signal_at, status)
-      VALUES (?, ?, datetime('now', ?), ?)
+      VALUES (?, ?, ?, ?)
     `)
-    .bind(lobby.id, roundNumber, signalOffset, status)
+    .bind(lobby.id, roundNumber, signalAt, status)
     .run();
+}
+
+function getSignalAtForMode(mode: string) {
+  if (mode === "what_the_hold") {
+    return new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  }
+
+  if (mode === "best_focus") {
+    const fakeCount = randomInt(4, 9);
+    const fakeIntervalMs = randomInt(620, 920);
+    const finalGapMs = randomInt(240, 620);
+    return new Date(Date.now() + fakeCount * fakeIntervalMs + finalGapMs).toISOString();
+  }
+
+  return new Date(Date.now() + 5000).toISOString();
 }
 
 async function markHoldReady(context: any, lobbyId: number, roundNumber: number, userId: number) {
@@ -206,9 +221,10 @@ async function bothPlayersHoldReady(context: any, lobby: any, roundNumber: numbe
 }
 
 async function activateHoldRound(context: any, lobbyId: number, roundNumber: number) {
+  const signalAt = new Date(Date.now() + randomInt(4200, 6200)).toISOString();
   await context.env.DB
-    .prepare("UPDATE duel_rounds SET status = 'active', signal_at = datetime('now', '+5 seconds') WHERE lobby_id = ? AND round_number = ? AND status = 'waiting_hold'")
-    .bind(lobbyId, roundNumber)
+    .prepare("UPDATE duel_rounds SET status = 'active', signal_at = ? WHERE lobby_id = ? AND round_number = ? AND status = 'waiting_hold'")
+    .bind(signalAt, lobbyId, roundNumber)
     .run();
 }
 
@@ -354,6 +370,10 @@ async function requireUser(context: any) {
   if (user.role === "blocked") return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   if (!OFF_ROLES.includes(String(user.role))) return { ok: false, status: 403, error: "Tech Duel için OFF, admin veya owner rolü gerekiyor." };
   return { ok: true, user };
+}
+
+function randomInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function getCookie(cookieHeader: string, name: string) {
