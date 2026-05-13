@@ -3,13 +3,15 @@ const FIXED_REWARD_AMOUNT = 50;
 const ROUND_OPTIONS = [3, 5, 7];
 const MODE_OPTIONS = ["classic", "best_focus", "what_the_hold"];
 const OFF_ROLES = ["off", "admin", "owner"];
+const ENTER_MATCH_TIMEOUT_MINUTES = 2;
+const HOLD_READY_TIMEOUT_MINUTES = 2;
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
 
   try {
-    await expireOldOpenLobbies(context);
+    await cleanupStaleLobbies(context);
 
     const open = await context.env.DB
       .prepare(`
@@ -58,7 +60,10 @@ export async function onRequestGet(context: any) {
           opponent.name AS opponent_name,
           opponent.email AS opponent_email,
           opponent.avatar_url AS opponent_avatar_url,
-          winner.name AS winner_name,
+          CASE
+            WHEN duel_lobbies.status = 'cancelled' THEN NULL
+            ELSE winner.name
+          END AS winner_name,
           my_result.average_ms AS my_average_ms,
           my_result.best_ms AS my_best_ms,
           my_result.too_early_count AS my_too_early_count,
@@ -86,6 +91,8 @@ export async function onRequestPost(context: any) {
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
 
   try {
+    await cleanupStaleLobbies(context);
+
     const body = await context.request.json().catch(() => null);
     const roundCount = Number(body?.round_count || 5);
     const mode = String(body?.mode || "classic").trim();
@@ -126,9 +133,40 @@ export async function onRequestPost(context: any) {
   }
 }
 
-async function expireOldOpenLobbies(context: any) {
+async function cleanupStaleLobbies(context: any) {
   await context.env.DB
-    .prepare("UPDATE duel_lobbies SET status = 'expired', updated_at = datetime('now') WHERE status = 'open' AND created_at < datetime('now', '-2 hours')")
+    .prepare("UPDATE duel_lobbies SET status = 'expired', winner_user_id = NULL, updated_at = datetime('now') WHERE status = 'open' AND created_at < datetime('now', '-2 hours')")
+    .run();
+
+  await context.env.DB
+    .prepare(`
+      UPDATE duel_lobbies
+      SET status = 'cancelled', winner_user_id = NULL, updated_at = datetime('now')
+      WHERE status = 'in_progress'
+        AND opponent_user_id IS NOT NULL
+        AND updated_at < datetime('now', ?)
+        AND NOT EXISTS (
+          SELECT 1 FROM duel_rounds
+          WHERE duel_rounds.lobby_id = duel_lobbies.id
+        )
+    `)
+    .bind(`-${ENTER_MATCH_TIMEOUT_MINUTES} minutes`)
+    .run();
+
+  await context.env.DB
+    .prepare(`
+      UPDATE duel_lobbies
+      SET status = 'cancelled', winner_user_id = NULL, updated_at = datetime('now')
+      WHERE status = 'in_progress'
+        AND updated_at < datetime('now', ?)
+        AND EXISTS (
+          SELECT 1 FROM duel_rounds
+          WHERE duel_rounds.lobby_id = duel_lobbies.id
+            AND duel_rounds.status = 'waiting_hold'
+            AND duel_rounds.created_at < datetime('now', ?)
+        )
+    `)
+    .bind(`-${HOLD_READY_TIMEOUT_MINUTES} minutes`, `-${HOLD_READY_TIMEOUT_MINUTES} minutes`)
     .run();
 }
 
