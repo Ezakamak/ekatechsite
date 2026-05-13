@@ -82,7 +82,7 @@ export function CipherBreak() {
 
   const c = useMemo(() => tr ? {
     title: "Cipher Break",
-    subtitle: "1 round içinde 3 farklı üçlü kod kilitle. 14 kod sırayla yanar; hedef kod yandığı anda bas.",
+    subtitle: "1 round içinde AS7DF3K9P gibi 9 haneli hedef kod çıkar. Kodları soldan sağa üçlü üçlü kilitle.",
     create: "Lobby oluştur",
     active: "Aktif Cipher lobileri",
     mine: "Cipher maçlarım",
@@ -104,12 +104,12 @@ export function CipherBreak() {
     player2: "Player 2",
     cancelled: "İptal edildi",
     back: "Lobby listesi",
-    rule: "Bu roundu almak için 3 kodu sırayla kilitle.",
+    rule: "Hedef kod tek parça görünür; sıradaki üçlü parça yanınca kilitle.",
     scan: "Scan...",
-    lockProgress: "Kilit",
+    lockProgress: "Parça",
   } : {
     title: "Cipher Break",
-    subtitle: "Lock 3 different three-character codes in one round. Fourteen codes light up in sequence; press when the target is active.",
+    subtitle: "A 9-character target code appears as one string, like AS7DF3K9P. Lock it left-to-right in 3-character chunks.",
     create: "Create lobby",
     active: "Active Cipher lobbies",
     mine: "My Cipher matches",
@@ -131,9 +131,9 @@ export function CipherBreak() {
     player2: "Player 2",
     cancelled: "Cancelled",
     back: "Lobby list",
-    rule: "Lock 3 codes in order to win this round.",
+    rule: "The target appears as one code; lock the next 3-character chunk when it lights up.",
     scan: "Scan...",
-    lockProgress: "Lock",
+    lockProgress: "Chunk",
   }, [tr]);
 
   const loadList = async (silent = false) => {
@@ -214,6 +214,7 @@ export function CipherBreak() {
   const lobby = state?.lobby || activeLobby;
   const round = state?.current_round || null;
   const locks = useMemo(() => parseLocks(round), [round?.options_json, round?.target_code]);
+  const fullTarget = locks.length ? locks.map((lock) => lock.target).join("") : round?.target_code || "---";
   const lockGoal = Number(state?.lock_goal || Math.max(1, locks.length || 1));
   const rawProgress = Number(state?.my_submission?.correct ?? 0);
   const myProgress = rawProgress > 0 ? rawProgress : 0;
@@ -227,7 +228,6 @@ export function CipherBreak() {
   const tickMs = Number(round?.tick_ms || 650);
   const activeIndex = options.length ? Math.floor(Math.max(0, serverNow - startedAt) / tickMs) % options.length : 0;
   const activeCode = options[activeIndex] || "---";
-  const mySubmission = state?.my_submission;
   const creatorWins = Number(state?.score?.[String(lobby?.creator_user_id || "")] || 0);
   const opponentWins = Number(state?.score?.[String(lobby?.opponent_user_id || "")] || 0);
   const roundCompleted = round?.status === "completed";
@@ -278,7 +278,7 @@ export function CipherBreak() {
           <div className="rounded-[2rem] border border-cyan-300/20 bg-black/50 p-6 text-center shadow-2xl shadow-cyan-500/10">
             {!round ? <div className="flex min-h-[320px] items-center justify-center text-white/45">{c.waiting}</div> : <>
               <p className="text-xs uppercase tracking-[0.28em] text-white/35">{c.target}</p>
-              <div className="mx-auto mt-3 inline-flex rounded-3xl border border-purple-300/25 bg-purple-300/10 px-8 py-4 font-mono text-4xl font-semibold tracking-[0.35em] text-purple-100 shadow-2xl shadow-purple-500/10">{currentTarget}</div>
+              <div className="mx-auto mt-3 inline-flex max-w-full rounded-3xl border border-purple-300/25 bg-purple-300/10 px-5 py-4 font-mono text-3xl font-semibold tracking-[0.18em] text-purple-100 shadow-2xl shadow-purple-500/10 sm:px-8 sm:text-4xl sm:tracking-[0.24em]">{fullTarget}</div>
               <div className="mt-4 flex items-center justify-center gap-2">
                 {Array.from({ length: lockGoal }).map((_, i) => <span key={i} className={`h-2 w-12 rounded-full ${i < myProgress ? "bg-emerald-300" : eliminated ? "bg-red-300/40" : "bg-white/15"}`} />)}
               </div>
