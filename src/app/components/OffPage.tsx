@@ -40,13 +40,13 @@ export function OffPage() {
   const copy = tr
     ? {
         loading: "OFF alanı kontrol ediliyor...",
-        accessDeniedTitle: "Yetkili erişimi gerekli",
-        accessDeniedDesc: "Bu sayfa sadece admin ve owner hesapları için açık.",
-        signIn: "Yetkili giriş",
+        accessDeniedTitle: "OFF erişimi gerekli",
+        accessDeniedDesc: "Bu sayfa OFF, admin ve owner hesapları için açık.",
+        signIn: "Giriş yap",
         home: "Ana sayfa",
-        eyebrow: "Admin özel oyun alanı",
+        eyebrow: "OFF özel oyun alanı",
         title: "EkaTech OFF Hub",
-        subtitle: "OFF artık tek bir oyun değil; admin/owner hesaplarına özel hafif oyunlar ve deneysel modlar için hub alanı.",
+        subtitle: "OFF rolü arkadaşlarla takılmak, Tech Duel oynamak ve coin puanı biriktirmek için özel ara rol.",
         available: "Aktif oyun",
         comingSoon: "Yakında",
         open: "Aç",
@@ -66,13 +66,13 @@ export function OffPage() {
       }
     : {
         loading: "Checking OFF access...",
-        accessDeniedTitle: "Authorized access required",
-        accessDeniedDesc: "This page is available only to admin and owner accounts.",
-        signIn: "Authorized login",
+        accessDeniedTitle: "OFF access required",
+        accessDeniedDesc: "This page is available to OFF, admin and owner accounts.",
+        signIn: "Sign in",
         home: "Home",
-        eyebrow: "Admin-only game area",
+        eyebrow: "OFF private game area",
         title: "EkaTech OFF Hub",
-        subtitle: "OFF is now a hub for lightweight games and experimental modes available only to admin/owner accounts.",
+        subtitle: "The OFF role is a middle role for hanging out, playing Tech Duel and collecting score coins.",
         available: "Available game",
         comingSoon: "Coming soon",
         open: "Open",
@@ -135,7 +135,7 @@ export function OffPage() {
     };
   }, [user?.id]);
 
-  const canAccess = user?.role === "admin" || user?.role === "owner";
+  const canAccess = user?.role === "off" || user?.role === "admin" || user?.role === "owner";
 
   if (loading) {
     return (
