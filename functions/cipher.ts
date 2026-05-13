@@ -3,6 +3,8 @@ const OFF_ROLES = ["off", "admin", "owner"];
 const FIXED_REWARD_AMOUNT = 40;
 const ROUND_COUNT = 5;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const CODE_LENGTH = 3;
+const OPTION_COUNT = 6;
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
@@ -166,9 +168,9 @@ async function getCurrentRound(context: any, lobbyId: number) {
 }
 
 async function createRound(context: any, lobby: any, roundNumber: number) {
-  const target = makeCode(roundNumber >= 4 ? 4 : 3);
-  const options = makeOptions(target, roundNumber);
-  const tickMs = Math.max(380, 720 - roundNumber * 45);
+  const target = makeCode(CODE_LENGTH);
+  const options = makeOptions(target);
+  const tickMs = Math.max(420, 820 - roundNumber * 55);
   await context.env.DB.prepare(`
     INSERT OR IGNORE INTO cipher_rounds (lobby_id, round_number, target_code, options_json, tick_ms, started_at, status)
     VALUES (?, ?, ?, ?, ?, datetime('now'), 'active')
@@ -181,20 +183,19 @@ function makeCode(length: number) {
   return code;
 }
 
-function makeOptions(target: string, roundNumber: number) {
-  const total = Math.min(14, 9 + roundNumber);
+function makeOptions(target: string) {
   const options = new Set<string>();
   options.add(target);
-  while (options.size < total) options.add(makeSimilarCode(target));
+  while (options.size < OPTION_COUNT) options.add(makeSimilarCode(target));
   return shuffle([...options]);
 }
 
 function makeSimilarCode(target: string) {
   const chars = target.split("");
-  const changes = Math.random() < 0.72 ? 1 : 2;
+  const changes = Math.random() < 0.8 ? 1 : 2;
   for (let i = 0; i < changes; i++) chars[randomInt(0, chars.length - 1)] = CODE_CHARS[randomInt(0, CODE_CHARS.length - 1)];
   const code = chars.join("");
-  return code === target ? makeCode(target.length) : code;
+  return code === target ? makeCode(CODE_LENGTH) : code;
 }
 
 async function buildState(context: any, lobbyId: number, userId: number) {
