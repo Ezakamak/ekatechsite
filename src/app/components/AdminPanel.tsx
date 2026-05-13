@@ -7,7 +7,7 @@ type User = {
   id: number;
   name: string;
   email: string;
-  role: "owner" | "admin" | "client" | "blocked" | string;
+  role: "owner" | "admin" | "off" | "client" | "blocked" | string;
   created_at?: string;
 };
 
@@ -38,6 +38,7 @@ type Overview = {
     totalUsers: number;
     ownerUsers?: number;
     adminUsers: number;
+    offUsers?: number;
     clientUsers: number;
     blockedUsers?: number;
     activeSessions: number;
@@ -115,6 +116,7 @@ export function AdminPanel() {
             averageRating: "Ortalama müşteri puanı",
             ratedProjects: "tamamlanan proje puanlandı",
             admins: "Admin",
+            offUsers: "OFF",
             clients: "Client",
             activeSessions: "Aktif oturum",
             allUsers: "Kullanıcı yönetimi",
@@ -150,6 +152,7 @@ export function AdminPanel() {
             averageRating: "Average customer rating",
             ratedProjects: "completed projects rated",
             admins: "Admins",
+            offUsers: "OFF",
             clients: "Clients",
             activeSessions: "Active sessions",
             allUsers: "User management",
@@ -356,11 +359,12 @@ export function AdminPanel() {
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard label={t.totalUsers} value={overview?.stats.totalUsers ?? 0} />
-          <StatCard label={t.averageRating} value={averageRating ? averageRating.toFixed(1) : "-"} suffix={averageRating ? "/5" : ""} note={`${ratedCompletedProjects} ${t.ratedProjects}`} />
           <StatCard label={t.admins} value={overview?.stats.adminUsers ?? 0} />
+          <StatCard label={t.offUsers} value={overview?.stats.offUsers ?? 0} />
           <StatCard label={t.activeSessions} value={overview?.stats.activeSessions ?? 0} />
+          <StatCard label={t.averageRating} value={averageRating ? averageRating.toFixed(1) : "-"} suffix={averageRating ? "/5" : ""} note={`${ratedCompletedProjects} ${t.ratedProjects}`} />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -374,6 +378,7 @@ export function AdminPanel() {
                 <option value="all">{t.roleFilter}: {t.all}</option>
                 <option value="owner">owner</option>
                 <option value="admin">admin</option>
+                <option value="off">OFF</option>
                 <option value="client">client</option>
                 <option value="blocked">blocked</option>
               </select>
@@ -401,6 +406,7 @@ export function AdminPanel() {
                       >
                         {targetIsOwner && <option value="owner">owner</option>}
                         <option value="client">client</option>
+                        <option value="off">OFF</option>
                         <option value="admin" disabled={!isOwner}>admin</option>
                         <option value="blocked">blocked</option>
                       </select>
