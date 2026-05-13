@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSyncFixed";
+import { CipherBreak } from "./CipherBreak";
 
 type User = {
   id: number;
@@ -21,7 +22,7 @@ type Wallet = {
   updated_at?: string | null;
 };
 
-type GameKey = "hub" | "duel";
+type GameKey = "hub" | "duel" | "cipher";
 
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
@@ -53,16 +54,15 @@ export function OffPage() {
         backHub: "OFF Hub'a dön",
         duelTitle: "Tech Duel",
         duelDesc: "Aynı anda başlayan roundlar, tur kazananı gösterimi, Best of 3/5/7 ve güvenli sabit ödül sistemi.",
-        reactionTitle: "Reaction Lab",
-        reactionDesc: "Tek kişilik ms ölçme, günlük rekor ve hafif leaderboard modu.",
+        cipherTitle: "Cipher Break",
+        cipherDesc: "2 kişilik premium kod kilitleme düellosu. Hedef kodu takip et, doğru kod hizaya geldiğinde ilk kilitleyen round'u alır.",
         bossTitle: "Boss Rush",
         bossDesc: "Coin kaybettirmeyen, görev/enerji tabanlı PvE refleks etkinliği.",
         minesRemoved: "EkaMines kaldırıldı. Tech Coin sistemi puan biriktirmek için duruyor.",
         walletTitle: "Tech Coin cüzdanı",
-        balance: "Bakiye",
         lifetime: "Toplam kazanılan",
         currency: "Para birimi",
-        fixedRewardLabel: "Tech Duel kazanan ödülü",
+        fixedRewardLabel: "Oyun ödülleri",
       }
     : {
         loading: "Checking OFF access...",
@@ -72,23 +72,22 @@ export function OffPage() {
         home: "Home",
         eyebrow: "OFF private game area",
         title: "EkaTech OFF Hub",
-        subtitle: "The OFF role is a middle role for hanging out, playing Tech Duel and collecting score coins.",
+        subtitle: "The OFF role is a middle role for hanging out, playing games and collecting score coins.",
         available: "Available game",
         comingSoon: "Coming soon",
         open: "Open",
         backHub: "Back to OFF Hub",
         duelTitle: "Tech Duel",
         duelDesc: "Synchronized rounds, per-round winner reveal, Best of 3/5/7, and safe fixed reward logic.",
-        reactionTitle: "Reaction Lab",
-        reactionDesc: "Single-player ms tracking, daily records and a lightweight leaderboard mode.",
+        cipherTitle: "Cipher Break",
+        cipherDesc: "A premium 1v1 code-lock duel. Track the target code and lock first when the matching code aligns.",
         bossTitle: "Boss Rush",
         bossDesc: "A non-staking PvE reflex event based on tasks/energy instead of coin loss.",
         minesRemoved: "EkaMines was removed. Tech Coin remains for score progression.",
         walletTitle: "Tech Coin wallet",
-        balance: "Balance",
         lifetime: "Lifetime earned",
         currency: "Currency",
-        fixedRewardLabel: "Tech Duel winner reward",
+        fixedRewardLabel: "Game rewards",
       };
 
   useEffect(() => {
@@ -170,7 +169,7 @@ export function OffPage() {
     );
   }
 
-  if (activeGame === "duel") {
+  if (activeGame === "duel" || activeGame === "cipher") {
     return (
       <>
         <div className="fixed bottom-5 left-1/2 z-40 -translate-x-1/2 px-4">
@@ -185,7 +184,7 @@ export function OffPage() {
             ← {copy.backHub}
           </button>
         </div>
-        <TechDuelSync />
+        {activeGame === "duel" ? <TechDuelSync /> : <CipherBreak />}
       </>
     );
   }
@@ -217,6 +216,8 @@ export function OffPage() {
             <h2 className="mt-2 flex flex-wrap items-center gap-2 text-2xl font-medium text-white">
               <span>{copy.fixedRewardLabel}:</span>
               <CoinAmount amount={50} locale={tr ? "tr-TR" : "en-US"} size="md" tone="cyan" />
+              <span className="text-white/35">/</span>
+              <CoinAmount amount={40} locale={tr ? "tr-TR" : "en-US"} size="md" tone="amber" />
             </h2>
             <p className="mt-4 text-sm leading-6 text-white/50">{copy.minesRemoved}</p>
           </div>
@@ -224,7 +225,7 @@ export function OffPage() {
 
         <section className="grid gap-5 lg:grid-cols-3">
           <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("duel")} />
-          <GameCard icon={<Zap className="h-6 w-6" />} status={copy.comingSoon} title={copy.reactionTitle} description={copy.reactionDesc} accent="purple" locked />
+          <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("cipher")} />
           <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.comingSoon} title={copy.bossTitle} description={copy.bossDesc} accent="amber" locked />
         </section>
       </div>
@@ -289,12 +290,7 @@ function CoinIcon({ size, tone }: { size: "xs" | "sm" | "md" | "lg"; tone: "cyan
   return (
     <span className={`inline-flex ${wrapperSize} shrink-0 items-center justify-center overflow-hidden rounded-full border ${ring} ${bg} p-[2px] shadow-xl ${glow}`}>
       <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-black/60">
-        <img
-          src={coinIcon}
-          alt="Tech Coin"
-          className="block h-full w-full rounded-full object-cover"
-          style={{ clipPath: "circle(50% at 50% 50%)" }}
-        />
+        <img src={coinIcon} alt="Tech Coin" className="block h-full w-full rounded-full object-cover" style={{ clipPath: "circle(50% at 50% 50%)" }} />
       </span>
     </span>
   );
@@ -310,7 +306,7 @@ function GameCard({
   locked = false,
   onClick,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   status: string;
   title: string;
   description: string;
