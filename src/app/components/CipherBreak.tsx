@@ -69,7 +69,7 @@ export function CipherBreak() {
 
   const c = useMemo(() => tr ? {
     title: "Cipher Break",
-    subtitle: "2 kişilik protokol düellosu. Hedef kodu takip et, doğru kod hizaya geldiğinde kilitle.",
+    subtitle: "2 kişilik kod hizalama düellosu. 6 kod sırayla yanar; hedef kod yandığı anda kilitle.",
     create: "Lobby oluştur",
     active: "Aktif Cipher lobileri",
     mine: "Cipher maçlarım",
@@ -77,7 +77,6 @@ export function CipherBreak() {
     enter: "Maça gir",
     refresh: "Yenile",
     target: "Hedef kod",
-    scanner: "Aktif kod",
     lock: "Kodu kilitle",
     waiting: "Rakip bekleniyor",
     waitingResult: "Rakibin hamlesi bekleniyor",
@@ -92,9 +91,10 @@ export function CipherBreak() {
     player2: "Player 2",
     cancelled: "İptal edildi",
     back: "Lobby listesi",
+    rule: "Sırayla yanan 6 koddan hedef kod tam hizalanınca bas.",
   } : {
     title: "Cipher Break",
-    subtitle: "A 1v1 protocol duel. Track the target code and lock when the matching code aligns.",
+    subtitle: "A 1v1 code-alignment duel. Six codes light up in sequence; lock exactly when the target code is active.",
     create: "Create lobby",
     active: "Active Cipher lobbies",
     mine: "My Cipher matches",
@@ -102,7 +102,6 @@ export function CipherBreak() {
     enter: "Enter match",
     refresh: "Refresh",
     target: "Target code",
-    scanner: "Active code",
     lock: "Lock code",
     waiting: "Waiting for opponent",
     waitingResult: "Waiting for opponent move",
@@ -117,6 +116,7 @@ export function CipherBreak() {
     player2: "Player 2",
     cancelled: "Cancelled",
     back: "Lobby list",
+    rule: "Press when the target code is exactly aligned among the six active codes.",
   }, [tr]);
 
   const loadList = async (silent = false) => {
@@ -174,7 +174,7 @@ export function CipherBreak() {
 
   useEffect(() => {
     loadList();
-    const tick = window.setInterval(() => setNow(Date.now()), 90);
+    const tick = window.setInterval(() => setNow(Date.now()), 60);
     const poll = window.setInterval(() => activeLobby ? loadState(activeLobby.id, true) : loadList(true), 1200);
     return () => { window.clearInterval(tick); window.clearInterval(poll); };
   }, [activeLobby?.id, language]);
@@ -256,9 +256,17 @@ export function CipherBreak() {
             {!round ? <div className="flex min-h-[320px] items-center justify-center text-white/45">{c.waiting}</div> : <>
               <p className="text-xs uppercase tracking-[0.28em] text-white/35">{c.target}</p>
               <div className="mx-auto mt-3 inline-flex rounded-3xl border border-purple-300/25 bg-purple-300/10 px-8 py-4 font-mono text-4xl font-semibold tracking-[0.35em] text-purple-100 shadow-2xl shadow-purple-500/10">{round.target_code}</div>
-              <div className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-5">
-                <p className="text-xs uppercase tracking-[0.28em] text-white/35">{c.scanner}</p>
-                <p className={`mt-4 font-mono text-6xl font-semibold tracking-[0.2em] ${activeCode === round.target_code ? "text-cyan-100" : "text-white"}`}>{activeCode}</p>
+              <div className="relative mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 overflow-hidden">
+                <div className="pointer-events-none absolute inset-y-4 left-1/2 w-px -translate-x-1/2 bg-cyan-200/70 shadow-[0_0_28px_rgba(103,232,249,0.85)]" />
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-20 w-40 -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-cyan-200/25 bg-cyan-200/5 shadow-2xl shadow-cyan-500/20" />
+                <p className="relative text-xs uppercase tracking-[0.28em] text-white/35">{c.rule}</p>
+                <div className="relative mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {options.map((code, index) => {
+                    const active = index === activeIndex;
+                    const targetActive = active && code === round.target_code;
+                    return <div key={`${code}-${index}`} className={`rounded-2xl border px-3 py-5 font-mono text-2xl font-semibold tracking-[0.2em] transition-all ${targetActive ? "border-emerald-300/60 bg-emerald-300/15 text-emerald-100 shadow-2xl shadow-emerald-500/20" : active ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100 shadow-2xl shadow-cyan-500/20 scale-[1.03]" : "border-white/10 bg-black/35 text-white/55"}`}>{code}</div>;
+                  })}
+                </div>
               </div>
               <button onClick={submitCode} disabled={Boolean(mySubmission) || roundCompleted || matchCompleted || cancelled} className="mt-6 w-full rounded-full bg-white px-6 py-4 text-sm font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-45">{mySubmission ? (Number(mySubmission.correct) === 1 ? c.correct : c.wrong) : c.lock}</button>
               <p className="mt-4 text-sm text-white/45">{mySubmission && !roundCompleted ? c.waitingResult : roundCompleted ? `${c.roundWinner}: ${round.winner_name || "Draw"}` : activeCode === round.target_code ? c.lock : "Scan..."}</p>
