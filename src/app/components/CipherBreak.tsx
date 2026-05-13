@@ -29,10 +29,14 @@ type Round = {
   winner_user_id?: number | null;
   winner_name?: string | null;
 };
+type ReadyRow = { user_id: number; name?: string };
 type State = {
   user_id: number;
   lobby: Lobby;
   current_round: Round | null;
+  pending_round_number?: number;
+  ready?: ReadyRow[];
+  ready_count?: number;
   rounds: Round[];
   submissions: any[];
   my_submission?: any;
@@ -60,6 +64,9 @@ function parseLocks(round: Round | null): LockItem[] {
   if (!round) return [];
   try {
     const raw = JSON.parse(round.options_json || "[]");
+    if (raw && Array.isArray(raw.targets) && Array.isArray(raw.options)) {
+      return raw.targets.map((target: string) => ({ target, options: raw.options }));
+    }
     if (raw && Array.isArray(raw.locks)) return raw.locks;
     if (Array.isArray(raw) && raw[0]?.target && Array.isArray(raw[0]?.options)) return raw as LockItem[];
     if (Array.isArray(raw)) return [{ target: round.target_code, options: raw }];
@@ -91,11 +98,11 @@ export function CipherBreak() {
     refresh: "Yenile",
     target: "Hedef kod",
     lock: "Kodu kilitle",
-    waiting: "Rakip bekleniyor",
+    waiting: "İki oyuncu da maça girince round başlayacak",
     waitingResult: "Rakibin hamlesi bekleniyor",
     correct: "Doğru kilit",
     wrong: "Yanlış kod",
-    nextRound: "Sonraki round",
+    nextRound: "Sonraki round için hazır ol",
     matchOver: "Maç tamamlandı",
     score: "Skor",
     reward: "Ödül",
@@ -104,12 +111,15 @@ export function CipherBreak() {
     player2: "Player 2",
     cancelled: "İptal edildi",
     back: "Lobby listesi",
-    rule: "Hedef kod tek parça görünür; sıradaki üçlü parça yanınca kilitle.",
+    rule: "Hedef tek parça; aynı 14 kod içinde sıradaki üçlü yanınca kilitle.",
     scan: "Scan...",
     lockProgress: "Parça",
+    ready: "Hazır",
+    readyWaiting: "Hazırsın · rakip bekleniyor",
+    countdown: "Başlıyor",
   } : {
     title: "Cipher Break",
-    subtitle: "A 9-character target code appears as one string, like AS7DF3K9P. Lock it left-to-right in 3-character chunks.",
+    subtitle: "A 9-character target code appears as one string. Lock it left-to-right in 3-character chunks.",
     create: "Create lobby",
     active: "Active Cipher lobbies",
     mine: "My Cipher matches",
@@ -118,11 +128,11 @@ export function CipherBreak() {
     refresh: "Refresh",
     target: "Target code",
     lock: "Lock code",
-    waiting: "Waiting for opponent",
+    waiting: "Round starts after both players enter the match",
     waitingResult: "Waiting for opponent move",
     correct: "Correct lock",
     wrong: "Wrong code",
-    nextRound: "Next round",
+    nextRound: "Ready for next round",
     matchOver: "Match completed",
     score: "Score",
     reward: "Reward",
@@ -131,9 +141,12 @@ export function CipherBreak() {
     player2: "Player 2",
     cancelled: "Cancelled",
     back: "Lobby list",
-    rule: "The target appears as one code; lock the next 3-character chunk when it lights up.",
+    rule: "Target appears as one code; lock the next chunk in the same 14-code grid.",
     scan: "Scan...",
     lockProgress: "Chunk",
+    ready: "Ready",
+    readyWaiting: "Ready · waiting for opponent",
+    countdown: "Starting",
   }, [tr]);
 
   const loadList = async (silent = false) => {
@@ -208,7 +221,8 @@ export function CipherBreak() {
   const enter = async (lobby: Lobby) => {
     setActiveLobby(lobby);
     setState(null);
-    await loadState(lobby.id, false);
+    const d = await post({ action: "ready", lobby_id: lobby.id, round_number: 1 }, true);
+    if (!d?.lobby) await loadState(lobby.id, false);
   };
 
   const lobby = state?.lobby || activeLobby;
@@ -225,23 +239,36 @@ export function CipherBreak() {
   const currentTarget = currentLock?.target || round?.target_code || "---";
   const serverNow = state?.server_time ? toMs(state.server_time) + (now - syncedAt) : now;
   const startedAt = toMs(round?.started_at);
+  const countdownMs = round ? startedAt - serverNow : 0;
+  const countdownActive = Boolean(round && countdownMs > 0);
+  const countdownSeconds = Math.max(0, Math.ceil(countdownMs / 1000));
   const tickMs = Number(round?.tick_ms || 650);
-  const activeIndex = options.length ? Math.floor(Math.max(0, serverNow - startedAt) / tickMs) % options.length : 0;
+  const elapsed = Math.max(0, serverNow - startedAt);
+  const activeIndex = options.length ? Math.floor(elapsed / tickMs) % options.length : 0;
   const activeCode = options[activeIndex] || "---";
   const creatorWins = Number(state?.score?.[String(lobby?.creator_user_id || "")] || 0);
   const opponentWins = Number(state?.score?.[String(lobby?.opponent_user_id || "")] || 0);
   const roundCompleted = round?.status === "completed";
   const matchCompleted = lobby?.status === "completed";
   const cancelled = lobby?.status === "cancelled" || lobby?.status === "İptal edildi";
+  const pendingRoundNumber = Number(state?.pending_round_number || (round ? Number(round.round_number) + (roundCompleted ? 1 : 0) : 1));
+  const readyRows = state?.ready || [];
+  const selfReady = Boolean(user && readyRows.some((row) => Number(row.user_id) === Number(user.id)));
+  const readyLabel = `${readyRows.length}/2 ${c.ready}`;
 
   const submitCode = async () => {
-    if (!lobby || !round || eliminated || myProgress >= lockGoal || round.status !== "active") return;
+    if (!lobby || !round || countdownActive || eliminated || myProgress >= lockGoal || round.status !== "active") return;
     await post({ action: "submit", lobby_id: lobby.id, selected_code: activeCode }, true);
   };
 
   const nextRound = async () => {
     if (!lobby) return;
     await post({ action: "next_round", lobby_id: lobby.id });
+  };
+
+  const readyCurrentRound = async () => {
+    if (!lobby) return;
+    await post({ action: "ready", lobby_id: lobby.id, round_number: pendingRoundNumber }, true);
   };
 
   return <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 sm:px-6">
@@ -263,7 +290,7 @@ export function CipherBreak() {
       {activeLobby && lobby ? <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 backdrop-blur-xl sm:p-8">
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="space-y-4">
-            <p className="text-sm uppercase tracking-[0.22em] text-white/35">Round {round?.round_number || "-"} / {lobby.round_count}</p>
+            <p className="text-sm uppercase tracking-[0.22em] text-white/35">Round {round?.round_number || pendingRoundNumber} / {lobby.round_count}</p>
             <h2 className="text-3xl font-medium text-white">#{lobby.id} · Cipher Break</h2>
             <div className="grid grid-cols-3 items-center gap-3 rounded-3xl border border-white/10 bg-black/35 p-4">
               <Player name={lobby.creator_name} email={lobby.creator_email} avatarUrl={lobby.creator_avatar_url} wins={creatorWins} target={state?.target_wins || 3} />
@@ -276,30 +303,35 @@ export function CipherBreak() {
           </div>
 
           <div className="rounded-[2rem] border border-cyan-300/20 bg-black/50 p-6 text-center shadow-2xl shadow-cyan-500/10">
-            {!round ? <div className="flex min-h-[320px] items-center justify-center text-white/45">{c.waiting}</div> : <>
+            {!round ? <div className="flex min-h-[360px] flex-col items-center justify-center gap-5 text-white/45">
+              <p>{selfReady ? c.readyWaiting : c.waiting}</p>
+              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-2 text-sm text-cyan-100">{readyLabel}</span>
+              <button onClick={readyCurrentRound} disabled={selfReady || busy} className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-black disabled:opacity-50">{selfReady ? c.readyWaiting : c.enter}</button>
+            </div> : <>
               <p className="text-xs uppercase tracking-[0.28em] text-white/35">{c.target}</p>
               <div className="mx-auto mt-3 inline-flex max-w-full rounded-3xl border border-purple-300/25 bg-purple-300/10 px-5 py-4 font-mono text-3xl font-semibold tracking-[0.18em] text-purple-100 shadow-2xl shadow-purple-500/10 sm:px-8 sm:text-4xl sm:tracking-[0.24em]">{fullTarget}</div>
               <div className="mt-4 flex items-center justify-center gap-2">
                 {Array.from({ length: lockGoal }).map((_, i) => <span key={i} className={`h-2 w-12 rounded-full ${i < myProgress ? "bg-emerald-300" : eliminated ? "bg-red-300/40" : "bg-white/15"}`} />)}
               </div>
-              <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/35">{c.lockProgress} {Math.min(myProgress + 1, lockGoal)} / {lockGoal}</p>
+              <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/35">{countdownActive ? `${c.countdown}: ${countdownSeconds}` : `${c.lockProgress} ${Math.min(myProgress + 1, lockGoal)} / ${lockGoal}`}</p>
               <div className="relative mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-4 overflow-hidden sm:p-5">
-                <p className="relative text-xs uppercase tracking-[0.22em] text-white/35 sm:tracking-[0.28em]">{c.rule}</p>
+                <p className="relative text-xs uppercase tracking-[0.22em] text-white/35 sm:tracking-[0.28em]">{countdownActive ? `${c.countdown}: ${countdownSeconds}` : c.rule}</p>
                 <div className="relative mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-7">
                   {options.map((code, index) => {
-                    const active = index === activeIndex;
+                    const active = !countdownActive && index === activeIndex;
                     const targetActive = active && code === currentTarget;
-                    return <div key={`${code}-${index}-${myProgress}`} className={`transform-gpu rounded-2xl border px-2 py-4 font-mono text-xl font-semibold tracking-[0.18em] transition-[transform,background-color,border-color,box-shadow,color,opacity] duration-200 ease-out sm:px-3 sm:py-5 sm:text-2xl ${targetActive ? "scale-[1.04] border-emerald-300/60 bg-emerald-300/15 text-emerald-100 shadow-2xl shadow-emerald-500/20" : active ? "scale-[1.035] border-cyan-300/60 bg-cyan-300/15 text-cyan-100 shadow-2xl shadow-cyan-500/20" : "scale-100 border-white/10 bg-black/35 text-white/50 opacity-80"}`}>{code}</div>;
+                    return <div key={`${code}-${index}`} className={`transform-gpu rounded-2xl border px-2 py-4 font-mono text-xl font-semibold tracking-[0.18em] transition-[transform,background-color,border-color,box-shadow,color,opacity] duration-200 ease-out sm:px-3 sm:py-5 sm:text-2xl ${targetActive ? "scale-[1.04] border-emerald-300/60 bg-emerald-300/15 text-emerald-100 shadow-2xl shadow-emerald-500/20" : active ? "scale-[1.035] border-cyan-300/60 bg-cyan-300/15 text-cyan-100 shadow-2xl shadow-cyan-500/20" : "scale-100 border-white/10 bg-black/35 text-white/50 opacity-80"}`}>{code}</div>;
                   })}
                 </div>
               </div>
-              <button onClick={submitCode} disabled={eliminated || myProgress >= lockGoal || roundCompleted || matchCompleted || cancelled} className="mt-6 w-full rounded-full bg-white px-6 py-4 text-sm font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-45">{eliminated ? c.wrong : myProgress >= lockGoal ? c.waitingResult : c.lock}</button>
-              <p className="mt-4 text-sm text-white/45">{eliminated ? c.wrong : myProgress >= lockGoal && !roundCompleted ? c.waitingResult : roundCompleted ? `${c.roundWinner}: ${round.winner_name || "Draw"}` : activeCode === currentTarget ? c.lock : c.scan}</p>
+              <button onClick={submitCode} disabled={countdownActive || eliminated || myProgress >= lockGoal || roundCompleted || matchCompleted || cancelled} className="mt-6 w-full rounded-full bg-white px-6 py-4 text-sm font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-45">{countdownActive ? `${c.countdown}: ${countdownSeconds}` : eliminated ? c.wrong : myProgress >= lockGoal ? c.waitingResult : c.lock}</button>
+              <p className="mt-4 text-sm text-white/45">{countdownActive ? `${c.countdown}: ${countdownSeconds}` : eliminated ? c.wrong : myProgress >= lockGoal && !roundCompleted ? c.waitingResult : roundCompleted ? `${c.roundWinner}: ${round.winner_name || "Draw"}` : activeCode === currentTarget ? c.lock : c.scan}</p>
             </>}
           </div>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
-          {roundCompleted && !matchCompleted && <button onClick={nextRound} disabled={busy} className="rounded-full bg-white px-6 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-50">{busy ? "..." : c.nextRound}</button>}
+          {roundCompleted && !matchCompleted && <button onClick={nextRound} disabled={busy || selfReady} className="rounded-full bg-white px-6 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-50">{busy ? "..." : selfReady ? c.readyWaiting : c.nextRound}</button>}
+          {roundCompleted && !matchCompleted && <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-6 py-3 text-sm font-medium text-cyan-100">{readyLabel}</span>}
           {matchCompleted && <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-6 py-3 text-sm font-medium text-emerald-100">{c.matchOver}: {lobby.winner_name || "Draw"}</span>}
           {cancelled && <span className="rounded-full border border-red-300/20 bg-red-300/10 px-6 py-3 text-sm font-medium text-red-100">{c.cancelled}</span>}
           <button onClick={() => { setActiveLobby(null); setState(null); loadList(true); }} className="rounded-full border border-white/10 bg-white/[0.06] px-6 py-3 text-sm font-medium text-white hover:bg-white/[0.1]">{c.back}</button>
