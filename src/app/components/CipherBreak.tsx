@@ -44,6 +44,7 @@ type State = {
   target_wins: number;
   server_time: string;
   lock_goal?: number;
+  round_timeout_ms?: number;
 };
 
 function toMs(value?: string | null) {
@@ -64,9 +65,7 @@ function parseLocks(round: Round | null): LockItem[] {
   if (!round) return [];
   try {
     const raw = JSON.parse(round.options_json || "[]");
-    if (raw && Array.isArray(raw.targets) && Array.isArray(raw.options)) {
-      return raw.targets.map((target: string) => ({ target, options: raw.options }));
-    }
+    if (raw && Array.isArray(raw.targets) && Array.isArray(raw.options)) return raw.targets.map((target: string) => ({ target, options: raw.options }));
     if (raw && Array.isArray(raw.locks)) return raw.locks;
     if (Array.isArray(raw) && raw[0]?.target && Array.isArray(raw[0]?.options)) return raw as LockItem[];
     if (Array.isArray(raw)) return [{ target: round.target_code, options: raw }];
@@ -104,11 +103,13 @@ export function CipherBreak() {
     wrong: "Yanlış kod",
     nextRound: "Sonraki round için hazır ol",
     matchOver: "Maç tamamlandı",
+    roundWinner: "Round sonucu",
     score: "Skor",
     reward: "Ödül",
     empty: "Açık lobby yok.",
     emptyMine: "Henüz Cipher maçın yok.",
     player2: "Player 2",
+    waitingPlayer: "Player 2 bekleniyor",
     cancelled: "İptal edildi",
     back: "Lobby listesi",
     rule: "Hedef tek parça; aynı 14 kod içinde sıradaki üçlü yanınca kilitle.",
@@ -134,11 +135,13 @@ export function CipherBreak() {
     wrong: "Wrong code",
     nextRound: "Ready for next round",
     matchOver: "Match completed",
+    roundWinner: "Round result",
     score: "Score",
     reward: "Reward",
     empty: "No open lobbies.",
     emptyMine: "No Cipher matches yet.",
     player2: "Player 2",
+    waitingPlayer: "Waiting for Player 2",
     cancelled: "Cancelled",
     back: "Lobby list",
     rule: "Target appears as one code; lock the next chunk in the same 14-code grid.",
@@ -221,7 +224,7 @@ export function CipherBreak() {
   const enter = async (lobby: Lobby) => {
     setActiveLobby(lobby);
     setState(null);
-    const d = await post({ action: "ready", lobby_id: lobby.id, round_number: 1 }, true);
+    const d = await post({ action: "ready", lobby_id: lobby.id }, true);
     if (!d?.lobby) await loadState(lobby.id, false);
   };
 
@@ -268,7 +271,7 @@ export function CipherBreak() {
 
   const readyCurrentRound = async () => {
     if (!lobby) return;
-    await post({ action: "ready", lobby_id: lobby.id, round_number: pendingRoundNumber }, true);
+    await post({ action: "ready", lobby_id: lobby.id }, true);
   };
 
   return <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 sm:px-6">
