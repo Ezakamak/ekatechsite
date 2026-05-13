@@ -6,6 +6,7 @@ const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 3;
 const OPTION_COUNT = 14;
 const LOCKS_PER_ROUND = 3;
+const START_DELAY_MS = 3000;
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
@@ -46,12 +47,13 @@ export async function onRequestPost(context: any) {
     if (!isParticipant(lobby, auth.user.id)) return Response.json({ error: "Bu oyunun oyuncusu değilsin." }, { status: 403 });
     if (lobby.status !== "in_progress") return Response.json({ error: "Bu oyun aktif değil." }, { status: 409 });
 
+    if (action === "ready") return await markReadyAndMaybeStart(context, lobby, auth.user.id, Number(body?.round_number || 1));
     if (action === "submit") return await submitCode(context, lobbyId, auth.user.id, String(body?.selected_code || ""));
     if (action === "next_round") return await nextRound(context, lobbyId, auth.user.id);
 
     return Response.json({ error: "Geçersiz işlem." }, { status: 400 });
   } catch {
-    return Response.json({ error: "Cipher Break işlemi tamamlanamadı." }, { status: 500 });
+    return Response.json({ error: "Cipher Break işlemi tamamlanamadı. cipher_round_ready tablosunu kontrol et." }, { status: 500 });
   }
 }
 
@@ -67,14 +69,31 @@ async function joinLobby(context: any, lobby: any, userId: number) {
   if (Number(lobby.creator_user_id) === Number(userId)) return Response.json({ error: "Kendi lobby'ne katılamazsın." }, { status: 400 });
   const update = await context.env.DB.prepare("UPDATE cipher_lobbies SET opponent_user_id = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ? AND status = 'open' AND opponent_user_id IS NULL").bind(userId, lobby.id).run();
   if (Number(update?.meta?.changes || 0) === 0) return Response.json({ error: "Bu lobby'ye başka biri katılmış." }, { status: 409 });
-  const freshLobby = await getLobby(context, lobby.id);
-  await createRound(context, freshLobby, 1);
   return Response.json(await buildState(context, lobby.id, userId));
+}
+
+async function markReadyAndMaybeStart(context: any, lobby: any, userId: number, roundNumber: number) {
+  if (!lobby.opponent_user_id) return Response.json({ error: "İkinci oyuncu bekleniyor." }, { status: 409 });
+  const existingRound = await context.env.DB.prepare("SELECT id FROM cipher_rounds WHERE lobby_id = ? AND round_number = ? LIMIT 1").bind(lobby.id, roundNumber).first();
+  if (existingRound) return Response.json(await buildState(context, lobby.id, userId));
+
+  await context.env.DB.prepare("INSERT OR IGNORE INTO cipher_round_ready (lobby_id, round_number, user_id, ready_at) VALUES (?, ?, ?, datetime('now'))").bind(lobby.id, roundNumber, userId).run();
+
+  if (await bothPlayersReady(context, lobby, roundNumber)) {
+    await createRound(context, lobby, roundNumber);
+  }
+
+  return Response.json(await buildState(context, lobby.id, userId));
+}
+
+async function bothPlayersReady(context: any, lobby: any, roundNumber: number) {
+  const row = await context.env.DB.prepare("SELECT COUNT(DISTINCT user_id) AS ready_count FROM cipher_round_ready WHERE lobby_id = ? AND round_number = ? AND user_id IN (?, ?)").bind(lobby.id, roundNumber, lobby.creator_user_id, lobby.opponent_user_id).first();
+  return Number(row?.ready_count || 0) >= 2;
 }
 
 async function submitCode(context: any, lobbyId: number, userId: number, selectedCode: string) {
   const round = await getCurrentRound(context, lobbyId);
-  if (!round) return Response.json({ error: "Round bulunamadı." }, { status: 404 });
+  if (!round) return Response.json({ error: "Round başlamadı. İki oyuncunun da hazır olması gerekiyor." }, { status: 409 });
   if (round.status !== "active") return Response.json({ error: "Bu round aktif değil." }, { status: 409 });
 
   const existing = await context.env.DB
@@ -154,10 +173,19 @@ async function nextRound(context: any, lobbyId: number, userId: number) {
   const current = await getCurrentRound(context, lobbyId);
   if (!current) return Response.json({ error: "Round bulunamadı." }, { status: 404 });
   if (current.status !== "completed") return Response.json({ error: "Yeni round için mevcut round bitmeli." }, { status: 409 });
+
   const lobby = await getLobby(context, lobbyId);
   if (lobby.status !== "in_progress") return Response.json(await buildState(context, lobbyId, userId));
+
   const next = Number(current.round_number) + 1;
-  if (next <= Number(lobby.round_count || ROUND_COUNT)) await createRound(context, lobby, next);
+  if (next > Number(lobby.round_count || ROUND_COUNT)) return Response.json(await buildState(context, lobbyId, userId));
+
+  await context.env.DB.prepare("INSERT OR IGNORE INTO cipher_round_ready (lobby_id, round_number, user_id, ready_at) VALUES (?, ?, ?, datetime('now'))").bind(lobbyId, next, userId).run();
+
+  if (await bothPlayersReady(context, lobby, next)) {
+    await createRound(context, lobby, next);
+  }
+
   return Response.json(await buildState(context, lobbyId, userId));
 }
 
@@ -199,9 +227,10 @@ async function getCurrentRound(context: any, lobbyId: number) {
 async function createRound(context: any, lobby: any, roundNumber: number) {
   const locks = Array.from({ length: LOCKS_PER_ROUND }, () => makeLock());
   const tickMs = Math.max(360, 780 - roundNumber * 55);
+  const startedAt = new Date(Date.now() + START_DELAY_MS).toISOString();
   await context.env.DB
-    .prepare("INSERT OR IGNORE INTO cipher_rounds (lobby_id, round_number, target_code, options_json, tick_ms, started_at, status) VALUES (?, ?, ?, ?, ?, datetime('now'), 'active')")
-    .bind(lobby.id, roundNumber, locks[0].target, JSON.stringify({ locks }), tickMs)
+    .prepare("INSERT OR IGNORE INTO cipher_rounds (lobby_id, round_number, target_code, options_json, tick_ms, started_at, status) VALUES (?, ?, ?, ?, ?, ?, 'active')")
+    .bind(lobby.id, roundNumber, locks[0].target, JSON.stringify({ locks }), tickMs, startedAt)
     .run();
 }
 
@@ -246,8 +275,10 @@ async function buildState(context: any, lobbyId: number, userId: number) {
   if (!lobby) return { error: "Lobby bulunamadı." };
   if (!isParticipant(lobby, userId)) return { error: "Bu oyunun oyuncusu değilsin." };
   const currentRound = await getCurrentRound(context, lobbyId);
+  const pendingRoundNumber = currentRound ? Number(currentRound.round_number) + (currentRound.status === "completed" ? 1 : 0) : 1;
   const rounds = await context.env.DB.prepare("SELECT r.*, winner.name AS winner_name FROM cipher_rounds r LEFT JOIN users winner ON r.winner_user_id = winner.id WHERE r.lobby_id = ? ORDER BY r.round_number ASC").bind(lobbyId).all();
   const submissions = currentRound ? await context.env.DB.prepare("SELECT s.*, users.name FROM cipher_submissions s JOIN users ON s.user_id = users.id WHERE s.lobby_id = ? AND s.round_number = ? ORDER BY s.submitted_at ASC").bind(lobbyId, currentRound.round_number).all() : { results: [] };
+  const ready = await context.env.DB.prepare("SELECT cipher_round_ready.user_id, users.name FROM cipher_round_ready JOIN users ON cipher_round_ready.user_id = users.id WHERE cipher_round_ready.lobby_id = ? AND cipher_round_ready.round_number = ?").bind(lobbyId, pendingRoundNumber).all();
   const score = await getScore(context, lobbyId);
   const mySubmission = (submissions?.results || []).find((item: any) => Number(item.user_id) === Number(userId)) || null;
   return {
@@ -255,6 +286,9 @@ async function buildState(context: any, lobbyId: number, userId: number) {
     user_id: userId,
     lobby,
     current_round: currentRound || null,
+    pending_round_number: pendingRoundNumber,
+    ready: ready?.results || [],
+    ready_count: ready?.results?.length || 0,
     rounds: rounds?.results || [],
     submissions: submissions?.results || [],
     my_submission: mySubmission,
