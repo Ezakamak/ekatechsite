@@ -7,7 +7,12 @@ type Lobby = { id: number; creator_user_id: number; opponent_user_id?: number | 
 type Round = { round_number: number; signal_at: string; status: string; winner_user_id?: number | null; winner_name?: string | null };
 type Payload = { server_time: string; lobby: Lobby; current_round: Round | null; rounds: Round[]; my_submission?: any; score: Record<string, number>; target_wins: number; ready?: any[]; hold_ready?: any[]; pending_round_number?: number };
 
-const fakeSignals = ["DRA...", "DR4W", "DRAW?", "READY?", "NOW"];
+const fakeSignals = ["DRA...", "DR4W", "DRAW?", "DROW", "DRAVV", "READY?", "NOW", "FIRE", "GO?", "DANGER", "WAIT!", "CLICK?"];
+function randomFakeSignal(previous = "") {
+  let next = previous;
+  while (next === previous) next = fakeSignals[Math.floor(Math.random() * fakeSignals.length)];
+  return next;
+}
 function toMs(v?: string | null) { return v ? Date.parse(v.includes("T") ? v : v.replace(" ", "T") + "Z") : 0; }
 function initials(name?: string | null, email?: string | null) { return (name || email || "P").split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "P"; }
 function Avatar({ name, email, url }: { name?: string | null; email?: string | null; url?: string | null }) { return <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-sm font-semibold text-black">{url ? <img src={url} alt="" className="h-full w-full object-cover" /> : initials(name, email)}</span>; }
@@ -29,11 +34,12 @@ export function TechDuelSync() {
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [focusFakeSignal, setFocusFakeSignal] = useState(() => randomFakeSignal());
 
   const c = useMemo(() => tr ? {
-    title: "Tech Duel", subtitle: "What The Hold’da iki taraf basılı tutmadan RELEASE başlamaz.", createTitle: "Create Lobby", create: "Lobby oluştur", active: "Aktif düellolar", mine: "Düellolarım", mode: "Oyun modu", round: "Round", reward: "Ödül", fixed: "50 Tech Coin sabit ödül · kaybedenden coin kesilmez", join: "Join", enter: "Maça gir", refresh: "Yenile", ready: "Hazır", readyWaiting: "Hazırsın · rakip bekleniyor", waitingBoth: "İki oyuncu da maça girince round başlayacak", wait: "WAIT...", draw: "DRAW!", release: "RELEASE!", hold: "HOLD...", pressHold: "PRESS & HOLD", tooEarly: "TOO EARLY", holdStart: "Başlamak için basılı tut", holdWaiting: "Basılı tut · rakip bekleniyor", holdBoth: "İki taraf da basılı tutunca RELEASE hazırlanacak", keepHolding: "Basılı tutmaya devam et", releaseNow: "Şimdi bırak", waitingOpponent: "Rakibin sonucu bekleniyor", roundWinner: "Tur sonucu", nextRound: "Sonraki round için hazır ol", matchOver: "Maç tamamlandı", cancelled: "İptal edildi", score: "Skor", player2: "Player 2", waitingPlayer: "Player 2 bekleniyor", empty: "Açık lobby yok.", emptyMine: "Henüz düellon yok.", classic: "WAIT → DRAW. DRAW’dan önce basarsan round kaybı.", focus: "Sahte sinyaller gelir. Sadece gerçek DRAW! anında bas.", what: "İki oyuncu basılı tutar. RELEASE çıkınca ilk bırakan round’u alır.", login: "Tech Duel için OFF, admin veya owner rolü gerekiyor."
+    title: "Tech Duel", subtitle: "What The Hold’da iki taraf basılı tutmadan RELEASE başlamaz.", createTitle: "Create Lobby", create: "Lobby oluştur", active: "Aktif düellolar", mine: "Düellolarım", mode: "Oyun modu", round: "Round", reward: "Ödül", fixed: "50 Tech Coin sabit ödül · kaybedenden coin kesilmez", join: "Join", enter: "Maça gir", refresh: "Yenile", ready: "Hazır", readyWaiting: "Hazırsın · rakip bekleniyor", waitingBoth: "İki oyuncu da maça girince round başlayacak", wait: "WAIT...", draw: "DRAW!", release: "RELEASE!", hold: "HOLD...", pressHold: "PRESS & HOLD", tooEarly: "TOO EARLY", holdStart: "Başlamak için basılı tut", holdWaiting: "Basılı tut · rakip bekleniyor", holdBoth: "İki taraf da basılı tutunca RELEASE hazırlanacak", keepHolding: "Basılı tutmaya devam et", releaseNow: "Şimdi bırak", waitingOpponent: "Rakibin sonucu bekleniyor", roundWinner: "Tur sonucu", nextRound: "Sonraki round için hazır ol", matchOver: "Maç tamamlandı", cancelled: "İptal edildi", score: "Skor", player2: "Player 2", waitingPlayer: "Player 2 bekleniyor", empty: "Açık lobby yok.", emptyMine: "Henüz düellon yok.", classic: "WAIT → DRAW. DRAW’dan önce basarsan round kaybı.", focus: "Sahte sinyaller rastgele gelir. Sadece gerçek DRAW! anında bas.", what: "İki oyuncu basılı tutar. RELEASE çıkınca ilk bırakan round’u alır.", login: "Tech Duel için OFF, admin veya owner rolü gerekiyor."
   } : {
-    title: "Tech Duel", subtitle: "In What The Hold, RELEASE will not start until both players hold down.", createTitle: "Create Lobby", create: "Create lobby", active: "Active duels", mine: "My duels", mode: "Game mode", round: "Round", reward: "Reward", fixed: "50 Tech Coin fixed reward · loser coins are not deducted", join: "Join", enter: "Enter match", refresh: "Refresh", ready: "Ready", readyWaiting: "Ready · waiting for opponent", waitingBoth: "Round starts after both players enter the match", wait: "WAIT...", draw: "DRAW!", release: "RELEASE!", hold: "HOLD...", pressHold: "PRESS & HOLD", tooEarly: "TOO EARLY", holdStart: "Hold down to start", holdWaiting: "Keep holding · waiting for opponent", holdBoth: "RELEASE starts after both players hold down", keepHolding: "Keep holding", releaseNow: "Release now", waitingOpponent: "Waiting for opponent result", roundWinner: "Round result", nextRound: "Ready for next round", matchOver: "Match completed", cancelled: "Cancelled", score: "Score", player2: "Player 2", waitingPlayer: "Waiting for Player 2", empty: "No open lobbies.", emptyMine: "No duels yet.", classic: "WAIT → DRAW. Clicking before DRAW loses the round.", focus: "Fake signals appear. Only click on the real DRAW! signal.", what: "Both players hold down. Release after RELEASE!; first release wins the round.", login: "OFF, admin or owner role is required for Tech Duel."
+    title: "Tech Duel", subtitle: "In What The Hold, RELEASE will not start until both players hold down.", createTitle: "Create Lobby", create: "Create lobby", active: "Active duels", mine: "My duels", mode: "Game mode", round: "Round", reward: "Reward", fixed: "50 Tech Coin fixed reward · loser coins are not deducted", join: "Join", enter: "Enter match", refresh: "Refresh", ready: "Ready", readyWaiting: "Ready · waiting for opponent", waitingBoth: "Round starts after both players enter the match", wait: "WAIT...", draw: "DRAW!", release: "RELEASE!", hold: "HOLD...", pressHold: "PRESS & HOLD", tooEarly: "TOO EARLY", holdStart: "Hold down to start", holdWaiting: "Keep holding · waiting for opponent", holdBoth: "RELEASE starts after both players hold down", keepHolding: "Keep holding", releaseNow: "Release now", waitingOpponent: "Waiting for opponent result", roundWinner: "Round result", nextRound: "Ready for next round", matchOver: "Match completed", cancelled: "Cancelled", score: "Score", player2: "Player 2", waitingPlayer: "Waiting for Player 2", empty: "No open lobbies.", emptyMine: "No duels yet.", classic: "WAIT → DRAW. Clicking before DRAW loses the round.", focus: "Fake signals appear randomly. Only click on the real DRAW! signal.", what: "Both players hold down. Release after RELEASE!; first release wins the round.", login: "OFF, admin or owner role is required for Tech Duel."
   }, [tr]);
 
   const loadDuels = async (silent = false) => {
@@ -121,7 +127,6 @@ export function TechDuelSync() {
   const ms = signalPassed ? Math.max(0, Math.round(serverNow - signalAt)) : null;
   const roundCompleted = current?.status === "completed";
   const submitted = Boolean(payload?.my_submission) || submitting;
-  const secondsLeft = current && isActiveRound && !signalPassed ? Math.max(0, Math.ceil((signalAt - serverNow) / 1000)) : 0;
   const creatorWins = Number(payload?.score?.[String(lobby?.creator_user_id || "")] || 0);
   const opponentWins = Number(payload?.score?.[String(lobby?.opponent_user_id || "")] || 0);
   const readyRows = payload?.ready || [];
@@ -132,6 +137,24 @@ export function TechDuelSync() {
   const readyLabel = `${readyRows.length}/2 ${c.ready}`;
   const holdReadyLabel = `${holdReadyRows.length}/2 ${c.ready}`;
   const cancelled = lobby?.status === "cancelled" || lobby?.status === "İptal edildi";
+
+  useEffect(() => {
+    setFocusFakeSignal(randomFakeSignal());
+  }, [lobby?.id, current?.round_number, currentMode]);
+
+  useEffect(() => {
+    if (currentMode !== "best_focus" || !current || !isActiveRound || signalPassed || submitted || roundCompleted || cancelled) return;
+    let timeoutId = 0;
+    const schedule = () => {
+      const delay = 360 + Math.floor(Math.random() * 560);
+      timeoutId = window.setTimeout(() => {
+        setFocusFakeSignal((previous) => randomFakeSignal(previous));
+        schedule();
+      }, delay);
+    };
+    schedule();
+    return () => window.clearTimeout(timeoutId);
+  }, [currentMode, current?.round_number, isActiveRound, signalPassed, submitted, roundCompleted, cancelled]);
 
   const arenaText = () => {
     if (cancelled) return c.cancelled;
@@ -144,7 +167,7 @@ export function TechDuelSync() {
       return signalPassed ? c.release : c.hold;
     }
     if (signalPassed) return c.draw;
-    if (currentMode === "best_focus" && secondsLeft <= 4) return fakeSignals[Math.floor(now / 550) % fakeSignals.length];
+    if (currentMode === "best_focus") return focusFakeSignal;
     return c.wait;
   };
 
@@ -158,7 +181,7 @@ export function TechDuelSync() {
       if (!holding) return c.holdStart;
       return signalPassed ? c.releaseNow : c.keepHolding;
     }
-    return signalPassed ? c.clickNow : c.dontClick;
+    return signalPassed ? c.clickNow : currentMode === "best_focus" ? c.focus : c.dontClick;
   };
 
   const clickArena = () => { if (!current || roundCompleted || submitted || currentMode === "what_the_hold") return; submit(!signalPassed, signalPassed ? ms : null); };
