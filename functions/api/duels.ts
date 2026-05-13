@@ -51,7 +51,10 @@ export async function onRequestGet(context: any) {
           COALESCE(duel_lobbies.mode, 'classic') AS mode,
           duel_lobbies.reward_amount,
           duel_lobbies.round_count,
-          duel_lobbies.status,
+          CASE
+            WHEN duel_lobbies.status = 'cancelled' THEN 'İptal edildi'
+            ELSE duel_lobbies.status
+          END AS status,
           duel_lobbies.winner_user_id,
           duel_lobbies.created_at,
           creator.name AS creator_name,
