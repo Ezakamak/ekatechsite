@@ -161,7 +161,7 @@ async function getCurrentRound(context: any, lobbyId: number) {
 async function createRound(context: any, lobby: any, roundNumber: number) {
   const targets = makeTargets();
   const options = makeOptions(targets);
-  const tickMs = Math.max(360, 780 - roundNumber * 55);
+  const tickMs = Math.max(320, 700 - roundNumber * 50);
   const startedAt = new Date(Date.now() + START_DELAY_MS).toISOString();
   await context.env.DB.prepare("INSERT OR IGNORE INTO cipher_rounds (lobby_id, round_number, target_code, options_json, tick_ms, started_at, status) VALUES (?, ?, ?, ?, ?, ?, 'active')").bind(lobby.id, roundNumber, targets.join(""), JSON.stringify({ targets, options }), tickMs, startedAt).run();
 }
