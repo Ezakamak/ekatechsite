@@ -9,6 +9,7 @@ const CORE_RAID_REWARD_POOL = 1000;
 
 type TaskScope = "daily" | "event";
 type RaidTask = { label: string; description: string; damage: number; scope: TaskScope };
+type GameTable = "duel_lobbies" | "cipher_lobbies" | "core_clash_lobbies";
 
 const TASKS: Record<string, RaidTask> = {
   daily_checkin: {
@@ -65,21 +66,45 @@ const TASKS: Record<string, RaidTask> = {
     damage: 180,
     scope: "event",
   },
+  play_clash_today: {
+    label: "Core Clash oyna",
+    description: "Bugün en az 1 Core Clash lobisine katıl veya oluştur.",
+    damage: 75,
+    scope: "daily",
+  },
+  play_clash_3_today: {
+    label: "3 Core Clash oyna",
+    description: "Bugün 3 farklı Core Clash lobisine katıl veya oluştur.",
+    damage: 120,
+    scope: "daily",
+  },
+  win_clash_today: {
+    label: "Core Clash kazan",
+    description: "Bugün 1 Core Clash maçı kazan.",
+    damage: 130,
+    scope: "daily",
+  },
+  clash_streak_3: {
+    label: "Core Clash 3 gün streak",
+    description: "3 gün üst üste Core Clash oyna.",
+    damage: 180,
+    scope: "event",
+  },
   play_two_modes_today: {
     label: "2 farklı mod oyna",
-    description: "Bugün hem Tech Duel hem Cipher Break oyna.",
+    description: "Bugün Tech Duel, Cipher Break veya Core Clash içinden 2 farklı mod oyna.",
     damage: 150,
     scope: "daily",
   },
   complete_two_matches_today: {
     label: "2 maç tamamla",
-    description: "Bugün toplam 2 Tech Duel / Cipher Break maçı tamamla.",
+    description: "Bugün toplam 2 Tech Duel / Cipher Break / Core Clash maçı tamamla.",
     damage: 150,
     scope: "daily",
   },
   win_any_today: {
     label: "Bugün 1 galibiyet al",
-    description: "Tech Duel veya Cipher Break içinde bugün 1 maç kazan.",
+    description: "Tech Duel, Cipher Break veya Core Clash içinde bugün 1 maç kazan.",
     damage: 140,
     scope: "daily",
   },
@@ -328,24 +353,47 @@ async function getTaskStatus(context: any, eventId: number, userId: number, task
     return { completed: progress >= 3, claimed, progress, target: 3 };
   }
 
+  if (taskKey === "play_clash_today") {
+    const progress = await countUserRows(context, "core_clash_lobbies", userId, "created_at", false);
+    return { completed: progress >= 1, claimed, progress, target: 1 };
+  }
+
+  if (taskKey === "play_clash_3_today") {
+    const progress = await countUserRows(context, "core_clash_lobbies", userId, "created_at", false);
+    return { completed: progress >= 3, claimed, progress, target: 3 };
+  }
+
+  if (taskKey === "win_clash_today") {
+    const progress = await countUserRows(context, "core_clash_lobbies", userId, "updated_at", true);
+    return { completed: progress >= 1, claimed, progress, target: 1 };
+  }
+
+  if (taskKey === "clash_streak_3") {
+    const progress = await getGameStreak(context, "core_clash_lobbies", userId);
+    return { completed: progress >= 3, claimed, progress, target: 3 };
+  }
+
   if (taskKey === "play_two_modes_today") {
     const duel = await countUserRows(context, "duel_lobbies", userId, "created_at", false);
     const cipher = await countUserRows(context, "cipher_lobbies", userId, "created_at", false);
-    const progress = Math.min(1, duel) + Math.min(1, cipher);
+    const clash = await countUserRows(context, "core_clash_lobbies", userId, "created_at", false);
+    const progress = Math.min(1, duel) + Math.min(1, cipher) + Math.min(1, clash);
     return { completed: progress >= 2, claimed, progress, target: 2 };
   }
 
   if (taskKey === "complete_two_matches_today") {
     const duel = await countCompletedRows(context, "duel_lobbies", userId);
     const cipher = await countCompletedRows(context, "cipher_lobbies", userId);
-    const progress = duel + cipher;
+    const clash = await countCompletedRows(context, "core_clash_lobbies", userId);
+    const progress = duel + cipher + clash;
     return { completed: progress >= 2, claimed, progress, target: 2 };
   }
 
   if (taskKey === "win_any_today") {
     const duel = await countUserRows(context, "duel_lobbies", userId, "updated_at", true);
     const cipher = await countUserRows(context, "cipher_lobbies", userId, "updated_at", true);
-    const progress = duel + cipher;
+    const clash = await countUserRows(context, "core_clash_lobbies", userId, "updated_at", true);
+    const progress = duel + cipher + clash;
     return { completed: progress >= 1, claimed, progress, target: 1 };
   }
 
@@ -389,7 +437,7 @@ async function countAction(context: any, eventId: number, userId: number, day: s
   return Number(row?.uses || 0);
 }
 
-async function countUserRows(context: any, table: "duel_lobbies" | "cipher_lobbies", userId: number, dateColumn: "created_at" | "updated_at", winnersOnly: boolean) {
+async function countUserRows(context: any, table: GameTable, userId: number, dateColumn: "created_at" | "updated_at", winnersOnly: boolean) {
   try {
     const day = todayKey();
     const where = winnersOnly
@@ -405,7 +453,7 @@ async function countUserRows(context: any, table: "duel_lobbies" | "cipher_lobbi
   }
 }
 
-async function countCompletedRows(context: any, table: "duel_lobbies" | "cipher_lobbies", userId: number) {
+async function countCompletedRows(context: any, table: GameTable, userId: number) {
   try {
     const row = await context.env.DB
       .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE status = 'completed' AND (creator_user_id = ? OR opponent_user_id = ?) AND date(updated_at) = date(?)`)
@@ -417,7 +465,7 @@ async function countCompletedRows(context: any, table: "duel_lobbies" | "cipher_
   }
 }
 
-async function getGameStreak(context: any, table: "duel_lobbies" | "cipher_lobbies", userId: number) {
+async function getGameStreak(context: any, table: GameTable, userId: number) {
   try {
     const rows = await context.env.DB
       .prepare(`SELECT DISTINCT date(created_at) AS action_day FROM ${table} WHERE creator_user_id = ? OR opponent_user_id = ? ORDER BY action_day DESC LIMIT 30`)
