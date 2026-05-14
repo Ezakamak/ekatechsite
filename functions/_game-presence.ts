@@ -22,6 +22,7 @@ export async function syncGamePresence(context: any, game: string, lobbyTable: s
   const empty = baseResult(game, lobbyId);
   if (!lobby || lobby.status !== "in_progress" || !isParticipant(lobby, userId)) return empty;
 
+  await resumeIfReturning(context, game, lobbyId, userId);
   await markActive(context, game, lobbyId, userId);
   await markStaleOpponentAbsent(context, game, lobby);
   await completeExpiredAbsence(context, game, lobbyTable, lobby);
@@ -83,6 +84,39 @@ async function ensurePresenceTable(context: any) {
   `).run();
 }
 
+async function resumeIfReturning(context: any, game: string, lobbyId: number, userId: number) {
+  const row = await context.env.DB.prepare("SELECT * FROM game_presence WHERE game = ? AND lobby_id = ? AND user_id = ? AND state = 'absent'")
+    .bind(game, lobbyId, userId)
+    .first();
+
+  if (!row) return;
+  const leftAtMs = parseTime(row.updated_at);
+  const deltaMs = leftAtMs ? Math.max(0, Math.min(FORFEIT_SECONDS * 1000, Date.now() - leftAtMs)) : 0;
+  if (deltaMs > 0) await extendGameClocks(context, game, lobbyId, deltaMs);
+}
+
+async function extendGameClocks(context: any, game: string, lobbyId: number, deltaMs: number) {
+  const seconds = Math.max(1, Math.ceil(deltaMs / 1000));
+  if (game === "core_clash") {
+    await context.env.DB.prepare("UPDATE core_clash_turns SET deadline_at = datetime(deadline_at, ?) WHERE lobby_id = ? AND status = 'active'")
+      .bind(`+${seconds} seconds`, lobbyId).run();
+    await context.env.DB.prepare("UPDATE core_clash_lobbies SET deadline_at = datetime(deadline_at, ?), updated_at = datetime('now') WHERE id = ? AND status = 'in_progress' AND deadline_at IS NOT NULL")
+      .bind(`+${seconds} seconds`, lobbyId).run();
+    return;
+  }
+
+  if (game === "tech_duel") {
+    await context.env.DB.prepare("UPDATE duel_rounds SET signal_at = datetime(signal_at, ?) WHERE lobby_id = ? AND status IN ('active','waiting_hold')")
+      .bind(`+${seconds} seconds`, lobbyId).run();
+    return;
+  }
+
+  if (game === "cipher") {
+    await context.env.DB.prepare("UPDATE cipher_rounds SET started_at = datetime(started_at, ?) WHERE lobby_id = ? AND status = 'active'")
+      .bind(`+${seconds} seconds`, lobbyId).run();
+  }
+}
+
 async function markActive(context: any, game: string, lobbyId: number, userId: number) {
   await context.env.DB.prepare(`
     INSERT INTO game_presence (game, lobby_id, user_id, state, leave_deadline_at, updated_at)
@@ -104,7 +138,7 @@ async function markStaleOpponentAbsent(context: any, game: string, lobby: any) {
 
     if (row?.state === "absent") continue;
 
-    const updatedAt = row?.updated_at ? Date.parse(String(row.updated_at).includes("T") ? row.updated_at : String(row.updated_at).replace(" ", "T") + "Z") : 0;
+    const updatedAt = row?.updated_at ? parseTime(row.updated_at) : 0;
     if (!row || !Number.isFinite(updatedAt) || updatedAt < staleBeforeMs) {
       const deadline = new Date(Date.now() + FORFEIT_SECONDS * 1000).toISOString();
       await context.env.DB.prepare(`
