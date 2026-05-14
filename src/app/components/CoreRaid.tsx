@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { ShieldAlert, Sparkles, Zap } from "lucide-react";
+import { CheckCircle2, ShieldAlert, Sparkles, Target, Zap } from "lucide-react";
 import { useLanguage } from "../i18n";
 
-type RaidAction = {
+type RaidTask = {
   key: string;
   label: string;
+  description: string;
   damage: number;
-  daily_limit: number;
-  uses: number;
-  remaining: number;
+  scope: "daily" | "event";
+  completed: boolean;
+  claimed: boolean;
+  progress: number;
+  target: number;
 };
 
 type RaidState = {
@@ -20,10 +23,12 @@ type RaidState = {
     status: string;
     defeated_at?: string | null;
   };
-  actions: RaidAction[];
+  actions: RaidTask[];
+  tasks?: RaidTask[];
   my_damage: number;
   daily_damage: number;
   daily_damage_cap: number;
+  visit_streak?: number;
   leaderboard: Array<{ user_id: number; damage: number; name: string; email: string; avatar_url?: string | null }>;
 };
 
@@ -46,39 +51,45 @@ export function CoreRaid() {
   const c = useMemo(() => tr ? {
     eyebrow: "Community Event",
     title: "Core Raid",
-    subtitle: "Glitch Titan EkaTech core'unu bozuyor. Görev yap, hasar ver, core'u birlikte restore et.",
+    subtitle: "Glitch Titan EkaTech core'unu bozuyor. OFF içinde görevleri tamamla, hasarı görev ödülü olarak claim et, core'u birlikte restore et.",
     hp: "Boss HP",
     corruption: "Corruption",
     restored: "CORE RESTORED",
     active: "SYSTEM BREACH",
     myDamage: "Senin hasarın",
-    dailyLimit: "Günlük limit",
-    actions: "Raid görevleri",
+    dailyLimit: "Günlük hasar limiti",
+    actions: "Görevler",
     leaderboard: "Katkı sıralaması",
     damage: "hasar",
-    use: "Çalıştır",
-    used: "Bitti",
+    claim: "Hasarı al",
+    claimed: "Alındı",
+    locked: "Tamamlanmadı",
     refresh: "Yenile",
     empty: "Henüz katkı yok.",
     reward: "Boss düşerse katkı verenlere Tech Coin ödülü dağıtılır.",
+    progress: "İlerleme",
+    streak: "Streak",
   } : {
     eyebrow: "Community Event",
     title: "Core Raid",
-    subtitle: "Glitch Titan is corrupting the EkaTech core. Complete tasks, deal damage, and restore the system together.",
+    subtitle: "Glitch Titan is corrupting the EkaTech core. Complete OFF tasks, claim damage as task rewards, and restore the system together.",
     hp: "Boss HP",
     corruption: "Corruption",
     restored: "CORE RESTORED",
     active: "SYSTEM BREACH",
     myDamage: "Your damage",
-    dailyLimit: "Daily limit",
-    actions: "Raid tasks",
+    dailyLimit: "Daily damage limit",
+    actions: "Tasks",
     leaderboard: "Contribution leaderboard",
     damage: "damage",
-    use: "Run",
-    used: "Used",
+    claim: "Claim damage",
+    claimed: "Claimed",
+    locked: "Incomplete",
     refresh: "Refresh",
     empty: "No contributions yet.",
     reward: "When the boss falls, contributors receive Tech Coin rewards.",
+    progress: "Progress",
+    streak: "Streak",
   }, [tr]);
 
   const load = async (silent = false) => {
@@ -93,7 +104,7 @@ export function CoreRaid() {
     }
   };
 
-  const runAction = async (key: string) => {
+  const claimTask = async (key: string) => {
     setBusy(key);
     setNotice(null);
     try {
@@ -105,11 +116,11 @@ export function CoreRaid() {
         body: JSON.stringify({ action: key }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || data?.error) throw new Error(data?.error || "Görev tamamlanamadı.");
+      if (!response.ok || data?.error) throw new Error(data?.error || "Görev hasarı alınamadı.");
       setState(data);
       setNotice({ type: "success", text: `+${data.damage || 0} ${c.damage}` });
     } catch (error) {
-      setNotice({ type: "error", text: error instanceof Error ? error.message : "Görev tamamlanamadı." });
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Görev hasarı alınamadı." });
     } finally {
       setBusy(null);
     }
@@ -130,7 +141,8 @@ export function CoreRaid() {
   const dailyDamage = Number(state?.daily_damage || 0);
   const dailyCap = Number(state?.daily_damage_cap || 600);
   const dailyPercent = dailyCap > 0 ? Math.min(100, (dailyDamage / dailyCap) * 100) : 0;
-  const codeRows = ["ERR_CORE_0x7F", "BREACH::ACTIVE", "NULL_PACKET_DROP", "RESTORE_PROTOCOL", "GLITCH TITAN", "TRACE_FAILED", "CORE_SHIELD_SYNC"];
+  const tasks = state?.tasks || state?.actions || [];
+  const codeRows = ["ERR_CORE_0x7F", "BREACH::ACTIVE", "TASK_DAMAGE_PROTOCOL", "RESTORE_PROTOCOL", "GLITCH TITAN", "TRACE_FAILED", "CORE_SHIELD_SYNC"];
 
   return <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
     <div className="pointer-events-none absolute inset-0 opacity-30">
@@ -167,27 +179,36 @@ export function CoreRaid() {
           <div className="mt-7 h-6 overflow-hidden rounded-full border border-white/10 bg-white/[0.06]">
             <div className="h-full rounded-full bg-white transition-all duration-500" style={{ width: `${hpPercent}%` }} />
           </div>
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          <div className="mt-5 grid gap-4 sm:grid-cols-4">
             <Stat label={c.corruption} value={`${corruption}%`} />
             <Stat label={c.myDamage} value={Number(state?.my_damage || 0).toLocaleString()} />
             <Stat label={c.dailyLimit} value={`${dailyDamage}/${dailyCap}`} />
+            <Stat label={c.streak} value={`${Number(state?.visit_streak || 0)} gün`} />
           </div>
           <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-white/70" style={{ width: `${dailyPercent}%` }} /></div>
           <p className="mt-4 text-sm text-white/45">{c.reward}</p>
         </div>
 
         <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 backdrop-blur-xl sm:p-8">
-          <div className="flex items-center gap-2"><Zap className="h-5 w-5 text-cyan-100" /><h2 className="text-2xl font-medium">{c.actions}</h2></div>
+          <div className="flex items-center gap-2"><Target className="h-5 w-5 text-cyan-100" /><h2 className="text-2xl font-medium">{c.actions}</h2></div>
           <div className="mt-5 space-y-3">
-            {(state?.actions || []).map((action) => <button key={action.key} disabled={busy !== null || defeated || action.remaining <= 0 || dailyDamage >= dailyCap} onClick={() => runAction(action.key)} className="w-full rounded-3xl border border-white/10 bg-black/35 p-4 text-left transition-all hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-medium text-white">{action.label}</p>
-                  <p className="mt-1 text-sm text-white/45">{action.damage} {c.damage} · {action.uses}/{action.daily_limit}</p>
+            {tasks.map((task) => {
+              const canClaim = task.completed && !task.claimed && !defeated && dailyDamage < dailyCap;
+              const label = task.claimed ? c.claimed : task.completed ? c.claim : c.locked;
+              return <button key={task.key} disabled={busy !== null || !canClaim} onClick={() => claimTask(task.key)} className="w-full rounded-3xl border border-white/10 bg-black/35 p-4 text-left transition-all hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-55">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-white">{task.label}</p>
+                      {task.claimed && <CheckCircle2 className="h-4 w-4 text-emerald-200" />}
+                    </div>
+                    <p className="mt-1 text-sm leading-5 text-white/45">{task.description}</p>
+                    <p className="mt-2 text-xs uppercase tracking-[0.16em] text-white/35">{c.progress}: {Math.min(Number(task.progress || 0), Number(task.target || 1))}/{task.target} · {task.damage} {c.damage}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium ${canClaim ? "bg-white text-black" : task.claimed ? "bg-emerald-300/10 text-emerald-100 border border-emerald-300/20" : "bg-white/[0.06] text-white/45 border border-white/10"}`}>{busy === task.key ? "..." : label}</span>
                 </div>
-                <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black">{busy === action.key ? "..." : action.remaining <= 0 ? c.used : c.use}</span>
-              </div>
-            </button>)}
+              </button>;
+            })}
           </div>
         </div>
       </section>
