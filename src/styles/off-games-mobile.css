@@ -1,189 +1,238 @@
-/* OFF game mobile polish: Core Clash + Cipher Break */
-html,
-body,
-#root {
+/* Scoped mobile polish for OFF games only.
+   Targets current game DOM signatures without touching the rest of the site. */
+
+:root {
+  --game-safe-x: 0.75rem;
+  --game-safe-top: 5.75rem;
+  --game-safe-bottom: 7rem;
+}
+
+main:has(.touch-none),
+main:has(.min-h-56),
+main:has([class*="tracking-[0.18em]"]),
+main:has([class*="rotate-[-11deg]"]),
+main:has([class*="NAV_BUTTON"]),
+main:has([class*="CORE RESTORED"]) {
   width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-main {
   max-width: 100vw;
   overflow-x: clip;
 }
 
-main button,
-main a,
-main span,
-main p,
-main h1,
-main h2,
-main h3,
-main div {
-  min-width: 0;
+main:has(.touch-none) *,
+main:has(.min-h-56) *,
+main:has([class*="tracking-[0.18em]"]) *,
+main:has([class*="rotate-[-11deg]"]) * {
+  box-sizing: border-box;
 }
 
-main button {
+main:has(.touch-none) button,
+main:has(.min-h-56) button,
+main:has([class*="tracking-[0.18em]"]) button,
+main:has([class*="rotate-[-11deg]"]) button {
   white-space: normal;
 }
 
-main .font-mono {
+main:has(.touch-none) .font-mono,
+main:has(.min-h-56) .font-mono,
+main:has([class*="tracking-[0.18em]"]) .font-mono,
+main:has([class*="rotate-[-11deg]"]) .font-mono {
   overflow-wrap: anywhere;
 }
 
 @media (max-width: 1279px) {
-  main section.grid {
+  main:has(.touch-none) section.grid,
+  main:has(.min-h-56) section.grid,
+  main:has([class*="tracking-[0.18em]"]) section.grid,
+  main:has([class*="rotate-[-11deg]"]) section.grid {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  main [class*="xl:grid-cols-7"] {
+  main:has([class*="tracking-[0.18em]"]) [class*="xl:grid-cols-7"] {
     grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   }
 
-  main [class*="xl:grid-cols-4"] {
+  main:has(.min-h-56) [class*="xl:grid-cols-3"],
+  main:has(.min-h-56) [class*="sm:grid-cols-2"] {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
 
 @media (max-width: 768px) {
-  main {
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
-    padding-top: 5.75rem !important;
-    padding-bottom: 7rem !important;
+  main:has(.touch-none),
+  main:has(.min-h-56),
+  main:has([class*="tracking-[0.18em]"]),
+  main:has([class*="rotate-[-11deg]"]) {
+    padding-left: var(--game-safe-x) !important;
+    padding-right: var(--game-safe-x) !important;
+    padding-top: var(--game-safe-top) !important;
+    padding-bottom: var(--game-safe-bottom) !important;
   }
 
-  main .rounded-\[2rem\] {
+  main:has(.touch-none) .rounded-\[2rem\],
+  main:has(.min-h-56) .rounded-\[2rem\],
+  main:has([class*="tracking-[0.18em]"]) .rounded-\[2rem\],
+  main:has([class*="rotate-[-11deg]"]) .rounded-\[2rem\] {
     border-radius: 1.25rem !important;
   }
 
-  main .rounded-\[1\.5rem\] {
-    border-radius: 1rem !important;
-  }
-
-  main section,
-  main [class*="sm:p-8"],
-  main [class*="sm:p-6"] {
+  main:has(.touch-none) section,
+  main:has(.min-h-56) section,
+  main:has([class*="tracking-[0.18em]"]) section,
+  main:has([class*="rotate-[-11deg]"]) section,
+  main:has(.touch-none) [class*="sm:p-8"],
+  main:has(.min-h-56) [class*="sm:p-8"],
+  main:has([class*="tracking-[0.18em]"]) [class*="sm:p-8"],
+  main:has([class*="rotate-[-11deg]"]) [class*="sm:p-8"],
+  main:has(.touch-none) [class*="sm:p-6"],
+  main:has(.min-h-56) [class*="sm:p-6"],
+  main:has([class*="tracking-[0.18em]"]) [class*="sm:p-6"],
+  main:has([class*="rotate-[-11deg]"]) [class*="sm:p-6"] {
     padding: 1rem !important;
   }
 
-  main h1,
-  main .text-7xl,
-  main .text-6xl,
-  main .text-5xl {
+  main:has(.touch-none) h1,
+  main:has(.min-h-56) h1,
+  main:has([class*="tracking-[0.18em]"]) h1,
+  main:has([class*="rotate-[-11deg]"]) h1,
+  main:has(.touch-none) .text-7xl,
+  main:has(.min-h-56) .text-7xl,
+  main:has([class*="tracking-[0.18em]"]) .text-7xl,
+  main:has([class*="rotate-[-11deg]"]) .text-7xl,
+  main:has(.touch-none) .text-6xl,
+  main:has(.min-h-56) .text-6xl,
+  main:has([class*="tracking-[0.18em]"]) .text-6xl,
+  main:has([class*="rotate-[-11deg]"]) .text-6xl,
+  main:has(.touch-none) .text-5xl,
+  main:has(.min-h-56) .text-5xl,
+  main:has([class*="tracking-[0.18em]"]) .text-5xl,
+  main:has([class*="rotate-[-11deg]"]) .text-5xl {
     font-size: clamp(2rem, 10vw, 3rem) !important;
     line-height: 1.05 !important;
     letter-spacing: -0.04em !important;
   }
 
-  main h2,
-  main .text-4xl,
-  main .text-3xl {
+  main:has(.touch-none) h2,
+  main:has(.min-h-56) h2,
+  main:has([class*="tracking-[0.18em]"]) h2,
+  main:has([class*="rotate-[-11deg]"]) h2,
+  main:has(.touch-none) .text-4xl,
+  main:has(.min-h-56) .text-4xl,
+  main:has([class*="tracking-[0.18em]"]) .text-4xl,
+  main:has([class*="rotate-[-11deg]"]) .text-4xl,
+  main:has(.touch-none) .text-3xl,
+  main:has(.min-h-56) .text-3xl,
+  main:has([class*="tracking-[0.18em]"]) .text-3xl,
+  main:has([class*="rotate-[-11deg]"]) .text-3xl {
     font-size: clamp(1.45rem, 7vw, 2rem) !important;
     line-height: 1.12 !important;
   }
 
-  main .text-2xl {
-    font-size: clamp(1.15rem, 5.2vw, 1.5rem) !important;
-    line-height: 1.18 !important;
-  }
-
-  main [class*="tracking-[0.28em]"],
-  main [class*="tracking-[0.24em]"],
-  main [class*="tracking-[0.22em]"],
-  main [class*="tracking-[0.2em]"] {
+  main:has(.touch-none) [class*="tracking-[0.28em]"],
+  main:has(.min-h-56) [class*="tracking-[0.28em]"],
+  main:has([class*="tracking-[0.18em]"]) [class*="tracking-[0.28em]"],
+  main:has([class*="rotate-[-11deg]"]) [class*="tracking-[0.28em]"],
+  main:has(.touch-none) [class*="tracking-[0.24em]"],
+  main:has(.min-h-56) [class*="tracking-[0.24em]"],
+  main:has([class*="tracking-[0.18em]"]) [class*="tracking-[0.24em]"],
+  main:has([class*="rotate-[-11deg]"]) [class*="tracking-[0.24em]"] {
     letter-spacing: 0.1em !important;
   }
 
-  main [class*="grid-cols-2"],
-  main [class*="grid-cols-3"],
-  main [class*="grid-cols-4"],
-  main [class*="md:grid-cols"],
-  main [class*="lg:grid-cols"],
-  main [class*="xl:grid-cols"] {
+  main:has(.touch-none) [class*="lg:grid-cols"],
+  main:has(.min-h-56) [class*="lg:grid-cols"],
+  main:has([class*="tracking-[0.18em]"]) [class*="lg:grid-cols"],
+  main:has([class*="rotate-[-11deg]"]) [class*="lg:grid-cols"],
+  main:has(.touch-none) [class*="md:grid-cols"],
+  main:has(.min-h-56) [class*="md:grid-cols"],
+  main:has([class*="tracking-[0.18em]"]) [class*="md:grid-cols"],
+  main:has([class*="rotate-[-11deg]"]) [class*="md:grid-cols"] {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  main [class*="sm:grid-cols-2"],
-  main [class*="sm:grid-cols-3"] {
-    grid-template-columns: minmax(0, 1fr) !important;
+  main:has(.touch-none) .min-h-\[320px\] {
+    min-height: min(56vh, 24rem) !important;
+    padding: 1.25rem !important;
   }
 
-  main .min-h-\[360px\] {
-    min-height: 18rem !important;
+  main:has(.touch-none) .touch-none p:first-child {
+    font-size: clamp(2.2rem, 14vw, 4.25rem) !important;
+    line-height: 0.95 !important;
   }
 
-  main .min-h-56,
-  main .min-h-24 {
+  main:has(.min-h-56) .min-h-56,
+  main:has(.min-h-56) .min-h-24,
+  main:has([class*="tracking-[0.18em]"]) .min-h-\[360px\],
+  main:has([class*="rotate-[-11deg]"]) .min-h-24 {
     min-height: auto !important;
   }
 
-  main .fixed.inset-x-0.top-28 {
+  main:has(.min-h-56) .fixed.inset-x-0.top-28 {
     top: 5.25rem !important;
     width: calc(100vw - 1rem) !important;
     max-width: calc(100vw - 1rem) !important;
     padding: 1rem !important;
   }
 
-  main .fixed.bottom-5.left-1\/2 {
-    bottom: 0.75rem !important;
-    width: calc(100vw - 1rem) !important;
-  }
-
-  main .fixed.bottom-5.left-1\/2 button {
-    width: 100%;
+  main:has([class*="rotate-[-11deg]"]) [class*="rotate-[-11deg]"],
+  main:has([class*="rotate-[-11deg]"]) [class*="rotate-[9deg]"] {
+    display: none !important;
   }
 }
 
 @media (max-width: 640px) {
-  main [class*="xl:grid-cols-7"],
-  main [class*="lg:grid-cols-4"],
-  main [class*="sm:grid-cols-3"],
-  main [class*="sm:grid-cols-2"] {
+  main:has(.min-h-56) [class*="xl:grid-cols-3"],
+  main:has(.min-h-56) [class*="sm:grid-cols-2"],
+  main:has([class*="tracking-[0.18em]"]) [class*="xl:grid-cols-7"],
+  main:has([class*="tracking-[0.18em]"]) [class*="lg:grid-cols-4"],
+  main:has([class*="tracking-[0.18em]"]) [class*="sm:grid-cols-3"],
+  main:has([class*="tracking-[0.18em]"]) [class*="sm:grid-cols-2"] {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
-  main [class*="text-4xl"].font-mono,
-  main [class*="text-3xl"].font-mono {
+  main:has([class*="tracking-[0.18em]"]) [class*="text-4xl"].font-mono,
+  main:has([class*="tracking-[0.18em]"]) [class*="text-3xl"].font-mono,
+  main:has(.min-h-56) [class*="text-3xl"].font-mono {
     font-size: clamp(1.35rem, 8vw, 2rem) !important;
     letter-spacing: 0.08em !important;
   }
 
-  main .px-8 {
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
-  }
-
-  main .py-5 {
+  main:has([class*="tracking-[0.18em]"]) .py-5,
+  main:has(.min-h-56) .py-5,
+  main:has(.touch-none) .py-5 {
     padding-top: 0.9rem !important;
     padding-bottom: 0.9rem !important;
   }
 }
 
 @media (max-width: 420px) {
-  main {
-    padding-left: 0.55rem !important;
-    padding-right: 0.55rem !important;
+  :root {
+    --game-safe-x: 0.55rem;
   }
 
-  main [class*="xl:grid-cols-7"],
-  main [class*="lg:grid-cols-4"],
-  main [class*="sm:grid-cols-3"],
-  main [class*="sm:grid-cols-2"],
-  main [class*="grid-cols-2"],
-  main [class*="grid-cols-3"] {
+  main:has(.min-h-56) [class*="xl:grid-cols-3"],
+  main:has(.min-h-56) [class*="sm:grid-cols-2"],
+  main:has(.min-h-56) [class*="grid-cols-2"],
+  main:has([class*="tracking-[0.18em]"]) [class*="xl:grid-cols-7"],
+  main:has([class*="tracking-[0.18em]"]) [class*="lg:grid-cols-4"],
+  main:has([class*="tracking-[0.18em]"]) [class*="sm:grid-cols-3"],
+  main:has([class*="tracking-[0.18em]"]) [class*="sm:grid-cols-2"],
+  main:has(.touch-none) [class*="grid-cols-3"] {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  main .font-mono {
-    letter-spacing: 0.06em !important;
+  main:has(.touch-none) button:not(.touch-none),
+  main:has(.min-h-56) button,
+  main:has([class*="tracking-[0.18em]"]) button,
+  main:has([class*="rotate-[-11deg]"]) button {
+    width: 100%;
   }
 
-  main button {
+  main:has(.touch-none) .touch-none {
     width: 100%;
+  }
+
+  main:has([class*="tracking-[0.18em]"]) .font-mono,
+  main:has(.min-h-56) .font-mono {
+    letter-spacing: 0.06em !important;
   }
 }
