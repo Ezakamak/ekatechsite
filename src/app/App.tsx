@@ -36,7 +36,7 @@ import { AdminProjectTools } from "./components/AdminProjectTools";
 import { MaintenancePanel } from "./components/MaintenancePanel";
 import { MaintenanceGate } from "./components/MaintenanceGate";
 import { OffPage } from "./components/OffPage";
-import { CoreClash } from "./components/CoreClashSequential";
+import { CoreClash } from "./components/CoreClashVisualEffects";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
