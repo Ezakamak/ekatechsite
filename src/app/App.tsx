@@ -37,6 +37,7 @@ import { MaintenancePanel } from "./components/MaintenancePanel";
 import { MaintenanceGate } from "./components/MaintenanceGate";
 import { OffPage } from "./components/OffPage";
 import { CoreClash } from "./components/CoreClashVisualEffects";
+import { AutoEnterLobbies } from "./components/AutoEnterLobbies";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -133,6 +134,7 @@ export default function App() {
       <CookieConsent />
       <AnnouncementPopup />
       <MaintenanceGate />
+      <AutoEnterLobbies />
       <div className="min-h-screen bg-black dark">
         <Navbar />
 
