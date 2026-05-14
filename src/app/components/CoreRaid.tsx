@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { motion } from "motion/react";
 import { CheckCircle2, ShieldAlert, Sparkles, Target } from "lucide-react";
 import { useLanguage } from "../i18n";
@@ -417,7 +417,7 @@ function BrokenButton({ className, label }: { className: string; label: string }
   );
 }
 
-function SparkBurst({ className, style, delay = 0 }: { className?: string; style?: React.CSSProperties; delay?: number }) {
+function SparkBurst({ className, style, delay = 0 }: { className?: string; style?: CSSProperties; delay?: number }) {
   return (
     <div className={`pointer-events-none absolute h-12 w-12 ${className || ""}`} style={style}>
       <motion.span
