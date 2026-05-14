@@ -5,6 +5,7 @@ import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSyncFixed";
 import { CipherBreak } from "./CipherBreak";
+import { CoreRaid } from "./CoreRaid";
 
 type User = {
   id: number;
@@ -22,7 +23,7 @@ type Wallet = {
   updated_at?: string | null;
 };
 
-type GameKey = "hub" | "duel" | "cipher";
+type GameKey = "hub" | "duel" | "cipher" | "raid";
 
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
@@ -56,8 +57,8 @@ export function OffPage() {
         duelDesc: "Aynı anda başlayan roundlar, tur kazananı gösterimi, Best of 3/5/7 ve güvenli sabit ödül sistemi.",
         cipherTitle: "Cipher Break",
         cipherDesc: "2 kişilik premium kod kilitleme düellosu. Hedef kodu takip et, doğru kod hizaya geldiğinde ilk kilitleyen round'u alır.",
-        bossTitle: "Boss Rush",
-        bossDesc: "Coin kaybettirmeyen, görev/enerji tabanlı PvE refleks etkinliği.",
+        raidTitle: "Core Raid",
+        raidDesc: "Community boss event. Glitch Titan sayfayı bozuyor; görev yap, hasar ver, core'u birlikte restore et.",
         minesRemoved: "EkaMines kaldırıldı. Tech Coin sistemi puan biriktirmek için duruyor.",
         walletTitle: "Tech Coin cüzdanı",
         lifetime: "Toplam kazanılan",
@@ -81,8 +82,8 @@ export function OffPage() {
         duelDesc: "Synchronized rounds, per-round winner reveal, Best of 3/5/7, and safe fixed reward logic.",
         cipherTitle: "Cipher Break",
         cipherDesc: "A premium 1v1 code-lock duel. Track the target code and lock first when the matching code aligns.",
-        bossTitle: "Boss Rush",
-        bossDesc: "A non-staking PvE reflex event based on tasks/energy instead of coin loss.",
+        raidTitle: "Core Raid",
+        raidDesc: "A community boss event. Glitch Titan corrupts the page; complete tasks, deal damage, and restore the core together.",
         minesRemoved: "EkaMines was removed. Tech Coin remains for score progression.",
         walletTitle: "Tech Coin wallet",
         lifetime: "Lifetime earned",
@@ -169,7 +170,7 @@ export function OffPage() {
     );
   }
 
-  if (activeGame === "duel" || activeGame === "cipher") {
+  if (activeGame !== "hub") {
     return (
       <>
         <div className="fixed bottom-5 left-1/2 z-40 -translate-x-1/2 px-4">
@@ -184,7 +185,7 @@ export function OffPage() {
             ← {copy.backHub}
           </button>
         </div>
-        {activeGame === "duel" ? <TechDuelSync /> : <CipherBreak />}
+        {activeGame === "duel" ? <TechDuelSync /> : activeGame === "cipher" ? <CipherBreak /> : <CoreRaid />}
       </>
     );
   }
@@ -226,7 +227,7 @@ export function OffPage() {
         <section className="grid gap-5 lg:grid-cols-3">
           <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("duel")} />
           <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("cipher")} />
-          <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.comingSoon} title={copy.bossTitle} description={copy.bossDesc} accent="amber" locked />
+          <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.available} title={copy.raidTitle} description={copy.raidDesc} accent="amber" buttonLabel={copy.open} onClick={() => setActiveGame("raid")} />
         </section>
       </div>
     </main>
