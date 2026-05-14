@@ -2,6 +2,10 @@ const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const OFF_ROLES = ["off", "admin", "owner"];
 const DEFAULT_MAX_HP = 10000;
 const DAILY_DAMAGE_CAP = 600;
+const MAX_DAILY_TASKS = 6;
+const DAILY_REGEN_AMOUNT = 500;
+const PASSIVE_REGEN_PER_SECOND = DAILY_REGEN_AMOUNT / 86400;
+const CORE_RAID_REWARD_POOL = 1000;
 
 type TaskScope = "daily" | "event";
 type RaidTask = { label: string; description: string; damage: number; scope: TaskScope };
@@ -125,11 +129,16 @@ export async function onRequestPost(context: any) {
 
     const event = await getOrCreateEvent(context);
     await markVisit(context, event.id, auth.user.id);
+
+    if (!isTaskAvailableToday(event.id, taskKey)) {
+      return Response.json({ error: "Bugünün raid panosunda en fazla 6 görev var. Bu görev bugün aktif değil.", ...(await buildState(context, auth.user.id)) }, { status: 409 });
+    }
+
     if (event.status !== "active") return Response.json(await buildState(context, auth.user.id));
 
     const status = await getTaskStatus(context, event.id, auth.user.id, taskKey, task);
     if (status.claimed) {
-      return Response.json({ error: "Bu görevin hasarı zaten alındı.", ...(await buildState(context, auth.user.id)) }, { status: 409 });
+      return Response.json({ error: "Bu görevin hasarı zaten verildi.", ...(await buildState(context, auth.user.id)) }, { status: 409 });
     }
     if (!status.completed) {
       return Response.json({ error: "Bu görev henüz tamamlanmadı.", ...(await buildState(context, auth.user.id)) }, { status: 409 });
@@ -141,11 +150,12 @@ export async function onRequestPost(context: any) {
       return Response.json({ error: "Günlük raid hasar limitin doldu.", ...(await buildState(context, auth.user.id)) }, { status: 429 });
     }
 
-    const damage = Math.min(task.damage, remainingDaily, Number(event.current_hp || 0));
+    const freshEvent = await getOrCreateEvent(context);
+    const damage = Math.min(task.damage, remainingDaily, Number(freshEvent.current_hp || 0));
     if (damage <= 0) return Response.json(await buildState(context, auth.user.id));
 
-    await applyDamage(context, event.id, auth.user.id, taskKey, task, damage);
-    await finalizeEventIfDefeated(context, event.id);
+    await applyDamage(context, freshEvent.id, auth.user.id, taskKey, task, damage);
+    await finalizeEventIfDefeated(context, freshEvent.id);
     return Response.json({ success: true, damage, action: taskKey, ...(await buildState(context, auth.user.id)) });
   } catch {
     return Response.json({ error: "Core Raid görevi tamamlanamadı." }, { status: 500 });
@@ -211,7 +221,7 @@ async function buildState(context: any, userId: number) {
 
   const dailyDamage = await getDailyDamage(context, event.id, userId);
   const tasks = [];
-  for (const [key, task] of Object.entries(TASKS)) {
+  for (const [key, task] of getDailyTaskEntries(event.id)) {
     const status = await getTaskStatus(context, event.id, userId, key, task);
     tasks.push({
       key,
@@ -234,9 +244,35 @@ async function buildState(context: any, userId: number) {
     my_damage: Number(mine?.damage || 0),
     daily_damage: dailyDamage,
     daily_damage_cap: DAILY_DAMAGE_CAP,
+    max_daily_tasks: MAX_DAILY_TASKS,
+    reward_pool: CORE_RAID_REWARD_POOL,
+    regen_per_day: DAILY_REGEN_AMOUNT,
     visit_streak: await getVisitStreak(context, event.id, userId),
     leaderboard: leaderboard?.results || [],
   };
+}
+
+function getDailyTaskEntries(eventId: number): Array<[string, RaidTask]> {
+  const entries = Object.entries(TASKS);
+  const guaranteed = entries.filter(([key]) => key === "daily_checkin");
+  const rotating = entries
+    .filter(([key]) => key !== "daily_checkin")
+    .sort(([a], [b]) => hashNumber(`${todayKey()}:${eventId}:${a}`) - hashNumber(`${todayKey()}:${eventId}:${b}`));
+
+  return [...guaranteed, ...rotating].slice(0, MAX_DAILY_TASKS);
+}
+
+function isTaskAvailableToday(eventId: number, taskKey: string) {
+  return getDailyTaskEntries(eventId).some(([key]) => key === taskKey);
+}
+
+function hashNumber(input: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 async function getTaskStatus(context: any, eventId: number, userId: number, taskKey: string, task: RaidTask) {
@@ -455,12 +491,12 @@ async function getOrCreateEvent(context: any) {
   const active = await context.env.DB
     .prepare("SELECT * FROM core_raid_events WHERE status = 'active' ORDER BY id DESC LIMIT 1")
     .first();
-  if (active) return active;
+  if (active) return await applyPassiveRegen(context, active);
 
   const last = await context.env.DB
     .prepare("SELECT * FROM core_raid_events ORDER BY id DESC LIMIT 1")
     .first();
-  if (last && last.status === "active") return last;
+  if (last && last.status === "active") return await applyPassiveRegen(context, last);
 
   await context.env.DB
     .prepare("INSERT INTO core_raid_events (boss_name, max_hp, current_hp, status) VALUES ('GLITCH TITAN', ?, ?, 'active')")
@@ -468,6 +504,30 @@ async function getOrCreateEvent(context: any) {
     .run();
 
   return await context.env.DB.prepare("SELECT * FROM core_raid_events WHERE status = 'active' ORDER BY id DESC LIMIT 1").first();
+}
+
+async function applyPassiveRegen(context: any, event: any) {
+  if (!event || event.status !== "active") return event;
+
+  const maxHp = Number(event.max_hp || DEFAULT_MAX_HP);
+  const currentHp = Number(event.current_hp || 0);
+  if (currentHp <= 0 || currentHp >= maxHp) return event;
+
+  const updatedAt = String(event.updated_at || "").trim();
+  const lastTick = updatedAt ? new Date(`${updatedAt.replace(" ", "T")}Z`).getTime() : Date.now();
+  const elapsedSeconds = Number.isFinite(lastTick) ? Math.max(0, Math.floor((Date.now() - lastTick) / 1000)) : 0;
+  if (elapsedSeconds <= 0) return event;
+
+  const healAmount = Math.min(maxHp - currentHp, elapsedSeconds * PASSIVE_REGEN_PER_SECOND);
+  if (healAmount <= 0) return event;
+
+  const nextHp = Number((currentHp + healAmount).toFixed(4));
+  await context.env.DB
+    .prepare("UPDATE core_raid_events SET current_hp = MIN(max_hp, ?), updated_at = datetime('now') WHERE id = ? AND status = 'active'")
+    .bind(nextHp, event.id)
+    .run();
+
+  return await context.env.DB.prepare("SELECT * FROM core_raid_events WHERE id = ?").bind(event.id).first();
 }
 
 async function finalizeEventIfDefeated(context: any, eventId: number) {
@@ -484,12 +544,17 @@ async function finalizeEventIfDefeated(context: any, eventId: number) {
     .bind(eventId)
     .all();
 
-  for (const contributor of contributors?.results || []) {
-    const coin = Number(contributor.damage || 0) >= 500 ? 50 : 20;
+  const rows = contributors?.results || [];
+  const totalDamage = rows.reduce((sum: number, contributor: any) => sum + Number(contributor.damage || 0), 0);
+  if (totalDamage <= 0) return;
+
+  for (const contributor of rows) {
+    const ratio = Number(contributor.damage || 0) / totalDamage;
+    const coin = Math.max(1, Math.round(ratio * CORE_RAID_REWARD_POOL));
     await awardCoins(context, Number(contributor.user_id), coin, `core_raid:${eventId}`);
     await context.env.DB
       .prepare("INSERT OR IGNORE INTO core_raid_rewards (event_id, user_id, tech_coin, reward_note) VALUES (?, ?, ?, ?)")
-      .bind(eventId, contributor.user_id, coin, "CORE RESTORED")
+      .bind(eventId, contributor.user_id, coin, `CORE RESTORED · ${(ratio * 100).toFixed(2)}% contribution`)
       .run();
   }
 }
