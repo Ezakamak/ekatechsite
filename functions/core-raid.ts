@@ -19,16 +19,34 @@ const TASKS: Record<string, RaidTask> = {
     damage: 75,
     scope: "daily",
   },
+  play_duel_3_today: {
+    label: "3 Tech Duel oyna",
+    description: "Bugün 3 farklı Tech Duel lobisine katıl veya oluştur.",
+    damage: 120,
+    scope: "daily",
+  },
   win_duel_today: {
     label: "Tech Duel kazan",
     description: "Bugün 1 Tech Duel maçı kazan.",
     damage: 130,
     scope: "daily",
   },
+  duel_streak_3: {
+    label: "Tech Duel 3 gün streak",
+    description: "3 gün üst üste Tech Duel oyna.",
+    damage: 180,
+    scope: "event",
+  },
   play_cipher_today: {
     label: "Cipher Break oyna",
     description: "Bugün en az 1 Cipher Break lobisine katıl veya oluştur.",
     damage: 75,
+    scope: "daily",
+  },
+  play_cipher_3_today: {
+    label: "3 Cipher Break oyna",
+    description: "Bugün 3 farklı Cipher Break lobisine katıl veya oluştur.",
+    damage: 120,
     scope: "daily",
   },
   win_cipher_today: {
@@ -37,10 +55,46 @@ const TASKS: Record<string, RaidTask> = {
     damage: 130,
     scope: "daily",
   },
-  streak_3: {
-    label: "3 gün streak yap",
-    description: "Core Raid sayfasına 3 gün üst üste gir.",
+  cipher_streak_3: {
+    label: "Cipher Break 3 gün streak",
+    description: "3 gün üst üste Cipher Break oyna.",
+    damage: 180,
+    scope: "event",
+  },
+  play_two_modes_today: {
+    label: "2 farklı mod oyna",
+    description: "Bugün hem Tech Duel hem Cipher Break oyna.",
     damage: 150,
+    scope: "daily",
+  },
+  complete_two_matches_today: {
+    label: "2 maç tamamla",
+    description: "Bugün toplam 2 Tech Duel / Cipher Break maçı tamamla.",
+    damage: 150,
+    scope: "daily",
+  },
+  win_any_today: {
+    label: "Bugün 1 galibiyet al",
+    description: "Tech Duel veya Cipher Break içinde bugün 1 maç kazan.",
+    damage: 140,
+    scope: "daily",
+  },
+  deal_100_damage: {
+    label: "100 raid hasarı katkı yap",
+    description: "Bu event içinde toplam 100 boss hasarına ulaş.",
+    damage: 80,
+    scope: "event",
+  },
+  leaderboard_top10: {
+    label: "Leaderboard'a gir",
+    description: "Core Raid katkı sıralamasında Top 10'a gir.",
+    damage: 100,
+    scope: "event",
+  },
+  core_raid_streak_5: {
+    label: "Core Raid 5 gün streak",
+    description: "Core Raid sayfasına 5 gün üst üste gir.",
+    damage: 220,
     scope: "event",
   },
 };
@@ -203,9 +257,19 @@ async function getTaskStatus(context: any, eventId: number, userId: number, task
     return { completed: progress >= 1, claimed, progress, target: 1 };
   }
 
+  if (taskKey === "play_duel_3_today") {
+    const progress = await countUserRows(context, "duel_lobbies", userId, "created_at", false);
+    return { completed: progress >= 3, claimed, progress, target: 3 };
+  }
+
   if (taskKey === "win_duel_today") {
     const progress = await countUserRows(context, "duel_lobbies", userId, "updated_at", true);
     return { completed: progress >= 1, claimed, progress, target: 1 };
+  }
+
+  if (taskKey === "duel_streak_3") {
+    const progress = await getGameStreak(context, "duel_lobbies", userId);
+    return { completed: progress >= 3, claimed, progress, target: 3 };
   }
 
   if (taskKey === "play_cipher_today") {
@@ -213,14 +277,56 @@ async function getTaskStatus(context: any, eventId: number, userId: number, task
     return { completed: progress >= 1, claimed, progress, target: 1 };
   }
 
+  if (taskKey === "play_cipher_3_today") {
+    const progress = await countUserRows(context, "cipher_lobbies", userId, "created_at", false);
+    return { completed: progress >= 3, claimed, progress, target: 3 };
+  }
+
   if (taskKey === "win_cipher_today") {
     const progress = await countUserRows(context, "cipher_lobbies", userId, "updated_at", true);
     return { completed: progress >= 1, claimed, progress, target: 1 };
   }
 
-  if (taskKey === "streak_3") {
-    const progress = await getVisitStreak(context, eventId, userId);
+  if (taskKey === "cipher_streak_3") {
+    const progress = await getGameStreak(context, "cipher_lobbies", userId);
     return { completed: progress >= 3, claimed, progress, target: 3 };
+  }
+
+  if (taskKey === "play_two_modes_today") {
+    const duel = await countUserRows(context, "duel_lobbies", userId, "created_at", false);
+    const cipher = await countUserRows(context, "cipher_lobbies", userId, "created_at", false);
+    const progress = Math.min(1, duel) + Math.min(1, cipher);
+    return { completed: progress >= 2, claimed, progress, target: 2 };
+  }
+
+  if (taskKey === "complete_two_matches_today") {
+    const duel = await countCompletedRows(context, "duel_lobbies", userId);
+    const cipher = await countCompletedRows(context, "cipher_lobbies", userId);
+    const progress = duel + cipher;
+    return { completed: progress >= 2, claimed, progress, target: 2 };
+  }
+
+  if (taskKey === "win_any_today") {
+    const duel = await countUserRows(context, "duel_lobbies", userId, "updated_at", true);
+    const cipher = await countUserRows(context, "cipher_lobbies", userId, "updated_at", true);
+    const progress = duel + cipher;
+    return { completed: progress >= 1, claimed, progress, target: 1 };
+  }
+
+  if (taskKey === "deal_100_damage") {
+    const progress = await getContributionDamage(context, eventId, userId);
+    return { completed: progress >= 100, claimed, progress, target: 100 };
+  }
+
+  if (taskKey === "leaderboard_top10") {
+    const rank = await getLeaderboardRank(context, eventId, userId);
+    const progress = rank > 0 && rank <= 10 ? 1 : 0;
+    return { completed: progress >= 1, claimed, progress, target: 1 };
+  }
+
+  if (taskKey === "core_raid_streak_5") {
+    const progress = await getVisitStreak(context, eventId, userId);
+    return { completed: progress >= 5, claimed, progress, target: 5 };
   }
 
   return { completed: false, claimed, progress: 0, target: 1 };
@@ -261,6 +367,60 @@ async function countUserRows(context: any, table: "duel_lobbies" | "cipher_lobbi
   } catch {
     return 0;
   }
+}
+
+async function countCompletedRows(context: any, table: "duel_lobbies" | "cipher_lobbies", userId: number) {
+  try {
+    const row = await context.env.DB
+      .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE status = 'completed' AND (creator_user_id = ? OR opponent_user_id = ?) AND date(updated_at) = date(?)`)
+      .bind(userId, userId, todayKey())
+      .first();
+    return Number(row?.count || 0);
+  } catch {
+    return 0;
+  }
+}
+
+async function getGameStreak(context: any, table: "duel_lobbies" | "cipher_lobbies", userId: number) {
+  try {
+    const rows = await context.env.DB
+      .prepare(`SELECT DISTINCT date(created_at) AS action_day FROM ${table} WHERE creator_user_id = ? OR opponent_user_id = ? ORDER BY action_day DESC LIMIT 30`)
+      .bind(userId, userId)
+      .all();
+
+    const days = new Set((rows?.results || []).map((row: any) => String(row.action_day)));
+    let streak = 0;
+    const cursor = new Date(`${todayKey()}T00:00:00.000Z`);
+
+    for (;;) {
+      const key = cursor.toISOString().slice(0, 10);
+      if (!days.has(key)) break;
+      streak += 1;
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+    }
+
+    return streak;
+  } catch {
+    return 0;
+  }
+}
+
+async function getContributionDamage(context: any, eventId: number, userId: number) {
+  const row = await context.env.DB
+    .prepare("SELECT damage FROM core_raid_contributions WHERE event_id = ? AND user_id = ?")
+    .bind(eventId, userId)
+    .first();
+  return Number(row?.damage || 0);
+}
+
+async function getLeaderboardRank(context: any, eventId: number, userId: number) {
+  const rows = await context.env.DB
+    .prepare("SELECT user_id FROM core_raid_contributions WHERE event_id = ? ORDER BY damage DESC, updated_at ASC LIMIT 10")
+    .bind(eventId)
+    .all();
+
+  const index = (rows?.results || []).findIndex((row: any) => Number(row.user_id) === Number(userId));
+  return index >= 0 ? index + 1 : 0;
 }
 
 async function getDailyDamage(context: any, eventId: number, userId: number) {
