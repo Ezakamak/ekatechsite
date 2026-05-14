@@ -57,6 +57,8 @@ export function OffPage() {
         duelDesc: "Aynı anda başlayan roundlar, tur kazananı gösterimi, Best of 3/5/7 ve güvenli sabit ödül sistemi.",
         cipherTitle: "Cipher Break",
         cipherDesc: "2 kişilik premium kod kilitleme düellosu. Hedef kodu takip et, doğru kod hizaya geldiğinde ilk kilitleyen round'u alır.",
+        clashTitle: "Core Clash",
+        clashDesc: "2 kişilik stratejik kart düellosu. 3 kartla başla, harita boostlarını kullan, 15 saniyede en iyi counter hamleyi seç.",
         raidTitle: "Core Raid",
         raidDesc: "Community boss event. Glitch Titan sayfayı bozuyor; görev yap, hasar ver, core'u birlikte restore et.",
         minesRemoved: "EkaMines kaldırıldı. Tech Coin sistemi puan biriktirmek için duruyor.",
@@ -82,6 +84,8 @@ export function OffPage() {
         duelDesc: "Synchronized rounds, per-round winner reveal, Best of 3/5/7, and safe fixed reward logic.",
         cipherTitle: "Cipher Break",
         cipherDesc: "A premium 1v1 code-lock duel. Track the target code and lock first when the matching code aligns.",
+        clashTitle: "Core Clash",
+        clashDesc: "A 2-player strategic card duel. Start with 3 cards, use map boosts, and pick the best counter move in 15 seconds.",
         raidTitle: "Core Raid",
         raidDesc: "A community boss event. Glitch Titan corrupts the page; complete tasks, deal damage, and restore the core together.",
         minesRemoved: "EkaMines was removed. Tech Coin remains for score progression.",
@@ -224,9 +228,10 @@ export function OffPage() {
           </div>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-3">
+        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("duel")} />
           <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("cipher")} />
+          <GameCard icon={<Gamepad2 className="h-6 w-6" />} status={copy.available} title={copy.clashTitle} description={copy.clashDesc} accent="cyan" buttonLabel={copy.open} onClick={() => navigateTo("/core-clash")} />
           <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.available} title={copy.raidTitle} description={copy.raidDesc} accent="amber" buttonLabel={copy.open} onClick={() => setActiveGame("raid")} />
         </section>
       </div>
