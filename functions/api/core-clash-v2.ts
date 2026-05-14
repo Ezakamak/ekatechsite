@@ -6,6 +6,7 @@ const STARTING_ENERGY = 3;
 const MAX_ENERGY = 8;
 const STARTING_HAND = 3;
 const MAX_HAND = 6;
+const INACTIVE_MATCH_TIMEOUT_MINUTES = 5;
 export const TURN_SECONDS = 20;
 
 type CardType = "attack" | "defense" | "utility" | "trap" | "overload";
@@ -185,6 +186,7 @@ export async function buildState(context: any, lobbyId: number, userId: number) 
 }
 
 export async function getLobby(context: any, lobbyId: number) {
+  await cleanup(context);
   return await context.env.DB.prepare(`
     SELECT l.*, creator.name AS creator_name, creator.email AS creator_email, creator.avatar_url AS creator_avatar_url,
       opponent.name AS opponent_name, opponent.email AS opponent_email, opponent.avatar_url AS opponent_avatar_url,
@@ -204,6 +206,22 @@ export async function getPlayers(context: any, lobbyId: number) {
 
 async function cleanup(context: any) {
   await context.env.DB.prepare("UPDATE core_clash_lobbies SET status = 'expired', updated_at = datetime('now') WHERE status = 'open' AND created_at < datetime('now', '-2 hours')").run();
+
+  await context.env.DB.prepare(`
+    UPDATE core_clash_lobbies
+    SET status = 'cancelled', winner_user_id = NULL, deadline_at = NULL, updated_at = datetime('now')
+    WHERE status = 'in_progress'
+      AND updated_at < datetime('now', ?)
+  `).bind(`-${INACTIVE_MATCH_TIMEOUT_MINUTES} minutes`).run();
+
+  await context.env.DB.prepare(`
+    UPDATE core_clash_turns
+    SET status = 'cancelled', resolved_at = datetime('now')
+    WHERE status = 'active'
+      AND lobby_id IN (
+        SELECT id FROM core_clash_lobbies WHERE status = 'cancelled'
+      )
+  `).run();
 }
 
 function mapData(key: string) {
