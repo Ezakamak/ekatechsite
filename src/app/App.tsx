@@ -38,6 +38,7 @@ import { MaintenanceGate } from "./components/MaintenanceGate";
 import { OffPage } from "./components/OffPage";
 import { CoreClash } from "./components/CoreClashVisualEffects";
 import { AutoEnterLobbies } from "./components/AutoEnterLobbies";
+import { GamePresenceManager } from "./components/GamePresenceManager";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -135,6 +136,7 @@ export default function App() {
       <AnnouncementPopup />
       <MaintenanceGate />
       <AutoEnterLobbies />
+      <GamePresenceManager />
       <div className="min-h-screen bg-black dark">
         <Navbar />
 
