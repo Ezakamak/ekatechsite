@@ -5,8 +5,8 @@ const DAILY_DAMAGE_CAP = 600;
 const ACTIONS: Record<string, { label: string; damage: number; dailyLimit: number }> = {
   stabilize: { label: "Stabilize Core", damage: 35, dailyLimit: 8 },
   decrypt: { label: "Decrypt Fragment", damage: 85, dailyLimit: 3 },
-  pulse: { label: "Pulse Blaster", damage: 60, dailyLimit: 3 },
-  raygun: { label: "Raygun Charge", damage: 95, dailyLimit: 1 },
+  patch: { label: "Patch Firewall", damage: 60, dailyLimit: 4 },
+  purge: { label: "Purge Glitch Code", damage: 95, dailyLimit: 2 },
 };
 
 export async function onRequestGet(context: any) {
