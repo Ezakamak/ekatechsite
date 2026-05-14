@@ -74,13 +74,14 @@ export async function onRequestPost(context: any) {
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
   try {
     const body = await context.request.json().catch(() => null);
-    const mapKey = MAP_OPTIONS.includes(String(body?.map_key)) ? String(body.map_key) : "firewall_city";
+    const requestedMap = String(body?.map_key || "");
+    const mapKey = MAP_OPTIONS.includes(requestedMap) ? requestedMap : randomMapKey(auth.user.id);
     const existing = await context.env.DB.prepare("SELECT id FROM core_clash_lobbies WHERE creator_user_id = ? AND status = 'open' LIMIT 1").bind(auth.user.id).first();
     if (existing) return Response.json({ error: "Zaten açık bir Core Clash lobby'n var." }, { status: 409 });
     const result = await context.env.DB.prepare("INSERT INTO core_clash_lobbies (creator_user_id, map_key, status) VALUES (?, ?, 'open')").bind(auth.user.id, mapKey).run();
     const lobbyId = Number(result?.meta?.last_row_id);
     await createPlayer(context, lobbyId, auth.user.id, "creator");
-    return Response.json({ success: true, message: "Core Clash lobisi oluşturuldu.", lobby_id: lobbyId });
+    return Response.json({ success: true, message: "Core Clash lobisi rastgele harita ile oluşturuldu.", lobby_id: lobbyId, map_key: mapKey });
   } catch {
     return Response.json({ error: "Core Clash lobisi oluşturulamadı. d1-core-clash.sql migration'ını çalıştır." }, { status: 500 });
   }
@@ -200,10 +201,14 @@ async function cleanup(context: any) {
 }
 
 function mapData(key: string) {
-  if (key === "glitch_ruins") return { key, name: "Glitch Ruins", boostType: "trap", boostText: "Trap kartları tetiklenirse +2 hasar ekler." };
-  if (key === "overclock_core") return { key, name: "Overclock Core", boostType: "attack", boostText: "Attack kartları +2 hasar verir ama +1 Heat riski taşır." };
-  if (key === "data_archive") return { key, name: "Data Archive", boostType: "utility", boostText: "Utility kartları oynanınca gelecek tur +1 kart avantajı sağlar." };
-  return { key: "firewall_city", name: "Firewall City", boostType: "defense", boostText: "Defense kartları +2 shield etkisi kazanır." };
+  if (key === "glitch_ruins") return { key, name: "Glitch Ruins", boostType: "trap", boostText: "Trap tetiklenirse küçük ekstra yansıma hasarı eklenir." };
+  if (key === "overclock_core") return { key, name: "Overclock Core", boostType: "attack", boostText: "Attack kartları +1 hasar verir; ağır saldırılar daha fazla Heat riski taşır." };
+  if (key === "data_archive") return { key, name: "Data Archive", boostType: "utility", boostText: "Utility kartları tempo avantajı verir ama direkt hasar üretmez." };
+  return { key: "firewall_city", name: "Firewall City", boostType: "defense", boostText: "Defense kartları küçük ekstra koruma kazanır." };
+}
+function randomMapKey(userId: number) {
+  const index = hashNumber(`${userId}:${Date.now()}:${Math.random()}`) % MAP_OPTIONS.length;
+  return MAP_OPTIONS[index];
 }
 function safeJson(text: string) { try { const v = JSON.parse(text || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } }
 function shuffle(items: string[], seed: string) { const arr = [...items]; let s = hashNumber(seed); for (let i = arr.length - 1; i > 0; i -= 1) { s = Math.imul(s ^ (s >>> 15), 2246822507) >>> 0; const j = s % (i + 1); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
