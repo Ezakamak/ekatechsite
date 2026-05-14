@@ -21,30 +21,42 @@ function pageText() {
   return (document.body?.textContent || "").toLowerCase();
 }
 
-function isVisibleGameScreen(game: GameKey) {
+function buttonTextIncludes(value: string) {
+  const target = value.toLowerCase();
+  return Array.from(document.querySelectorAll("button")).some((button) => (button.textContent || "").toLowerCase().includes(target));
+}
+
+function isActiveMatchView(game: GameKey) {
   const text = pageText();
-  if (game === "core_clash") return window.location.pathname === "/core-clash";
-  if (game === "cipher") return window.location.pathname === "/off" && text.includes("cipher break") && text.includes("hedef kod");
-  return window.location.pathname === "/off" && text.includes("tech duel") && (text.includes("draw") || text.includes("release") || text.includes("aktif düellolar"));
+
+  if (game === "core_clash") {
+    return window.location.pathname === "/core-clash" && (text.includes("elindeki kartlar") || text.includes("your hand"));
+  }
+
+  if (game === "cipher") {
+    return window.location.pathname === "/off" && text.includes("cipher break") && (text.includes("hedef kod") || text.includes("target code")) && (buttonTextIncludes("lobby listesi") || buttonTextIncludes("lobby list"));
+  }
+
+  return window.location.pathname === "/off" && text.includes("tech duel") && (buttonTextIncludes("lobby") || text.includes("press & hold") || text.includes("draw!") || text.includes("release!"));
 }
 
 async function discoverSession(): Promise<Session | null> {
   try {
-    if (isVisibleGameScreen("core_clash")) {
+    if (isActiveMatchView("core_clash")) {
       const response = await fetch("/api/core-clash-v2", { credentials: "same-origin", cache: "no-store" });
       const data = await response.json().catch(() => null);
       const lobby = [...(data?.mine || []), ...(data?.open || [])].find((item: any) => item?.status === "in_progress");
       return lobby?.id ? { game: "core_clash", lobby_id: Number(lobby.id) } : null;
     }
 
-    if (isVisibleGameScreen("cipher")) {
+    if (isActiveMatchView("cipher")) {
       const response = await fetch("/cipher", { credentials: "same-origin", cache: "no-store" });
       const data = await response.json().catch(() => null);
       const lobby = [...(data?.mine || []), ...(data?.open || [])].find((item: any) => item?.status === "in_progress");
       return lobby?.id ? { game: "cipher", lobby_id: Number(lobby.id) } : null;
     }
 
-    if (isVisibleGameScreen("tech_duel")) {
+    if (isActiveMatchView("tech_duel")) {
       const response = await fetch("/api/duels", { credentials: "same-origin", cache: "no-store" });
       const data = await response.json().catch(() => null);
       const lobby = [...(data?.mine || []), ...(data?.open || [])].find((item: any) => item?.status === "in_progress");
