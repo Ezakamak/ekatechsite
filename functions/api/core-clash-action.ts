@@ -97,7 +97,7 @@ async function markEntered(context: any, lobbyId: number, userId: number) {
 async function resolveExpiredTurn(context: any, lobbyId: number) {
   const turn = await context.env.DB.prepare("SELECT * FROM core_clash_turns WHERE lobby_id = ? AND status = 'active' ORDER BY turn_number DESC LIMIT 1").bind(lobbyId).first();
   if (!turn) return;
-  const deadline = Date.parse(String(turn.deadline_at || "").replace(" ", "T") + "Z");
+  const deadline = parseDateMs(turn.deadline_at);
   if (Number.isFinite(deadline) && Date.now() >= deadline) await resolveTurn(context, lobbyId, turn);
 }
 
@@ -200,6 +200,11 @@ function mutable(p: PlayerState) {
 }
 async function updatePlayer(context: any, id: number, p: any) {
   await context.env.DB.prepare("UPDATE core_clash_players SET hp = ?, energy = ?, heat = ?, energy_delta_next = ?, draw_block_next = ?, updated_at = datetime('now') WHERE id = ?").bind(Math.max(0, p.hp), Math.max(0, Math.min(MAX_ENERGY, p.energy)), Math.max(0, p.heat), p.energy_delta_next, p.draw_block_next, id).run();
+}
+function parseDateMs(value?: string | null) {
+  if (!value) return 0;
+  const text = String(value);
+  return Date.parse(text.includes("T") ? text : text.replace(" ", "T") + "Z");
 }
 function mapType(key: string): CardType { if (key === "glitch_ruins") return "trap"; if (key === "overclock_core") return "attack"; if (key === "data_archive") return "utility"; return "defense"; }
 function safeJson(text: string) { try { const v = JSON.parse(text || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } }
