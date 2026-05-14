@@ -157,35 +157,35 @@ function applyCard(mapBoost: CardType, self: any, enemy: any, card: Card, enemyC
   let reflect = 0;
   let blocked = false;
 
-  if (card.id === "glitch_strike") damage = 8;
-  if (card.id === "packet_burst") damage = enemyCard.type === "defense" ? 6 : 11;
-  if (card.id === "pierce_injection") damage = 9;
-  if (card.id === "double_ping") damage = 10;
-  if (card.id === "core_spike") { damage = 15; self.heat += 1; }
-  if (card.id === "core_overload") { damage = 18; self.heat += 2; }
+  if (card.id === "glitch_strike") damage = 7;
+  if (card.id === "packet_burst") damage = enemyCard.type === "defense" ? 6 : 10;
+  if (card.id === "pierce_injection") damage = 8;
+  if (card.id === "double_ping") damage = 8;
+  if (card.id === "core_spike") { damage = 13; self.heat += 1; }
+  if (card.id === "core_overload") { damage = 16; self.heat += 2; }
   if (card.id === "blackout") { enemy.draw_block_next = 1; enemy.energy_delta_next -= 1; self.heat += 1; log.push(`${label} Blackout oynadı.`); }
-  if (card.id === "full_restore") { heal = 20; self.heat += 2; }
-  if (card.id === "emergency_patch") heal = 7;
+  if (card.id === "full_restore") { heal = 16; self.heat += 2; }
+  if (card.id === "emergency_patch") heal = 6;
   if (card.id === "battery_backup") self.energy_delta_next += 2;
   if (card.id === "data_drain") enemy.energy_delta_next -= 2;
   if (card.id === "system_scan") self.draw_block_next = -1;
   if (card.id === "hand_jam" && enemyCard.type === "utility") { enemy.draw_block_next = 1; enemy.energy_delta_next -= 1; log.push(`${label} Hand Jam ile utility bozdu.`); }
-  else if (card.id === "hand_jam") damage = Math.max(damage, 4);
+  else if (card.id === "hand_jam") damage = Math.max(damage, 3);
 
-  if (boosted && card.type === "attack") { damage += 2; self.heat += 1; }
+  if (boosted && card.type === "attack") { damage += 1; if (card.cost >= 5) self.heat += 1; }
   if (boosted && card.type === "utility") self.draw_block_next = -1;
 
   if (enemyCard.id === "core_shield" && damage > 0 && card.id !== "pierce_injection") blocked = true;
   if (enemyCard.id === "firewall" && damage > 0 && card.id !== "pierce_injection") damage = Math.ceil(damage / 2);
   if (enemyCard.id === "false_firewall" && card.id === "pierce_injection") blocked = true;
   if (enemyCard.id === "mirror_bug" && (card.type === "attack" || card.type === "overload")) reflect += Math.ceil(damage / 2);
-  if (enemyCard.id === "packet_trap" && card.cost >= 4) reflect += enemyCard.type === mapBoost ? 10 : 8;
-  if (enemyCard.id === "static_field" && card.id === "double_ping") reflect += 6;
+  if (enemyCard.id === "packet_trap" && card.cost >= 4) reflect += enemyCard.type === mapBoost ? 8 : 6;
+  if (enemyCard.id === "static_field" && card.id === "double_ping") reflect += 5;
   if (card.id === "decoy_packet" && enemyCard.type === "trap") { reflect = 0; log.push(`${label} Decoy Packet ile trap boşa çıkardı.`); }
 
   if (blocked) damage = 0;
-  if (boosted && card.type === "defense") heal += 2;
-  if (boosted && card.type === "trap" && reflect > 0) reflect += 2;
+  if (boosted && card.type === "defense") heal += 1;
+  if (boosted && card.type === "trap" && reflect > 0) reflect += 1;
   self.hp = Math.min(60, self.hp + heal);
   enemy.hp = Math.max(0, enemy.hp - damage);
   self.hp = Math.max(0, self.hp - reflect);
