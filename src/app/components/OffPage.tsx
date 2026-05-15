@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { BarChart3, Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
+import { BarChart3, Gamepad2, Lock, Pickaxe, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSyncFixed";
 import { CipherBreak } from "./CipherBreak";
 import { CoreRaid } from "./CoreRaid";
 import { MarketAcademy } from "./MarketAcademy";
+import { TechCoinMiner } from "./TechCoinMiner";
 
 type User = {
   id: number;
@@ -24,7 +25,7 @@ type Wallet = {
   updated_at?: string | null;
 };
 
-type GameKey = "hub" | "duel" | "cipher" | "raid" | "market";
+type GameKey = "hub" | "duel" | "cipher" | "raid" | "market" | "miner";
 
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
@@ -64,11 +65,14 @@ export function OffPage() {
         raidDesc: "Community boss event. Glitch Titan sayfayı bozuyor; görev yap, hasar ver, core'u birlikte restore et.",
         marketTitle: "Eka InvestSim",
         marketDesc: "Gerçek para ve gerçek hisse kullanmadan portföy, risk, haber etkisi ve sanal al-sat mantığını öğreten borsa simülasyonu.",
+        minerTitle: "TechCoin Miner",
+        minerDesc: "3 miner serverdan birine bağlan. Aynı anda sadece 1 server kullan, dakikada 1 Tech Coin üret, 1 saatin sonunda server otomatik boşalsın.",
         minesRemoved: "EkaMines kaldırıldı. Tech Coin sistemi puan biriktirmek için duruyor.",
         walletTitle: "Tech Coin cüzdanı",
         lifetime: "Toplam kazanılan",
         currency: "Para birimi",
         fixedRewardLabel: "Oyun ödülleri",
+        rewardRule: "Ödül kuralı",
       }
     : {
         loading: "Checking OFF access...",
@@ -93,11 +97,14 @@ export function OffPage() {
         raidDesc: "A community boss event. Glitch Titan corrupts the page; complete tasks, deal damage, and restore the core together.",
         marketTitle: "Eka InvestSim",
         marketDesc: "A stock market simulator that teaches portfolio, risk, news impact and virtual buy/sell logic without real money or real stocks.",
+        minerTitle: "TechCoin Miner",
+        minerDesc: "Connect to one of 3 miner servers. Use only 1 server at a time, earn 1 Tech Coin per minute, and automatically release the server after 1 hour.",
         minesRemoved: "EkaMines was removed. Tech Coin remains for score progression.",
         walletTitle: "Tech Coin wallet",
         lifetime: "Lifetime earned",
         currency: "Currency",
         fixedRewardLabel: "Game rewards",
+        rewardRule: "Reward rule",
       };
 
   useEffect(() => {
@@ -194,7 +201,7 @@ export function OffPage() {
             ← {copy.backHub}
           </button>
         </div>
-        {activeGame === "duel" ? <TechDuelSync /> : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : <MarketAcademy />}
+        {activeGame === "duel" ? <TechDuelSync /> : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : activeGame === "miner" ? <TechCoinMiner /> : <MarketAcademy />}
       </>
     );
   }
@@ -222,7 +229,7 @@ export function OffPage() {
         <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
           <CoinWalletCard wallet={wallet} copy={copy} locale={tr ? "tr-TR" : "en-US"} />
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
-            <p className="text-sm text-white/40">Reward rule</p>
+            <p className="text-sm text-white/40">{copy.rewardRule}</p>
             <h2 className="mt-2 flex flex-wrap items-center gap-2 text-2xl font-medium text-white">
               <span>{copy.fixedRewardLabel}:</span>
               <CoinAmount amount={50} locale={tr ? "tr-TR" : "en-US"} size="md" tone="cyan" />
@@ -233,12 +240,13 @@ export function OffPage() {
           </div>
         </section>
 
-        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("duel")} />
           <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("cipher")} />
           <GameCard icon={<Gamepad2 className="h-6 w-6" />} status={copy.available} title={copy.clashTitle} description={copy.clashDesc} accent="cyan" buttonLabel={copy.open} onClick={() => navigateTo("/core-clash")} />
           <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.available} title={copy.raidTitle} description={copy.raidDesc} accent="amber" buttonLabel={copy.open} onClick={() => setActiveGame("raid")} />
           <GameCard icon={<BarChart3 className="h-6 w-6" />} status={copy.available} title={copy.marketTitle} description={copy.marketDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("market")} />
+          <GameCard icon={<Pickaxe className="h-6 w-6" />} status={copy.available} title={copy.minerTitle} description={copy.minerDesc} accent="amber" buttonLabel={copy.open} onClick={() => setActiveGame("miner")} />
         </section>
       </div>
     </main>
