@@ -12,29 +12,38 @@ type DropItem = {
   description_en: string;
   rarity: Rarity;
   weight: number;
+  tech_coin_value: number;
+};
+
+const RARITY_VALUES: Record<Rarity, number> = {
+  common: 3,
+  rare: 8,
+  epic: 18,
+  legendary: 45,
+  glitch: 120,
 };
 
 const DROP_ITEMS: DropItem[] = [
-  { id: "broken_keycap", emoji: "⌨️", name_tr: "Kırık Klavye Tuşu", name_en: "Broken Keycap", description_tr: "Eski bir debug gecesinden kalma tuş.", description_en: "A keycap from an old debug night.", rarity: "common", weight: 90 },
-  { id: "server_screw", emoji: "🔩", name_tr: "Server Vidası", name_en: "Server Screw", description_tr: "Nereye ait olduğu bilinmeyen küçük bir vida.", description_en: "A tiny screw with an unknown origin.", rarity: "common", weight: 90 },
-  { id: "dusty_fan", emoji: "🧹", name_tr: "Tozlu Fan", name_en: "Dusty Fan", description_tr: "Çalışıyor ama biraz homurdanıyor.", description_en: "It still works, but it complains.", rarity: "common", weight: 84 },
-  { id: "old_cable", emoji: "📎", name_tr: "Eski Kablo", name_en: "Old Cable", description_tr: "Kimse ne işe yaradığını bilmiyor.", description_en: "Nobody knows what it is for.", rarity: "common", weight: 84 },
-  { id: "glitch_usb", emoji: "💾", name_tr: "Glitch USB", name_en: "Glitch USB", description_tr: "Takınca bazen dosyalar isim değiştiriyor.", description_en: "Sometimes files rename themselves when plugged in.", rarity: "rare", weight: 45 },
-  { id: "frozen_chip", emoji: "🧊", name_tr: "Frozen Chip", name_en: "Frozen Chip", description_tr: "Soğuk çalışır, sıcak bakmaz.", description_en: "Runs cold and stays distant.", rarity: "rare", weight: 42 },
-  { id: "encrypted_card", emoji: "🔐", name_tr: "Şifreli Kart", name_en: "Encrypted Card", description_tr: "Açmak için şifre değil sabır gerekiyor.", description_en: "Needs patience more than a password.", rarity: "rare", weight: 42 },
-  { id: "neon_mouse", emoji: "🖱️", name_tr: "Neon Mouse", name_en: "Neon Mouse", description_tr: "Tıklamadan önce bile parlar.", description_en: "Glows before you even click.", rarity: "rare", weight: 38 },
-  { id: "holo_disk", emoji: "💿", name_tr: "Hologram Disk", name_en: "Hologram Disk", description_tr: "İçinde silinmiş bir sürüm notu var.", description_en: "Contains a deleted release note.", rarity: "epic", weight: 20 },
-  { id: "bot_motherboard", emoji: "🧠", name_tr: "Bot Anakartı", name_en: "Bot Motherboard", description_tr: "Bir botun karar vermeden önce düşündüğü yer.", description_en: "Where a bot thinks before choosing.", rarity: "epic", weight: 18 },
-  { id: "data_crystal", emoji: "🧬", name_tr: "Veri Kristali", name_en: "Data Crystal", description_tr: "Kırılırsa loglar şarkı söylemeye başlar.", description_en: "If it breaks, logs start singing.", rarity: "epic", weight: 18 },
-  { id: "mini_firewall", emoji: "🛡️", name_tr: "Mini Firewall", name_en: "Mini Firewall", description_tr: "Küçük ama tripli bir savunma duvarı.", description_en: "Small, defensive, and dramatic.", rarity: "epic", weight: 16 },
-  { id: "gold_techcoin", emoji: "🪙", name_tr: "Altın Tech Coin", name_en: "Golden Tech Coin", description_tr: "Harcanmaz; koleksiyonda parlar.", description_en: "Not spendable; it only shines in collection.", rarity: "legendary", weight: 8 },
-  { id: "quantum_gear", emoji: "⚙️", name_tr: "Quantum Gear", name_en: "Quantum Gear", description_tr: "Döndüğünü görürsen çoktan dönmüştür.", description_en: "If you see it spin, it already did.", rarity: "legendary", weight: 7 },
-  { id: "black_terminal", emoji: "🖥️", name_tr: "Siyah Terminal", name_en: "Black Terminal", description_tr: "Sadece gece cevap verir.", description_en: "Only responds at night.", rarity: "legendary", weight: 6 },
-  { id: "eka_core", emoji: "💠", name_tr: "Eka Core", name_en: "Eka Core", description_tr: "OFF sisteminin merkezinde saklanan eski çekirdek.", description_en: "An old core hidden at the center of OFF.", rarity: "legendary", weight: 5 },
-  { id: "null_fragment", emoji: "❓", name_tr: "Null Fragment", name_en: "Null Fragment", description_tr: "Var mı yok mu, tabloya göre değişiyor.", description_en: "Exists depending on the table state.", rarity: "glitch", weight: 2 },
-  { id: "broken_reality", emoji: "🕳️", name_tr: "Bozuk Gerçeklik", name_en: "Broken Reality", description_tr: "Bakınca sayfa bir anlık kendini unutur.", description_en: "The page forgets itself for a moment.", rarity: "glitch", weight: 1.5 },
-  { id: "hidden_file", emoji: "👁️", name_tr: "Hidden File", name_en: "Hidden File", description_tr: "Görünüyor olması gizli olmadığı anlamına gelmez.", description_en: "Being visible does not mean it is not hidden.", rarity: "glitch", weight: 1.2 },
-  { id: "glitch_core", emoji: "🧿", name_tr: "Glitch Core", name_en: "Glitch Core", description_tr: "Sistemin bilinçsizce sakladığı şey.", description_en: "The thing the system hides unconsciously.", rarity: "glitch", weight: 1 },
+  { id: "broken_keycap", emoji: "⌨️", name_tr: "Kırık Klavye Tuşu", name_en: "Broken Keycap", description_tr: "Eski bir debug gecesinden kalma tuş.", description_en: "A keycap from an old debug night.", rarity: "common", weight: 90, tech_coin_value: RARITY_VALUES.common },
+  { id: "server_screw", emoji: "🔩", name_tr: "Server Vidası", name_en: "Server Screw", description_tr: "Nereye ait olduğu bilinmeyen küçük bir vida.", description_en: "A tiny screw with an unknown origin.", rarity: "common", weight: 90, tech_coin_value: RARITY_VALUES.common },
+  { id: "dusty_fan", emoji: "🧹", name_tr: "Tozlu Fan", name_en: "Dusty Fan", description_tr: "Çalışıyor ama biraz homurdanıyor.", description_en: "It still works, but it complains.", rarity: "common", weight: 84, tech_coin_value: RARITY_VALUES.common },
+  { id: "old_cable", emoji: "📎", name_tr: "Eski Kablo", name_en: "Old Cable", description_tr: "Kimse ne işe yaradığını bilmiyor.", description_en: "Nobody knows what it is for.", rarity: "common", weight: 84, tech_coin_value: RARITY_VALUES.common },
+  { id: "glitch_usb", emoji: "💾", name_tr: "Glitch USB", name_en: "Glitch USB", description_tr: "Takınca bazen dosyalar isim değiştiriyor.", description_en: "Sometimes files rename themselves when plugged in.", rarity: "rare", weight: 45, tech_coin_value: RARITY_VALUES.rare },
+  { id: "frozen_chip", emoji: "🧊", name_tr: "Frozen Chip", name_en: "Frozen Chip", description_tr: "Soğuk çalışır, sıcak bakmaz.", description_en: "Runs cold and stays distant.", rarity: "rare", weight: 42, tech_coin_value: RARITY_VALUES.rare },
+  { id: "encrypted_card", emoji: "🔐", name_tr: "Şifreli Kart", name_en: "Encrypted Card", description_tr: "Açmak için şifre değil sabır gerekiyor.", description_en: "Needs patience more than a password.", rarity: "rare", weight: 42, tech_coin_value: RARITY_VALUES.rare },
+  { id: "neon_mouse", emoji: "🖱️", name_tr: "Neon Mouse", name_en: "Neon Mouse", description_tr: "Tıklamadan önce bile parlar.", description_en: "Glows before you even click.", rarity: "rare", weight: 38, tech_coin_value: RARITY_VALUES.rare },
+  { id: "holo_disk", emoji: "💿", name_tr: "Hologram Disk", name_en: "Hologram Disk", description_tr: "İçinde silinmiş bir sürüm notu var.", description_en: "Contains a deleted release note.", rarity: "epic", weight: 20, tech_coin_value: RARITY_VALUES.epic },
+  { id: "bot_motherboard", emoji: "🧠", name_tr: "Bot Anakartı", name_en: "Bot Motherboard", description_tr: "Bir botun karar vermeden önce düşündüğü yer.", description_en: "Where a bot thinks before choosing.", rarity: "epic", weight: 18, tech_coin_value: RARITY_VALUES.epic },
+  { id: "data_crystal", emoji: "🧬", name_tr: "Veri Kristali", name_en: "Data Crystal", description_tr: "Kırılırsa loglar şarkı söylemeye başlar.", description_en: "If it breaks, logs start singing.", rarity: "epic", weight: 18, tech_coin_value: RARITY_VALUES.epic },
+  { id: "mini_firewall", emoji: "🛡️", name_tr: "Mini Firewall", name_en: "Mini Firewall", description_tr: "Küçük ama tripli bir savunma duvarı.", description_en: "Small, defensive, and dramatic.", rarity: "epic", weight: 16, tech_coin_value: RARITY_VALUES.epic },
+  { id: "gold_techcoin", emoji: "🪙", name_tr: "Altın Tech Coin", name_en: "Golden Tech Coin", description_tr: "Harcanmaz; koleksiyonda parlar.", description_en: "Not spendable; it only shines in collection.", rarity: "legendary", weight: 8, tech_coin_value: RARITY_VALUES.legendary },
+  { id: "quantum_gear", emoji: "⚙️", name_tr: "Quantum Gear", name_en: "Quantum Gear", description_tr: "Döndüğünü görürsen çoktan dönmüştür.", description_en: "If you see it spin, it already did.", rarity: "legendary", weight: 7, tech_coin_value: RARITY_VALUES.legendary },
+  { id: "black_terminal", emoji: "🖥️", name_tr: "Siyah Terminal", name_en: "Black Terminal", description_tr: "Sadece gece cevap verir.", description_en: "Only responds at night.", rarity: "legendary", weight: 6, tech_coin_value: RARITY_VALUES.legendary },
+  { id: "eka_core", emoji: "💠", name_tr: "Eka Core", name_en: "Eka Core", description_tr: "OFF sisteminin merkezinde saklanan eski çekirdek.", description_en: "An old core hidden at the center of OFF.", rarity: "legendary", weight: 5, tech_coin_value: RARITY_VALUES.legendary },
+  { id: "null_fragment", emoji: "❓", name_tr: "Null Fragment", name_en: "Null Fragment", description_tr: "Var mı yok mu, tabloya göre değişiyor.", description_en: "Exists depending on the table state.", rarity: "glitch", weight: 2, tech_coin_value: RARITY_VALUES.glitch },
+  { id: "broken_reality", emoji: "🕳️", name_tr: "Bozuk Gerçeklik", name_en: "Broken Reality", description_tr: "Bakınca sayfa bir anlık kendini unutur.", description_en: "The page forgets itself for a moment.", rarity: "glitch", weight: 1.5, tech_coin_value: RARITY_VALUES.glitch },
+  { id: "hidden_file", emoji: "👁️", name_tr: "Hidden File", name_en: "Hidden File", description_tr: "Görünüyor olması gizli olmadığı anlamına gelmez.", description_en: "Being visible does not mean it is not hidden.", rarity: "glitch", weight: 1.2, tech_coin_value: RARITY_VALUES.glitch },
+  { id: "glitch_core", emoji: "🧿", name_tr: "Glitch Core", name_en: "Glitch Core", description_tr: "Sistemin bilinçsizce sakladığı şey.", description_en: "The thing the system hides unconsciously.", rarity: "glitch", weight: 1, tech_coin_value: RARITY_VALUES.glitch },
 ];
 
 export async function onRequestGet(context: any) {
@@ -60,13 +69,8 @@ export async function onRequestPost(context: any) {
     const body = await context.request.json().catch(() => ({}));
     const action = String(body?.action || "open");
 
-    if (action === "claim_daily") {
-      return Response.json(await claimDailyBox(context, auth.user.id));
-    }
-
-    if (action === "open") {
-      return Response.json(await openBox(context, auth.user.id));
-    }
+    if (action === "claim_daily") return Response.json(await claimDailyBox(context, auth.user.id));
+    if (action === "open") return Response.json(await openBox(context, auth.user.id));
 
     return Response.json({ error: "Geçersiz DropTech işlemi." }, { status: 400 });
   } catch (error) {
@@ -126,8 +130,10 @@ async function buildState(context: any, userId: number) {
   const recentRows = await context.env.DB.prepare(`SELECT item_id, rarity, created_at FROM droptech_openings WHERE user_id = ? ORDER BY id DESC LIMIT 12`).bind(userId).all();
 
   const today = new Date().toISOString().slice(0, 10);
-  const ownedCount = Number((inventoryRows?.results || []).length || 0);
-  const totalQuantity = (inventoryRows?.results || []).reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+  const inventory = (inventoryRows?.results || []).map(enrichInventoryItem);
+  const ownedCount = Number(inventory.length || 0);
+  const totalQuantity = inventory.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+  const collectionValue = inventory.reduce((sum: number, item: any) => sum + Number(item.quantity || 0) * Number(item.tech_coin_value || 0), 0);
 
   return {
     box_count: Number(box?.box_count || 0),
@@ -137,10 +143,28 @@ async function buildState(context: any, userId: number) {
     collection_total: DROP_ITEMS.length,
     owned_count: ownedCount,
     total_quantity: totalQuantity,
-    inventory: inventoryRows?.results || [],
+    collection_value: collectionValue,
+    inventory,
     recent: recentRows?.results || [],
     items: DROP_ITEMS,
     odds: rarityOdds(),
+    value_rules: {
+      mode: "collection_value_only",
+      payout_on_open: false,
+      trade_enabled: false,
+      market_enabled: false,
+      rarity_values: RARITY_VALUES,
+    },
+  };
+}
+
+function enrichInventoryItem(row: any) {
+  const item = DROP_ITEMS.find((entry) => entry.id === row.item_id);
+  const value = item?.tech_coin_value || RARITY_VALUES[row.rarity as Rarity] || 0;
+  return {
+    ...row,
+    tech_coin_value: value,
+    total_tech_coin_value: Number(row.quantity || 0) * value,
   };
 }
 
