@@ -1,5 +1,6 @@
 const ABSENCE_GRACE_SECONDS = 4;
 const FORFEIT_SECONDS = 30;
+const BOT_EMAIL_MARKER = ".bot@ekatech.local";
 
 const TABLES = new Set(["duel_lobbies", "cipher_lobbies", "core_clash_lobbies"]);
 
@@ -24,6 +25,8 @@ export async function syncGamePresence(context: any, game: string, lobbyTable: s
 
   await resumeIfReturning(context, game, lobbyId, userId);
   await markActive(context, game, lobbyId, userId);
+  await markBotParticipantsActive(context, game, lobby);
+  await clearBotAbsences(context, game, lobby);
   await markStaleOpponentAbsent(context, game, lobby);
   await completeExpiredAbsence(context, game, lobbyTable, lobby);
 
@@ -42,6 +45,11 @@ export async function markGameLeft(context: any, game: string, lobbyTable: strin
   const lobby = await getLobby(context, lobbyTable, lobbyId);
   const empty = baseResult(game, lobbyId);
   if (!lobby || lobby.status !== "in_progress" || !isParticipant(lobby, userId)) return empty;
+
+  if (await isBotUserId(context, userId)) {
+    await markActive(context, game, lobbyId, userId);
+    return await getPauseState(context, game, lobby, getOpponentId(lobby, userId) || userId);
+  }
 
   const deadline = new Date(Date.now() + FORFEIT_SECONDS * 1000).toISOString();
   await context.env.DB.prepare(`
@@ -64,6 +72,8 @@ export async function peekGamePresence(context: any, game: string, lobbyTable: s
   const empty = baseResult(game, lobbyId);
   if (!lobby || !isParticipant(lobby, userId)) return empty;
 
+  await markBotParticipantsActive(context, game, lobby);
+  await clearBotAbsences(context, game, lobby);
   await completeExpiredAbsence(context, game, lobbyTable, lobby);
   const latestLobby = await getLobby(context, lobbyTable, lobbyId);
   if (!latestLobby || latestLobby.status !== "in_progress") return { ...empty, winner_user_id: latestLobby?.winner_user_id ?? null };
@@ -128,11 +138,35 @@ async function markActive(context: any, game: string, lobbyId: number, userId: n
   `).bind(game, lobbyId, userId).run();
 }
 
+async function markBotParticipantsActive(context: any, game: string, lobby: any) {
+  const ids = [Number(lobby.creator_user_id), Number(lobby.opponent_user_id)].filter(Boolean);
+  for (const id of ids) {
+    if (await isBotUserId(context, id)) {
+      await markActive(context, game, Number(lobby.id), id);
+    }
+  }
+}
+
+async function clearBotAbsences(context: any, game: string, lobby: any) {
+  const ids = [Number(lobby.creator_user_id), Number(lobby.opponent_user_id)].filter(Boolean);
+  for (const id of ids) {
+    if (await isBotUserId(context, id)) {
+      await context.env.DB.prepare("DELETE FROM game_presence WHERE game = ? AND lobby_id = ? AND user_id = ? AND state = 'absent'")
+        .bind(game, lobby.id, id).run();
+    }
+  }
+}
+
 async function markStaleOpponentAbsent(context: any, game: string, lobby: any) {
   const ids = [Number(lobby.creator_user_id), Number(lobby.opponent_user_id)].filter(Boolean);
   const staleBeforeMs = Date.now() - ABSENCE_GRACE_SECONDS * 1000;
 
   for (const id of ids) {
+    if (await isBotUserId(context, id)) {
+      await markActive(context, game, Number(lobby.id), id);
+      continue;
+    }
+
     const row = await context.env.DB.prepare("SELECT * FROM game_presence WHERE game = ? AND lobby_id = ? AND user_id = ?")
       .bind(game, lobby.id, id).first();
 
@@ -158,6 +192,12 @@ async function completeExpiredAbsence(context: any, game: string, lobbyTable: st
     .bind(game, lobby.id).all();
 
   for (const row of rows?.results || []) {
+    if (await isBotUserId(context, Number(row.user_id))) {
+      await context.env.DB.prepare("DELETE FROM game_presence WHERE game = ? AND lobby_id = ? AND user_id = ?")
+        .bind(game, lobby.id, row.user_id).run();
+      continue;
+    }
+
     const deadlineMs = parseTime(row.leave_deadline_at);
     if (!deadlineMs || Date.now() < deadlineMs) continue;
 
@@ -175,9 +215,20 @@ async function completeExpiredAbsence(context: any, game: string, lobbyTable: st
 }
 
 async function getPauseState(context: any, game: string, lobby: any, viewerUserId: number): Promise<PresenceResult> {
-  const rows = await context.env.DB.prepare("SELECT * FROM game_presence WHERE game = ? AND lobby_id = ? AND state = 'absent' ORDER BY updated_at ASC LIMIT 1")
+  const rows = await context.env.DB.prepare("SELECT * FROM game_presence WHERE game = ? AND lobby_id = ? AND state = 'absent' ORDER BY updated_at ASC")
     .bind(game, lobby.id).all();
-  const absent = rows?.results?.[0];
+
+  let absent: any = null;
+  for (const row of rows?.results || []) {
+    if (await isBotUserId(context, Number(row.user_id))) {
+      await context.env.DB.prepare("DELETE FROM game_presence WHERE game = ? AND lobby_id = ? AND user_id = ?")
+        .bind(game, lobby.id, row.user_id).run();
+      continue;
+    }
+    absent = row;
+    break;
+  }
+
   if (!absent) return baseResult(game, Number(lobby.id));
 
   const deadlineMs = parseTime(absent.leave_deadline_at);
@@ -210,6 +261,16 @@ function getOpponentId(lobby: any, userId: number) {
   if (Number(lobby.creator_user_id) === Number(userId)) return Number(lobby.opponent_user_id || 0) || null;
   if (Number(lobby.opponent_user_id) === Number(userId)) return Number(lobby.creator_user_id || 0) || null;
   return null;
+}
+
+async function isBotUserId(context: any, userId: number) {
+  if (!userId) return false;
+  try {
+    const user = await context.env.DB.prepare("SELECT name, email FROM users WHERE id = ?").bind(userId).first();
+    return String(user?.email || "").toLowerCase().includes(BOT_EMAIL_MARKER) || String(user?.name || "").toUpperCase().includes("BOT");
+  } catch {
+    return false;
+  }
 }
 
 function parseTime(value?: string | null) {
