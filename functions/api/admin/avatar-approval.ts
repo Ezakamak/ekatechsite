@@ -8,24 +8,42 @@ export async function onRequestGet(context: any) {
   }
 
   try {
+    const url = new URL(context.request.url);
+    const type = String(url.searchParams.get("type") || "admin").toLowerCase();
+    const safeType = ["admin", "user", "all"].includes(type) ? type : "admin";
+
+    const roleWhere =
+      safeType === "admin"
+        ? "AND COALESCE(role, 'client') = 'admin'"
+        : safeType === "user"
+          ? "AND COALESCE(role, 'client') NOT IN ('admin', 'owner', 'blocked')"
+          : "AND COALESCE(role, 'client') != 'blocked'";
+
     const result = await context.env.DB
       .prepare(`
-        SELECT id, name, email, avatar_url, COALESCE(avatar_approved, 0) AS avatar_approved, created_at
+        SELECT
+          id,
+          name,
+          email,
+          COALESCE(role, 'client') AS role,
+          avatar_url,
+          COALESCE(avatar_approved, 0) AS avatar_approved,
+          created_at
         FROM users
         WHERE
-          role = 'admin'
-          AND lower(email) != ?
+          lower(email) != ?
+          ${roleWhere}
           AND COALESCE(avatar_url, '') != ''
           AND COALESCE(avatar_approved, 0) = 0
         ORDER BY id DESC
-        LIMIT 100
+        LIMIT 150
       `)
       .bind(OWNER_EMAIL)
       .all();
 
-    return Response.json({ admins: result?.results || [] });
+    return Response.json({ avatars: result?.results || [], admins: result?.results || [] });
   } catch (error) {
-    return Response.json({ error: "Admin profil fotoğrafları alınamadı. avatar_approved kolonu olduğundan emin ol." }, { status: 500 });
+    return Response.json({ error: "Profil fotoğrafları alınamadı. avatar_url ve avatar_approved kolonlarını kontrol et." }, { status: 500 });
   }
 }
 
@@ -42,7 +60,7 @@ export async function onRequestPatch(context: any) {
     const action = String(body?.action || "").trim();
 
     if (!userId) {
-      return Response.json({ error: "Admin ID gerekli." }, { status: 400 });
+      return Response.json({ error: "Kullanıcı ID gerekli." }, { status: 400 });
     }
 
     if (!["approve", "reject"].includes(action)) {
@@ -51,7 +69,7 @@ export async function onRequestPatch(context: any) {
 
     const target = await context.env.DB
       .prepare(`
-        SELECT id, name, email, role, avatar_url
+        SELECT id, name, email, COALESCE(role, 'client') AS role, avatar_url
         FROM users
         WHERE id = ?
       `)
@@ -59,20 +77,22 @@ export async function onRequestPatch(context: any) {
       .first();
 
     if (!target) {
-      return Response.json({ error: "Admin bulunamadı." }, { status: 404 });
+      return Response.json({ error: "Kullanıcı bulunamadı." }, { status: 404 });
     }
 
     if (String(target.email).toLowerCase() === OWNER_EMAIL) {
       return Response.json({ error: "Owner hesabı zaten otomatik onaylıdır." }, { status: 403 });
     }
 
-    if (target.role !== "admin") {
-      return Response.json({ error: "Sadece admin hesaplarının profil fotoğrafı onaylanabilir veya reddedilebilir." }, { status: 400 });
+    if (target.role === "blocked") {
+      return Response.json({ error: "Engellenmiş hesabın fotoğrafı onaylanamaz." }, { status: 400 });
     }
+
+    const isAdmin = target.role === "admin";
 
     if (action === "approve") {
       if (!target.avatar_url) {
-        return Response.json({ error: "Profil fotoğrafı yüklemeyen admin onaylanamaz." }, { status: 400 });
+        return Response.json({ error: "Profil fotoğrafı yüklemeyen kullanıcı onaylanamaz." }, { status: 400 });
       }
 
       await context.env.DB
@@ -82,16 +102,24 @@ export async function onRequestPatch(context: any) {
 
       await writeAuditLog(context, {
         actorUserId: owner.user.id,
-        action: "admin_avatar_approved",
+        action: isAdmin ? "admin_avatar_approved" : "user_avatar_approved",
         targetType: "user",
         targetId: userId,
         targetLabel: `${target.name} <${target.email}>`,
-        details: "Owner admin profil fotoğrafını onayladı. Kayıt onay listesinden kaldırıldı.",
+        details: isAdmin
+          ? "Owner admin profil fotoğrafını onayladı. Admin sipariş yönetebilir."
+          : "Owner kullanıcı profil fotoğrafını onayladı. Fotoğraf herkese açık alanlarda gösterilebilir.",
       });
 
-      await notify(context, userId, "Profil fotoğrafın onaylandı", "Artık admin panelinde sipariş yönetebilirsin.", "/admin");
+      await notify(
+        context,
+        userId,
+        "Profil fotoğrafın onaylandı",
+        isAdmin ? "Artık admin panelinde sipariş yönetebilirsin." : "Profil fotoğrafın onaylandı ve görünür hale geldi.",
+        isAdmin ? "/admin" : "/account"
+      );
 
-      return Response.json({ success: true, message: "Admin profil fotoğrafı onaylandı ve onay listesinden kaldırıldı." });
+      return Response.json({ success: true, message: isAdmin ? "Admin profil fotoğrafı onaylandı." : "Kullanıcı profil fotoğrafı onaylandı." });
     }
 
     await context.env.DB
@@ -101,16 +129,24 @@ export async function onRequestPatch(context: any) {
 
     await writeAuditLog(context, {
       actorUserId: owner.user.id,
-      action: "admin_avatar_rejected",
+      action: isAdmin ? "admin_avatar_rejected" : "user_avatar_rejected",
       targetType: "user",
       targetId: userId,
       targetLabel: `${target.name} <${target.email}>`,
-      details: "Owner admin profil fotoğrafını reddetti. Fotoğraf silindi ve kayıt onay listesinden kaldırıldı.",
+      details: isAdmin
+        ? "Owner admin profil fotoğrafını reddetti. Fotoğraf silindi."
+        : "Owner kullanıcı profil fotoğrafını reddetti. Fotoğraf silindi.",
     });
 
-    await notify(context, userId, "Profil fotoğrafın reddedildi", "Sipariş yönetebilmek için yeni bir profil fotoğrafı yüklemelisin.", "/account");
+    await notify(
+      context,
+      userId,
+      "Profil fotoğrafın reddedildi",
+      isAdmin ? "Sipariş yönetebilmek için yeni bir profil fotoğrafı yüklemelisin." : "Yeni bir profil fotoğrafı yükleyebilirsin.",
+      "/account"
+    );
 
-    return Response.json({ success: true, message: "Admin profil fotoğrafı reddedildi ve onay listesinden kaldırıldı." });
+    return Response.json({ success: true, message: isAdmin ? "Admin profil fotoğrafı reddedildi." : "Kullanıcı profil fotoğrafı reddedildi." });
   } catch (error) {
     return Response.json({ error: "Profil fotoğrafı onayı güncellenemedi." }, { status: 500 });
   }
