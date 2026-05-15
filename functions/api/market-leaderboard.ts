@@ -10,6 +10,11 @@ type LeaderboardRow = {
   investedValue: number;
   holdingsCount: number;
   tradesCount: number;
+  marketProfit: number;
+  profitPercent: number;
+  buyVolume: number;
+  sellVolume: number;
+  currentPositionValue: number;
 };
 
 export async function onRequestGet(context: any) {
@@ -38,12 +43,7 @@ async function buildLeaderboard(context: any): Promise<LeaderboardRow[]> {
   const users = (await db.prepare(`
     SELECT DISTINCT users.id, users.name, users.avatar_url
     FROM users
-    LEFT JOIN coin_wallets ON coin_wallets.user_id = users.id
-    LEFT JOIN market_holdings ON market_holdings.user_id = users.id
-    LEFT JOIN market_transactions ON market_transactions.user_id = users.id
-    WHERE coin_wallets.user_id IS NOT NULL
-       OR market_holdings.user_id IS NOT NULL
-       OR market_transactions.user_id IS NOT NULL
+    INNER JOIN market_transactions ON market_transactions.user_id = users.id
     LIMIT 50
   `).all())?.results || [];
 
@@ -54,26 +54,44 @@ async function buildLeaderboard(context: any): Promise<LeaderboardRow[]> {
   for (const user of users as any[]) {
     const wallet: any = await db.prepare(`SELECT balance FROM coin_wallets WHERE user_id = ?`).bind(user.id).first();
     const holdings = (await db.prepare(`SELECT symbol, shares FROM market_holdings WHERE user_id = ? AND shares > 0`).bind(user.id).all())?.results || [];
-    const trades: any = await db.prepare(`SELECT COUNT(*) AS count FROM market_transactions WHERE user_id = ?`).bind(user.id).first();
-    const investedValue = (holdings as any[]).reduce((sum, holding) => {
+    const trades = (await db.prepare(`SELECT side, total FROM market_transactions WHERE user_id = ?`).bind(user.id).all())?.results || [];
+
+    const currentPositionValue = (holdings as any[]).reduce((sum, holding) => {
       return sum + Number(holding.shares || 0) * Number(prices[holding.symbol] || 0);
     }, 0);
+
+    const buyVolume = (trades as any[])
+      .filter((trade) => String(trade.side).toLowerCase() === "buy")
+      .reduce((sum, trade) => sum + Number(trade.total || 0), 0);
+
+    const sellVolume = (trades as any[])
+      .filter((trade) => String(trade.side).toLowerCase() === "sell")
+      .reduce((sum, trade) => sum + Number(trade.total || 0), 0);
+
+    const rawProfit = buyVolume > 0 ? currentPositionValue + sellVolume - buyVolume : 0;
+    const marketProfit = Math.round(rawProfit);
+    const profitPercent = buyVolume > 0 ? (rawProfit / buyVolume) * 100 : 0;
     const walletBalance = Number(wallet?.balance || 0);
 
     rows.push({
       userId: Number(user.id),
       name: String(user.name || "OFF Player"),
       avatar_url: user.avatar_url || null,
-      totalValue: Math.round(walletBalance + investedValue),
+      totalValue: marketProfit,
       walletBalance: Math.round(walletBalance),
-      investedValue: Math.round(investedValue),
+      investedValue: Math.round(currentPositionValue),
       holdingsCount: (holdings as any[]).length,
-      tradesCount: Number(trades?.count || 0),
+      tradesCount: (trades as any[]).length,
+      marketProfit,
+      profitPercent: Number(profitPercent.toFixed(2)),
+      buyVolume: Math.round(buyVolume),
+      sellVolume: Math.round(sellVolume),
+      currentPositionValue: Math.round(currentPositionValue),
     });
   }
 
   return rows
-    .sort((a, b) => b.totalValue - a.totalValue || b.tradesCount - a.tradesCount)
+    .sort((a, b) => b.marketProfit - a.marketProfit || b.profitPercent - a.profitPercent || b.tradesCount - a.tradesCount)
     .slice(0, 10)
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
