@@ -23,6 +23,7 @@ import { BackToTop } from "./components/BackToTop";
 import { CookieConsent } from "./components/CookieConsent";
 import { AdminPanel } from "./components/AdminPanel";
 import { AdminOffCredits } from "./components/AdminOffCredits";
+import { AdminUserActivity } from "./components/AdminUserActivity";
 import { AdminApprovalCenter } from "./components/AdminApprovalCenter";
 import { AdminStockSubmissions } from "./components/AdminStockSubmissions";
 import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
@@ -154,6 +155,7 @@ export default function App() {
             <div className="bg-black px-4 pb-24 sm:px-6">
               <div className="mx-auto max-w-7xl space-y-6">
                 <AdminOffCredits />
+                <AdminUserActivity />
                 <AdminApprovalCenter />
                 <AdminStockSubmissions />
                 <MaintenancePanel />
