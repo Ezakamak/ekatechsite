@@ -1,0 +1,183 @@
+const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+const OFF_ROLES = ["off", "admin", "owner"];
+
+type Rarity = "common" | "rare" | "epic" | "legendary" | "glitch";
+
+type DropItem = {
+  id: string;
+  emoji: string;
+  name_tr: string;
+  name_en: string;
+  description_tr: string;
+  description_en: string;
+  rarity: Rarity;
+  weight: number;
+};
+
+const DROP_ITEMS: DropItem[] = [
+  { id: "broken_keycap", emoji: "⌨️", name_tr: "Kırık Klavye Tuşu", name_en: "Broken Keycap", description_tr: "Eski bir debug gecesinden kalma tuş.", description_en: "A keycap from an old debug night.", rarity: "common", weight: 90 },
+  { id: "server_screw", emoji: "🔩", name_tr: "Server Vidası", name_en: "Server Screw", description_tr: "Nereye ait olduğu bilinmeyen küçük bir vida.", description_en: "A tiny screw with an unknown origin.", rarity: "common", weight: 90 },
+  { id: "dusty_fan", emoji: "🧹", name_tr: "Tozlu Fan", name_en: "Dusty Fan", description_tr: "Çalışıyor ama biraz homurdanıyor.", description_en: "It still works, but it complains.", rarity: "common", weight: 84 },
+  { id: "old_cable", emoji: "📎", name_tr: "Eski Kablo", name_en: "Old Cable", description_tr: "Kimse ne işe yaradığını bilmiyor.", description_en: "Nobody knows what it is for.", rarity: "common", weight: 84 },
+  { id: "glitch_usb", emoji: "💾", name_tr: "Glitch USB", name_en: "Glitch USB", description_tr: "Takınca bazen dosyalar isim değiştiriyor.", description_en: "Sometimes files rename themselves when plugged in.", rarity: "rare", weight: 45 },
+  { id: "frozen_chip", emoji: "🧊", name_tr: "Frozen Chip", name_en: "Frozen Chip", description_tr: "Soğuk çalışır, sıcak bakmaz.", description_en: "Runs cold and stays distant.", rarity: "rare", weight: 42 },
+  { id: "encrypted_card", emoji: "🔐", name_tr: "Şifreli Kart", name_en: "Encrypted Card", description_tr: "Açmak için şifre değil sabır gerekiyor.", description_en: "Needs patience more than a password.", rarity: "rare", weight: 42 },
+  { id: "neon_mouse", emoji: "🖱️", name_tr: "Neon Mouse", name_en: "Neon Mouse", description_tr: "Tıklamadan önce bile parlar.", description_en: "Glows before you even click.", rarity: "rare", weight: 38 },
+  { id: "holo_disk", emoji: "💿", name_tr: "Hologram Disk", name_en: "Hologram Disk", description_tr: "İçinde silinmiş bir sürüm notu var.", description_en: "Contains a deleted release note.", rarity: "epic", weight: 20 },
+  { id: "bot_motherboard", emoji: "🧠", name_tr: "Bot Anakartı", name_en: "Bot Motherboard", description_tr: "Bir botun karar vermeden önce düşündüğü yer.", description_en: "Where a bot thinks before choosing.", rarity: "epic", weight: 18 },
+  { id: "data_crystal", emoji: "🧬", name_tr: "Veri Kristali", name_en: "Data Crystal", description_tr: "Kırılırsa loglar şarkı söylemeye başlar.", description_en: "If it breaks, logs start singing.", rarity: "epic", weight: 18 },
+  { id: "mini_firewall", emoji: "🛡️", name_tr: "Mini Firewall", name_en: "Mini Firewall", description_tr: "Küçük ama tripli bir savunma duvarı.", description_en: "Small, defensive, and dramatic.", rarity: "epic", weight: 16 },
+  { id: "gold_techcoin", emoji: "🪙", name_tr: "Altın Tech Coin", name_en: "Golden Tech Coin", description_tr: "Harcanmaz; koleksiyonda parlar.", description_en: "Not spendable; it only shines in collection.", rarity: "legendary", weight: 8 },
+  { id: "quantum_gear", emoji: "⚙️", name_tr: "Quantum Gear", name_en: "Quantum Gear", description_tr: "Döndüğünü görürsen çoktan dönmüştür.", description_en: "If you see it spin, it already did.", rarity: "legendary", weight: 7 },
+  { id: "black_terminal", emoji: "🖥️", name_tr: "Siyah Terminal", name_en: "Black Terminal", description_tr: "Sadece gece cevap verir.", description_en: "Only responds at night.", rarity: "legendary", weight: 6 },
+  { id: "eka_core", emoji: "💠", name_tr: "Eka Core", name_en: "Eka Core", description_tr: "OFF sisteminin merkezinde saklanan eski çekirdek.", description_en: "An old core hidden at the center of OFF.", rarity: "legendary", weight: 5 },
+  { id: "null_fragment", emoji: "❓", name_tr: "Null Fragment", name_en: "Null Fragment", description_tr: "Var mı yok mu, tabloya göre değişiyor.", description_en: "Exists depending on the table state.", rarity: "glitch", weight: 2 },
+  { id: "broken_reality", emoji: "🕳️", name_tr: "Bozuk Gerçeklik", name_en: "Broken Reality", description_tr: "Bakınca sayfa bir anlık kendini unutur.", description_en: "The page forgets itself for a moment.", rarity: "glitch", weight: 1.5 },
+  { id: "hidden_file", emoji: "👁️", name_tr: "Hidden File", name_en: "Hidden File", description_tr: "Görünüyor olması gizli olmadığı anlamına gelmez.", description_en: "Being visible does not mean it is not hidden.", rarity: "glitch", weight: 1.2 },
+  { id: "glitch_core", emoji: "🧿", name_tr: "Glitch Core", name_en: "Glitch Core", description_tr: "Sistemin bilinçsizce sakladığı şey.", description_en: "The thing the system hides unconsciously.", rarity: "glitch", weight: 1 },
+];
+
+export async function onRequestGet(context: any) {
+  const auth = await requireOffUser(context);
+  if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
+
+  try {
+    await ensureTables(context);
+    await ensureUserBoxRow(context, auth.user.id);
+    return Response.json(await buildState(context, auth.user.id));
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "DropTech verisi alınamadı." }, { status: 500 });
+  }
+}
+
+export async function onRequestPost(context: any) {
+  const auth = await requireOffUser(context);
+  if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
+
+  try {
+    await ensureTables(context);
+    await ensureUserBoxRow(context, auth.user.id);
+    const body = await context.request.json().catch(() => ({}));
+    const action = String(body?.action || "open");
+
+    if (action === "claim_daily") {
+      return Response.json(await claimDailyBox(context, auth.user.id));
+    }
+
+    if (action === "open") {
+      return Response.json(await openBox(context, auth.user.id));
+    }
+
+    return Response.json({ error: "Geçersiz DropTech işlemi." }, { status: 400 });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "DropTech işlemi tamamlanamadı." }, { status: 500 });
+  }
+}
+
+async function ensureTables(context: any) {
+  const db = context.env.DB;
+  await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_boxes (user_id INTEGER PRIMARY KEY, box_count INTEGER NOT NULL DEFAULT 0, lifetime_opened INTEGER NOT NULL DEFAULT 0, last_daily_claim TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_inventory (user_id INTEGER NOT NULL, item_id TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, rarity TEXT NOT NULL, emoji TEXT NOT NULL, name_tr TEXT NOT NULL, name_en TEXT NOT NULL, description_tr TEXT NOT NULL, description_en TEXT NOT NULL, first_found_at TEXT DEFAULT CURRENT_TIMESTAMP, last_found_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, item_id))`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_openings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, item_id TEXT NOT NULL, rarity TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+}
+
+async function ensureUserBoxRow(context: any, userId: number) {
+  await context.env.DB.prepare(`INSERT OR IGNORE INTO droptech_boxes (user_id, box_count, lifetime_opened) VALUES (?, 0, 0)`).bind(userId).run();
+}
+
+async function claimDailyBox(context: any, userId: number) {
+  const today = new Date().toISOString().slice(0, 10);
+  const row: any = await context.env.DB.prepare(`SELECT last_daily_claim FROM droptech_boxes WHERE user_id = ?`).bind(userId).first();
+  if (row?.last_daily_claim === today) {
+    return { ...await buildState(context, userId), claimed: false, message: "Bugünkü DropTech kutusu zaten alındı." };
+  }
+
+  await context.env.DB.prepare(`UPDATE droptech_boxes SET box_count = box_count + 1, last_daily_claim = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).bind(today, userId).run();
+  return { ...await buildState(context, userId), claimed: true, message: "Günlük DropTech kutusu alındı." };
+}
+
+async function openBox(context: any, userId: number) {
+  const box: any = await context.env.DB.prepare(`SELECT box_count FROM droptech_boxes WHERE user_id = ?`).bind(userId).first();
+  if (Number(box?.box_count || 0) <= 0) throw new Error("Açacak DropTech kutun yok. Günlük kutunu alabilirsin.");
+
+  const item = pickDropItem();
+  await context.env.DB.prepare(`UPDATE droptech_boxes SET box_count = box_count - 1, lifetime_opened = lifetime_opened + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND box_count > 0`).bind(userId).run();
+  await context.env.DB.prepare(`
+    INSERT INTO droptech_inventory (user_id, item_id, quantity, rarity, emoji, name_tr, name_en, description_tr, description_en)
+    VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, item_id) DO UPDATE SET
+      quantity = quantity + 1,
+      rarity = excluded.rarity,
+      emoji = excluded.emoji,
+      name_tr = excluded.name_tr,
+      name_en = excluded.name_en,
+      description_tr = excluded.description_tr,
+      description_en = excluded.description_en,
+      last_found_at = CURRENT_TIMESTAMP
+  `).bind(userId, item.id, item.rarity, item.emoji, item.name_tr, item.name_en, item.description_tr, item.description_en).run();
+  await context.env.DB.prepare(`INSERT INTO droptech_openings (user_id, item_id, rarity) VALUES (?, ?, ?)`).bind(userId, item.id, item.rarity).run();
+
+  return { ...await buildState(context, userId), won: item };
+}
+
+async function buildState(context: any, userId: number) {
+  const box: any = await context.env.DB.prepare(`SELECT box_count, lifetime_opened, last_daily_claim, updated_at FROM droptech_boxes WHERE user_id = ?`).bind(userId).first();
+  const inventoryRows = await context.env.DB.prepare(`SELECT * FROM droptech_inventory WHERE user_id = ? ORDER BY CASE rarity WHEN 'glitch' THEN 5 WHEN 'legendary' THEN 4 WHEN 'epic' THEN 3 WHEN 'rare' THEN 2 ELSE 1 END DESC, last_found_at DESC`).bind(userId).all();
+  const recentRows = await context.env.DB.prepare(`SELECT item_id, rarity, created_at FROM droptech_openings WHERE user_id = ? ORDER BY id DESC LIMIT 12`).bind(userId).all();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const ownedCount = Number((inventoryRows?.results || []).length || 0);
+  const totalQuantity = (inventoryRows?.results || []).reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+
+  return {
+    box_count: Number(box?.box_count || 0),
+    lifetime_opened: Number(box?.lifetime_opened || 0),
+    last_daily_claim: box?.last_daily_claim || null,
+    can_claim_daily: box?.last_daily_claim !== today,
+    collection_total: DROP_ITEMS.length,
+    owned_count: ownedCount,
+    total_quantity: totalQuantity,
+    inventory: inventoryRows?.results || [],
+    recent: recentRows?.results || [],
+    items: DROP_ITEMS,
+    odds: rarityOdds(),
+  };
+}
+
+function pickDropItem() {
+  const total = DROP_ITEMS.reduce((sum, item) => sum + item.weight, 0);
+  let roll = Math.random() * total;
+  for (const item of DROP_ITEMS) {
+    roll -= item.weight;
+    if (roll <= 0) return item;
+  }
+  return DROP_ITEMS[0];
+}
+
+function rarityOdds() {
+  const total = DROP_ITEMS.reduce((sum, item) => sum + item.weight, 0);
+  const buckets: Record<Rarity, number> = { common: 0, rare: 0, epic: 0, legendary: 0, glitch: 0 };
+  for (const item of DROP_ITEMS) buckets[item.rarity] += item.weight;
+  return Object.fromEntries(Object.entries(buckets).map(([rarity, weight]) => [rarity, Number(((weight / total) * 100).toFixed(2))]));
+}
+
+async function requireOffUser(context: any) {
+  const token = getCookie(context.request.headers.get("Cookie") || "", "session");
+  if (!token) return { ok: false, status: 401, error: "Giriş yapman gerekiyor." };
+
+  const user = await context.env.DB.prepare(`
+    SELECT users.id, users.name, users.email, users.avatar_url,
+      CASE WHEN lower(users.email) = ? THEN 'owner' ELSE COALESCE(users.role, 'client') END AS role
+    FROM sessions JOIN users ON sessions.user_id = users.id
+    WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
+  `).bind(OWNER_EMAIL, token).first();
+
+  if (!user) return { ok: false, status: 401, error: "Oturum geçersiz." };
+  if (user.role === "blocked") return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
+  if (!OFF_ROLES.includes(String(user.role))) return { ok: false, status: 403, error: "OFF erişimi gerekiyor." };
+  return { ok: true, user };
+}
+
+function getCookie(cookieHeader: string, name: string) {
+  return cookieHeader.split("; ").find((row) => row.startsWith(`${name}=`))?.split("=")[1];
+}
