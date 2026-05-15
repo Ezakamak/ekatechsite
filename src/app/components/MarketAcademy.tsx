@@ -18,6 +18,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 
 type Stock = {
@@ -45,6 +46,13 @@ type NewsItem = {
   createdAt?: string;
 };
 
+type RewardItem = {
+  key: string;
+  amount: number;
+  titleTr: string;
+  titleEn: string;
+};
+
 type MarketState = {
   mode?: string;
   day: number;
@@ -53,14 +61,19 @@ type MarketState = {
   stocks: Stock[];
   history: Record<string, number[]>;
   news: NewsItem[];
+  rewards?: RewardItem[];
+  techCoin?: {
+    balance: number;
+    lifetime_earned: number;
+  };
 };
 
-const STARTING_CASH = 100000;
+const STARTING_TECH_COIN = 100000;
 
 const FALLBACK_STATE: MarketState = {
   mode: "offline-preview",
   day: 1,
-  cash: STARTING_CASH,
+  cash: STARTING_TECH_COIN,
   holdings: {},
   history: {
     EKA: [124],
@@ -71,6 +84,8 @@ const FALLBACK_STATE: MarketState = {
     LUNA: [67],
   },
   news: [],
+  rewards: [],
+  techCoin: { balance: 0, lifetime_earned: 0 },
   stocks: [
     { symbol: "EKA", name: "EKA Yazılım", sector: "Teknoloji", descriptionTr: "Bulut yazılım ve otomasyon çözümleri üreten kurgu şirket.", descriptionEn: "A fictional cloud software and automation company.", price: 124, change: 0, volatility: 0.055, risk: "medium" },
     { symbol: "NOVA", name: "NOVA Enerji", sector: "Enerji", descriptionTr: "Yenilenebilir enerji projelerine odaklanan kurgu şirket.", descriptionEn: "A fictional company focused on renewable energy projects.", price: 88, change: 0, volatility: 0.07, risk: "high" },
@@ -81,7 +96,7 @@ const FALLBACK_STATE: MarketState = {
   ],
 };
 
-function formatMoney(value: number, locale: string) {
+function formatNumber(value: number, locale: string) {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(value || 0));
 }
 
@@ -117,25 +132,26 @@ export function MarketAcademy() {
   const locale = tr ? "tr-TR" : "en-US";
   const copy = tr
     ? {
-        eyebrow: "Online SQL tabanlı eğitim borsası",
+        eyebrow: "Tech Coin tabanlı eğitim borsası",
         title: "EkaTrade Academy",
-        subtitle: "Kurgu piyasa artık cihazda değil, D1 veritabanında tutulur. Her hesap kendi sanal portföyünü görür; fiyatlar ortak piyasada süreyle güncellenir.",
+        subtitle: "Sanal TL kaldırıldı. Bu eğitim piyasasında bakiye, fiyatlar ve portföy değeri artık Tech Coin üzerinden gösterilir.",
         disclaimer: "Bu simülasyon yalnızca eğitim amaçlıdır. Gerçek yatırım tavsiyesi değildir; gerçek para veya gerçek hisse kullanılmaz.",
         loading: "Online market verisi yükleniyor...",
         offline: "Online market API şu an cevap vermedi. Önizleme verisi gösteriliyor; al/sat işlemleri devre dışı.",
         online: "Online D1 modu aktif",
-        day: "Piyasa günü",
-        cash: "Sanal nakit",
+        day: "Piyasa turu",
+        cash: "Tech Coin bakiyesi",
         total: "Portföy değeri",
         pnl: "Toplam sonuç",
+        wallet: "Cüzdan Tech Coin",
         refresh: "Canlı veriyi yenile",
         reset: "Portföyü sıfırla",
         market: "Global kurgu piyasa",
-        orderPanel: "Online işlem paneli",
+        orderPanel: "Tech Coin işlem paneli",
         symbol: "Hisse",
         quantity: "Adet",
-        buy: "Online sanal alım",
-        sell: "Online sanal satış",
+        buy: "Tech Coin ile al",
+        sell: "Tech Coin'e sat",
         owned: "Sende var",
         portfolio: "Hesap portföyün",
         risk: "Risk analizi",
@@ -143,16 +159,16 @@ export function MarketAcademy() {
         news: "Global haber akışı",
         emptyNews: "Henüz haber yok. Piyasa otomatik tick aldığında haber oluşur.",
         lesson: "Ders notu",
-        price: "Fiyat",
+        price: "Tech Coin fiyatı",
         value: "İşlem değeri",
         sector: "Sektör",
         shares: "adet",
-        emptyPortfolio: "Bu hesapta henüz hisse yok. Küçük bir sanal alım yaparak başla.",
-        buyOk: "Online sanal alım kaydedildi.",
-        sellOk: "Online sanal satış kaydedildi.",
-        resetOk: "Online portföy sıfırlandı.",
+        emptyPortfolio: "Bu hesapta henüz hisse yok. Küçük bir Tech Coin işlemiyle başla.",
+        buyOk: "Tech Coin alım işlemi kaydedildi.",
+        sellOk: "Tech Coin satış işlemi kaydedildi.",
+        resetOk: "Tech Coin portföyü sıfırlandı.",
         invalidQty: "Adet 1 veya daha büyük olmalı.",
-        resetConfirm: "Bu hesabın sanal borsa portföyü sıfırlansın mı?",
+        resetConfirm: "Bu hesabın EkaTrade Tech Coin portföyü sıfırlansın mı?",
         completed: "tamamlandı",
         low: "Düşük",
         medium: "Orta",
@@ -171,27 +187,29 @@ export function MarketAcademy() {
         lowPrice: "Grafik dibi",
         learningNote: "Öğrenme notu",
         stockProfile: "Şirket profili",
+        rewardPrefix: "Tech Coin ödülü",
       }
     : {
-        eyebrow: "Online SQL-based market academy",
+        eyebrow: "Tech Coin-based market academy",
         title: "EkaTrade Academy",
-        subtitle: "The fictional market is now stored in D1 instead of the device. Each account has its own virtual portfolio; prices update on the shared market timeline.",
+        subtitle: "Virtual TL has been removed. Balance, prices and portfolio value now use Tech Coin inside this learning market.",
         disclaimer: "This simulation is for education only. It is not investment advice; no real money or real stocks are used.",
         loading: "Loading online market data...",
         offline: "The online market API did not respond. Preview data is shown; trading is disabled.",
         online: "Online D1 mode active",
-        day: "Market day",
-        cash: "Virtual cash",
+        day: "Market round",
+        cash: "Tech Coin balance",
         total: "Portfolio value",
         pnl: "Total result",
+        wallet: "Wallet Tech Coin",
         refresh: "Refresh live data",
         reset: "Reset portfolio",
         market: "Global fictional market",
-        orderPanel: "Online order panel",
+        orderPanel: "Tech Coin order panel",
         symbol: "Stock",
         quantity: "Quantity",
-        buy: "Online virtual buy",
-        sell: "Online virtual sell",
+        buy: "Buy with Tech Coin",
+        sell: "Sell for Tech Coin",
         owned: "Owned",
         portfolio: "Account portfolio",
         risk: "Risk analysis",
@@ -199,16 +217,16 @@ export function MarketAcademy() {
         news: "Global news feed",
         emptyNews: "No news yet. A market tick will create news automatically.",
         lesson: "Lesson note",
-        price: "Price",
+        price: "Tech Coin price",
         value: "Order value",
         sector: "Sector",
         shares: "shares",
-        emptyPortfolio: "This account has no stocks yet. Start with a small virtual order.",
-        buyOk: "Online virtual buy saved.",
-        sellOk: "Online virtual sell saved.",
-        resetOk: "Online portfolio reset.",
+        emptyPortfolio: "This account has no stocks yet. Start with a small Tech Coin order.",
+        buyOk: "Tech Coin buy order saved.",
+        sellOk: "Tech Coin sell order saved.",
+        resetOk: "Tech Coin portfolio reset.",
         invalidQty: "Quantity must be 1 or higher.",
-        resetConfirm: "Reset this account's virtual market portfolio?",
+        resetConfirm: "Reset this account's EkaTrade Tech Coin portfolio?",
         completed: "completed",
         low: "Low",
         medium: "Medium",
@@ -227,6 +245,7 @@ export function MarketAcademy() {
         lowPrice: "Chart low",
         learningNote: "Learning note",
         stockProfile: "Company profile",
+        rewardPrefix: "Tech Coin reward",
       };
 
   const [state, setState] = useState<MarketState>(FALLBACK_STATE);
@@ -253,8 +272,8 @@ export function MarketAcademy() {
 
     const invested = rows.reduce((sum, row) => sum + row.value, 0);
     const total = state.cash + invested;
-    const pnl = total - STARTING_CASH;
-    const pnlPercent = STARTING_CASH > 0 ? (pnl / STARTING_CASH) * 100 : 0;
+    const pnl = total - STARTING_TECH_COIN;
+    const pnlPercent = STARTING_TECH_COIN > 0 ? (pnl / STARTING_TECH_COIN) * 100 : 0;
     const maxWeight = total > 0 ? Math.max(0, ...rows.map((row) => row.value / total)) : 0;
     const sectorMap = rows.reduce<Record<string, number>>((acc, row) => {
       acc[row.sector] = (acc[row.sector] || 0) + row.value;
@@ -305,9 +324,9 @@ export function MarketAcademy() {
     const concentrationOk = hasAnyStock && portfolio.maxWeight <= 0.5;
 
     return [
-      { done: hasAnyStock, title: tr ? "İlk online sanal alımını yap" : "Make your first online virtual buy", desc: tr ? "İşlem artık D1 veritabanına kaydolur." : "The trade is now saved to D1." },
+      { done: hasAnyStock, title: tr ? "İlk Tech Coin alımını yap" : "Make your first Tech Coin buy", desc: tr ? "İşlem D1 veritabanına Tech Coin değeriyle kaydolur." : "The trade is saved to D1 with Tech Coin value." },
       { done: diversified, title: tr ? "3 farklı hisseye böl" : "Hold 3 different stocks", desc: tr ? "Tek hisse riskini azalt." : "Reduce single-stock risk." },
-      { done: cashRatio >= 0.1, title: tr ? "En az %10 nakit bırak" : "Keep at least 10% cash", desc: tr ? "Fırsat ve hata payı için nakit tut." : "Keep cash for flexibility and mistakes." },
+      { done: cashRatio >= 0.1, title: tr ? "En az %10 Tech Coin bırak" : "Keep at least 10% Tech Coin", desc: tr ? "Fırsat ve hata payı için bakiye tut." : "Keep balance for flexibility and mistakes." },
       { done: concentrationOk, title: tr ? "Tek hisse ağırlığını %50 altına indir" : "Keep one stock below 50%", desc: tr ? "Yoğunlaşma riskini kontrol et." : "Control concentration risk." },
       { done: hasNews, title: tr ? "3 global haber etkisi gözlemle" : "Observe 3 global news events", desc: tr ? "Fiyatın habere nasıl tepki verdiğini izle." : "Watch how prices react to news." },
     ];
@@ -329,16 +348,25 @@ export function MarketAcademy() {
 
   function setTemporaryMessage(nextMessage: string) {
     setMessage(nextMessage);
-    window.setTimeout(() => setMessage(null), 2800);
+    window.setTimeout(() => setMessage(null), 3200);
+  }
+
+  function rewardMessage(data: MarketState, fallback: string) {
+    const rewards = Array.isArray(data.rewards) ? data.rewards : [];
+    if (!rewards.length) return fallback;
+    const amount = rewards.reduce((sum, reward) => sum + safeNumber(reward.amount), 0);
+    const title = tr ? rewards[0].titleTr : rewards[0].titleEn;
+    return `${copy.rewardPrefix}: +${formatNumber(amount, locale)} Tech Coin · ${title}`;
   }
 
   async function loadMarket(showLoader: boolean) {
     if (showLoader) setLoading(true);
     try {
-      const data = await readJson(await fetch("/api/market", { credentials: "same-origin", cache: "no-store" }));
-      setState(normalizeMarketState(data));
+      const data = normalizeMarketState(await readJson(await fetch("/api/market", { credentials: "same-origin", cache: "no-store" })));
+      setState(data);
       setOnline(true);
-      setMessage(null);
+      if (data.rewards?.length) setTemporaryMessage(rewardMessage(data, ""));
+      else setMessage(null);
     } catch (error) {
       setOnline(false);
       setTemporaryMessage(error instanceof Error ? error.message : copy.offline);
@@ -350,16 +378,16 @@ export function MarketAcademy() {
   async function postAction(payload: Record<string, unknown>, okMessage: string) {
     setBusy(true);
     try {
-      const data = await readJson(await fetch("/api/market", {
+      const data = normalizeMarketState(await readJson(await fetch("/api/market", {
         method: "POST",
         credentials: "same-origin",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      }));
-      setState(normalizeMarketState(data));
+      })));
+      setState(data);
       setOnline(true);
-      setTemporaryMessage(okMessage);
+      setTemporaryMessage(rewardMessage(data, okMessage));
     } catch (error) {
       setTemporaryMessage(error instanceof Error ? error.message : copy.offline);
     } finally {
@@ -422,14 +450,13 @@ export function MarketAcademy() {
           </div>
         </motion.section>
 
-        {loading ? (
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 text-white/55 backdrop-blur-xl">{copy.loading}</div>
-        ) : null}
+        {loading ? <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 text-white/55 backdrop-blur-xl">{copy.loading}</div> : null}
+        {message ? <div className="rounded-[2rem] border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100 backdrop-blur-xl">{message}</div> : null}
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard icon={<CircleDollarSign />} label={copy.cash} value={`${formatMoney(state.cash, locale)} ₺`} />
-          <MetricCard icon={<PieChart />} label={copy.total} value={`${formatMoney(portfolio.total, locale)} ₺`} />
-          <MetricCard icon={portfolio.pnl >= 0 ? <TrendingUp /> : <TrendingDown />} label={copy.pnl} value={`${portfolio.pnl >= 0 ? "+" : ""}${formatMoney(portfolio.pnl, locale)} ₺`} detail={`${portfolio.pnl >= 0 ? "+" : ""}${formatPrice(portfolio.pnlPercent, locale)}%`} tone={portfolio.pnl >= 0 ? "emerald" : "red"} />
+          <MetricCard icon={<CircleDollarSign />} label={copy.cash} value={<CoinAmount amount={state.cash} locale={locale} size="lg" />} />
+          <MetricCard icon={<PieChart />} label={copy.total} value={<CoinAmount amount={portfolio.total} locale={locale} size="lg" />} />
+          <MetricCard icon={portfolio.pnl >= 0 ? <TrendingUp /> : <TrendingDown />} label={copy.pnl} value={<CoinAmount amount={portfolio.pnl} locale={locale} prefix={portfolio.pnl >= 0 ? "+" : ""} size="lg" />} detail={`${portfolio.pnl >= 0 ? "+" : ""}${formatPrice(portfolio.pnlPercent, locale)}%`} tone={portfolio.pnl >= 0 ? "emerald" : "red"} />
           <MetricCard icon={<BookOpen />} label={copy.day} value={`${state.day}`} detail={`${completedMissions}/${missions.length} ${copy.completed}`} tone="cyan" />
         </section>
 
@@ -469,7 +496,7 @@ export function MarketAcademy() {
                       <p className="mt-2 text-sm leading-6 text-white/45">{tr ? stock.descriptionTr : stock.descriptionEn}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-semibold">{formatPrice(stock.price, locale)} ₺</p>
+                      <CoinAmount amount={stock.price} locale={locale} decimals size="md" />
                       <p className={`mt-1 text-sm ${stock.change >= 0 ? "text-emerald-300" : "text-red-300"}`}>{stock.change >= 0 ? "+" : ""}{formatPrice(stock.change, locale)}%</p>
                     </div>
                   </div>
@@ -494,9 +521,7 @@ export function MarketAcademy() {
                 <label className="block">
                   <span className="text-sm text-white/50">{copy.symbol}</span>
                   <select value={selectedSymbol} onChange={(event) => setSelectedSymbol(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-white outline-none focus:border-cyan-300/50">
-                    {state.stocks.map((stock) => (
-                      <option key={stock.symbol} value={stock.symbol}>{stock.symbol} · {stock.name}</option>
-                    ))}
+                    {state.stocks.map((stock) => <option key={stock.symbol} value={stock.symbol}>{stock.symbol} · {stock.name}</option>)}
                   </select>
                 </label>
                 <label className="block">
@@ -504,8 +529,8 @@ export function MarketAcademy() {
                   <input type="number" min={1} value={quantity} onChange={(event) => setQuantity(safeNumber(event.target.value))} className="mt-2 w-full rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-white outline-none focus:border-cyan-300/50" />
                 </label>
                 <div className="grid grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-black/25 p-4 text-sm">
-                  <InfoCell label={copy.price} value={`${formatPrice(selectedStock.price, locale)} ₺`} />
-                  <InfoCell label={copy.value} value={`${formatMoney(orderValue, locale)} ₺`} />
+                  <InfoCell label={copy.price} value={<CoinAmount amount={selectedStock.price} locale={locale} decimals size="sm" />} />
+                  <InfoCell label={copy.value} value={<CoinAmount amount={orderValue} locale={locale} size="sm" />} />
                   <InfoCell label={copy.owned} value={`${selectedOwned} ${copy.shares}`} />
                   <InfoCell label={copy.sector} value={selectedStock.sector} />
                 </div>
@@ -513,7 +538,6 @@ export function MarketAcademy() {
                   <button type="button" disabled={busy || !online} onClick={() => handleTrade("buy")} className="rounded-full bg-emerald-300 px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-emerald-200 disabled:opacity-40">{copy.buy}</button>
                   <button type="button" disabled={busy || !online} onClick={() => handleTrade("sell")} className="rounded-full border border-red-300/30 bg-red-300/10 px-5 py-3 text-sm font-semibold text-red-100 transition-all hover:bg-red-300/15 disabled:opacity-40">{copy.sell}</button>
                 </div>
-                {message ? <p className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white/70">{message}</p> : null}
               </div>
             </div>
 
@@ -531,35 +555,15 @@ export function MarketAcademy() {
 
         <section className="grid gap-4 md:grid-cols-3">
           <LessonCard icon={<Brain />} title={tr ? "Fiyat = beklenti" : "Price = expectation"} text={tr ? "Hisse fiyatı sadece bugünkü durumu değil, geleceğe dair beklentiyi de taşır." : "A stock price reflects not only today, but also expectations about the future."} />
-          <LessonCard icon={<ShieldCheck />} title={tr ? "Risk dağıtılır" : "Risk is diversified"} text={tr ? "Bütün sanal paranı tek şirkete koyarsan tek haber portföyü sert etkiler." : "If all virtual money is in one company, one headline can heavily affect the portfolio."} />
-          <LessonCard icon={<Building2 />} title={tr ? "SQL mantığı" : "SQL logic"} text={tr ? "Nakit, portföy, fiyat geçmişi ve haberler ayrı tablolarda tutulur. Bu gerçek uygulama mimarisine daha yakındır." : "Cash, holdings, price history and news live in separate tables. This is closer to real app architecture."} />
+          <LessonCard icon={<ShieldCheck />} title={tr ? "Risk dağıtılır" : "Risk is diversified"} text={tr ? "Bütün Tech Coin'ini tek şirkete koyarsan tek haber portföyü sert etkiler." : "If all Tech Coin is in one company, one headline can heavily affect the portfolio."} />
+          <LessonCard icon={<Building2 />} title={tr ? "SQL mantığı" : "SQL logic"} text={tr ? "Tech Coin bakiyesi, portföy, fiyat geçmişi ve haberler ayrı tablolarda tutulur." : "Tech Coin balance, holdings, price history and news live in separate tables."} />
         </section>
       </div>
     </main>
   );
 }
 
-function StockDetailView({
-  stock,
-  state,
-  copy,
-  tr,
-  locale,
-  online,
-  busy,
-  onBack,
-  onRefresh,
-}: {
-  stock: Stock;
-  state: MarketState;
-  copy: any;
-  tr: boolean;
-  locale: string;
-  online: boolean;
-  busy: boolean;
-  onBack: () => void;
-  onRefresh: () => void;
-}) {
+function StockDetailView({ stock, state, copy, tr, locale, online, busy, onBack, onRefresh }: { stock: Stock; state: MarketState; copy: any; tr: boolean; locale: string; online: boolean; busy: boolean; onBack: () => void; onRefresh: () => void }) {
   const values = state.history[stock.symbol]?.length ? state.history[stock.symbol] : [stock.price];
   const high = Math.max(...values, stock.price);
   const low = Math.min(...values, stock.price);
@@ -573,7 +577,6 @@ function StockDetailView({
     <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-28 pt-28 text-white sm:px-6">
       <div className="absolute left-1/2 top-16 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-purple-500/10 blur-3xl" />
       <div className="absolute bottom-28 right-0 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
-
       <div className="relative mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <button type="button" onClick={onBack} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/80 transition-all hover:bg-white/[0.1]">
@@ -598,17 +601,17 @@ function StockDetailView({
             </div>
             <div className={`rounded-3xl border p-5 text-right ${positive ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-red-300/20 bg-red-300/10 text-red-100"}`}>
               <p className="text-sm opacity-70">{copy.currentPrice}</p>
-              <p className="mt-2 text-4xl font-semibold">{formatPrice(stock.price, locale)} ₺</p>
+              <div className="mt-2"><CoinAmount amount={stock.price} locale={locale} decimals size="xl" /></div>
               <p className="mt-1 text-sm">{positive ? "+" : ""}{formatPrice(stock.change, locale)}%</p>
             </div>
           </div>
         </motion.section>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <MetricCard icon={<CircleDollarSign />} label={copy.currentPrice} value={`${formatPrice(stock.price, locale)} ₺`} tone={positive ? "emerald" : "red"} />
-          <MetricCard icon={<TrendingUp />} label={copy.previousPrice} value={`${formatPrice(stock.previousPrice || stock.price, locale)} ₺`} />
+          <MetricCard icon={<CircleDollarSign />} label={copy.currentPrice} value={<CoinAmount amount={stock.price} locale={locale} decimals size="md" />} tone={positive ? "emerald" : "red"} />
+          <MetricCard icon={<TrendingUp />} label={copy.previousPrice} value={<CoinAmount amount={stock.previousPrice || stock.price} locale={locale} decimals size="md" />} />
           <MetricCard icon={<PieChart />} label={copy.owned} value={`${owned} ${copy.shares}`} />
-          <MetricCard icon={<BarChart3 />} label={copy.positionValue} value={`${formatMoney(positionValue, locale)} ₺`} tone="cyan" />
+          <MetricCard icon={<BarChart3 />} label={copy.positionValue} value={<CoinAmount amount={positionValue} locale={locale} size="md" />} tone="cyan" />
           <MetricCard icon={<Activity />} label={copy.volatility} value={`${formatPrice(stock.volatility * 100, locale)}%`} />
           <MetricCard icon={<ShieldCheck />} label={copy.risk} value={riskLabel} tone={stock.risk === "high" ? "red" : stock.risk === "medium" ? "cyan" : "emerald"} />
         </section>
@@ -620,14 +623,12 @@ function StockDetailView({
                 <p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.bigChart}</p>
                 <h2 className="mt-2 text-3xl font-medium">{stock.symbol} · {copy.price}</h2>
               </div>
-              <div className={`rounded-full border px-4 py-2 text-sm ${online ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-amber-300/20 bg-amber-300/10 text-amber-100"}`}>
-                {online ? copy.online : copy.offline}
-              </div>
+              <div className={`rounded-full border px-4 py-2 text-sm ${online ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-amber-300/20 bg-amber-300/10 text-amber-100"}`}>{online ? copy.online : copy.offline}</div>
             </div>
             <LargeSparkline values={values} positive={positive} />
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <InfoBox label={copy.highPrice} value={`${formatPrice(high, locale)} ₺`} />
-              <InfoBox label={copy.lowPrice} value={`${formatPrice(low, locale)} ₺`} />
+              <InfoBox label={copy.highPrice} value={<CoinAmount amount={high} locale={locale} decimals size="sm" />} />
+              <InfoBox label={copy.lowPrice} value={<CoinAmount amount={low} locale={locale} decimals size="sm" />} />
               <InfoBox label={copy.day} value={`${state.day}`} />
             </div>
           </div>
@@ -642,13 +643,10 @@ function StockDetailView({
                 <InfoLine label={copy.owned} value={`${owned} ${copy.shares}`} />
               </div>
             </div>
-
             <div className="rounded-[2rem] border border-cyan-300/20 bg-cyan-300/10 p-5 text-cyan-100 backdrop-blur-xl sm:p-6">
               <p className="text-sm uppercase tracking-[0.2em] opacity-70">{copy.learningNote}</p>
               <p className="mt-3 text-sm leading-6 opacity-80">
-                {tr
-                  ? "Detay ekranında tek hisseye fazla odaklanma riskini gör. Büyük grafik yönü gösterir ama tek başına karar sebebi değildir; haber, sektör ve portföy ağırlığı birlikte okunur."
-                  : "Use the detail screen to see the risk of focusing too much on one stock. The large chart shows direction, but it is not a decision reason by itself; read news, sector and portfolio weight together."}
+                {tr ? "Tech Coin bakiyesi eğitim içi puandır. Büyük grafik yönü gösterir ama tek başına karar sebebi değildir; haber, sektör ve portföy ağırlığı birlikte okunur." : "Tech Coin balance is an in-education score. The large chart shows direction, but it is not a decision reason by itself; read news, sector and portfolio weight together."}
               </p>
             </div>
           </div>
@@ -659,18 +657,14 @@ function StockDetailView({
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
             {relatedNews.length === 0 ? (
               <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{copy.noRelatedNews}</p>
-            ) : (
-              relatedNews.map((item, index) => (
-                <div key={`${item.day}-${item.target}-${index}`} className="rounded-3xl border border-white/10 bg-black/25 p-4">
-                  <div className="flex items-center gap-2 text-xs text-white/35">
-                    <Newspaper className="h-4 w-4" /> {copy.day} {item.day} · {item.target}
-                  </div>
-                  <p className="mt-2 font-medium">{tr ? item.titleTr : item.titleEn}</p>
-                  <p className={`mt-2 text-sm ${item.tone === "positive" ? "text-emerald-300" : item.tone === "negative" ? "text-red-300" : "text-cyan-300"}`}>{item.impact > 0 ? "+" : ""}{formatPrice(item.impact * 100, locale)}%</p>
-                  <p className="mt-3 text-sm leading-6 text-white/45"><span className="text-white/70">{copy.lesson}:</span> {tr ? item.lessonTr : item.lessonEn}</p>
-                </div>
-              ))
-            )}
+            ) : relatedNews.map((item, index) => (
+              <div key={`${item.day}-${item.target}-${index}`} className="rounded-3xl border border-white/10 bg-black/25 p-4">
+                <div className="flex items-center gap-2 text-xs text-white/35"><Newspaper className="h-4 w-4" /> {copy.day} {item.day} · {item.target}</div>
+                <p className="mt-2 font-medium">{tr ? item.titleTr : item.titleEn}</p>
+                <p className={`mt-2 text-sm ${item.tone === "positive" ? "text-emerald-300" : item.tone === "negative" ? "text-red-300" : "text-cyan-300"}`}>{item.impact > 0 ? "+" : ""}{formatPrice(item.impact * 100, locale)}%</p>
+                <p className="mt-3 text-sm leading-6 text-white/45"><span className="text-white/70">{copy.lesson}:</span> {tr ? item.lessonTr : item.lessonEn}</p>
+              </div>
+            ))}
           </div>
         </section>
       </div>
@@ -683,11 +677,13 @@ function normalizeMarketState(data: any): MarketState {
   const holdings = data?.holdings && typeof data.holdings === "object" ? data.holdings : {};
   const history = data?.history && typeof data.history === "object" ? data.history : FALLBACK_STATE.history;
   const news = Array.isArray(data?.news) ? data.news : [];
+  const rewards = Array.isArray(data?.rewards) ? data.rewards : [];
+  const techCoin = data?.techCoin && typeof data.techCoin === "object" ? data.techCoin : FALLBACK_STATE.techCoin;
 
   return {
     mode: data?.mode || "online-d1",
     day: safeNumber(data?.day) || 1,
-    cash: safeNumber(data?.cash) || STARTING_CASH,
+    cash: safeNumber(data?.cash) || STARTING_TECH_COIN,
     holdings,
     stocks: stocks.map((stock: any) => ({
       symbol: String(stock.symbol || ""),
@@ -703,40 +699,65 @@ function normalizeMarketState(data: any): MarketState {
     })),
     history,
     news,
+    rewards,
+    techCoin: {
+      balance: safeNumber(techCoin?.balance),
+      lifetime_earned: safeNumber(techCoin?.lifetime_earned),
+    },
   };
 }
 
-function MetricCard({ icon, label, value, detail, tone = "white" }: { icon: ReactNode; label: string; value: string; detail?: string; tone?: "white" | "cyan" | "emerald" | "red" }) {
+function CoinIcon({ size = "sm" }: { size?: "xs" | "sm" | "md" }) {
+  const className = size === "md" ? "h-8 w-8" : size === "xs" ? "h-4 w-4" : "h-5 w-5";
+  return (
+    <span className={`inline-flex ${className} shrink-0 items-center justify-center overflow-hidden rounded-full border border-amber-300/30 bg-amber-100/5 p-[1px]`}>
+      <img src={coinIcon} alt="Tech Coin" className="h-full w-full rounded-full object-cover" style={{ clipPath: "circle(50% at 50% 50%)" }} />
+    </span>
+  );
+}
+
+function CoinAmount({ amount, locale, prefix = "", decimals = false, size = "sm" }: { amount: number; locale: string; prefix?: string; decimals?: boolean; size?: "sm" | "md" | "lg" | "xl" }) {
+  const value = decimals ? formatPrice(amount, locale) : formatNumber(amount, locale);
+  const textSize = size === "xl" ? "text-4xl" : size === "lg" ? "text-3xl" : size === "md" ? "text-2xl" : "text-base";
+  return (
+    <span className={`inline-flex items-center justify-end gap-2 font-semibold tracking-tight text-white ${textSize}`}>
+      <span>{prefix}{value}</span>
+      <CoinIcon size={size === "xl" || size === "lg" ? "md" : size === "md" ? "sm" : "xs"} />
+    </span>
+  );
+}
+
+function MetricCard({ icon, label, value, detail, tone = "white" }: { icon: ReactNode; label: string; value: ReactNode; detail?: string; tone?: "white" | "cyan" | "emerald" | "red" }) {
   const toneClass = tone === "cyan" ? "text-cyan-200" : tone === "emerald" ? "text-emerald-300" : tone === "red" ? "text-red-300" : "text-white";
   return (
     <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl">
       <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] ${toneClass}`}>{icon}</div>
       <p className="mt-4 text-sm text-white/40">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold tracking-tight ${toneClass}`}>{value}</p>
+      <div className={`mt-2 ${toneClass}`}>{value}</div>
       {detail ? <p className="mt-1 text-sm text-white/40">{detail}</p> : null}
     </div>
   );
 }
 
-function InfoCell({ label, value }: { label: string; value: string }) {
+function InfoCell({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <p className="text-white/35">{label}</p>
-      <p className="mt-1 font-medium">{value}</p>
+      <div className="mt-1 font-medium">{value}</div>
     </div>
   );
 }
 
-function InfoBox({ label, value }: { label: string; value: string }) {
+function InfoBox({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
       <p className="text-xs uppercase tracking-[0.16em] text-white/35">{label}</p>
-      <p className="mt-2 text-xl font-semibold text-white">{value}</p>
+      <div className="mt-2 text-xl font-semibold text-white">{value}</div>
     </div>
   );
 }
 
-function InfoLine({ label, value }: { label: string; value: string }) {
+function InfoLine({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
       <span className="text-white/40">{label}</span>
@@ -801,28 +822,24 @@ function PortfolioCard({ copy, portfolio, locale }: { copy: any; portfolio: any;
       <div className="mt-5 space-y-3">
         {portfolio.rows.length === 0 ? (
           <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{copy.emptyPortfolio}</p>
-        ) : (
-          portfolio.rows.map((row: any) => {
-            const weight = portfolio.total > 0 ? (row.value / portfolio.total) * 100 : 0;
-            return (
-              <div key={row.symbol} className="rounded-3xl border border-white/10 bg-black/25 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-medium">{row.symbol} · {row.name}</p>
-                    <p className="mt-1 text-sm text-white/40">{row.shares} {copy.shares} · {row.sector}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{formatMoney(row.value, locale)} ₺</p>
-                    <p className="mt-1 text-sm text-white/40">{formatPrice(weight, locale)}%</p>
-                  </div>
+        ) : portfolio.rows.map((row: any) => {
+          const weight = portfolio.total > 0 ? (row.value / portfolio.total) * 100 : 0;
+          return (
+            <div key={row.symbol} className="rounded-3xl border border-white/10 bg-black/25 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium">{row.symbol} · {row.name}</p>
+                  <p className="mt-1 text-sm text-white/40">{row.shares} {copy.shares} · {row.sector}</p>
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-                  <div className="h-full rounded-full bg-cyan-300/70" style={{ width: `${Math.min(100, weight)}%` }} />
+                <div className="text-right">
+                  <CoinAmount amount={row.value} locale={locale} size="sm" />
+                  <p className="mt-1 text-sm text-white/40">{formatPrice(weight, locale)}%</p>
                 </div>
               </div>
-            );
-          })
-        )}
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-cyan-300/70" style={{ width: `${Math.min(100, weight)}%` }} /></div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -856,18 +873,14 @@ function NewsCard({ title, empty, lesson, dayLabel, news, tr, locale }: { title:
       <div className="mt-5 space-y-3">
         {news.length === 0 ? (
           <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{empty}</p>
-        ) : (
-          news.map((item, index) => (
-            <div key={`${item.day}-${item.target}-${index}`} className="rounded-3xl border border-white/10 bg-black/25 p-4">
-              <div className="flex items-center gap-2 text-xs text-white/35">
-                <Newspaper className="h-4 w-4" /> {dayLabel} {item.day} · {item.target}
-              </div>
-              <p className="mt-2 font-medium">{tr ? item.titleTr : item.titleEn}</p>
-              <p className={`mt-2 text-sm ${item.tone === "positive" ? "text-emerald-300" : item.tone === "negative" ? "text-red-300" : "text-cyan-300"}`}>{item.impact > 0 ? "+" : ""}{formatPrice(item.impact * 100, locale)}%</p>
-              <p className="mt-3 text-sm leading-6 text-white/45"><span className="text-white/70">{lesson}:</span> {tr ? item.lessonTr : item.lessonEn}</p>
-            </div>
-          ))
-        )}
+        ) : news.map((item, index) => (
+          <div key={`${item.day}-${item.target}-${index}`} className="rounded-3xl border border-white/10 bg-black/25 p-4">
+            <div className="flex items-center gap-2 text-xs text-white/35"><Newspaper className="h-4 w-4" /> {dayLabel} {item.day} · {item.target}</div>
+            <p className="mt-2 font-medium">{tr ? item.titleTr : item.titleEn}</p>
+            <p className={`mt-2 text-sm ${item.tone === "positive" ? "text-emerald-300" : item.tone === "negative" ? "text-red-300" : "text-cyan-300"}`}>{item.impact > 0 ? "+" : ""}{formatPrice(item.impact * 100, locale)}%</p>
+            <p className="mt-3 text-sm leading-6 text-white/45"><span className="text-white/70">{lesson}:</span> {tr ? item.lessonTr : item.lessonEn}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
