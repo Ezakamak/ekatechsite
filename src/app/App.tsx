@@ -23,14 +23,13 @@ import { BackToTop } from "./components/BackToTop";
 import { CookieConsent } from "./components/CookieConsent";
 import { AdminPanel } from "./components/AdminPanel";
 import { AdminOffCredits } from "./components/AdminOffCredits";
-import { AdminMarketComments } from "./components/AdminMarketComments";
+import { AdminApprovalCenter } from "./components/AdminApprovalCenter";
 import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
 import { AuthPage } from "./components/AuthPage";
 import { AccountPage } from "./components/AccountPage";
 import { AnnouncementAdmin } from "./components/AnnouncementAdmin";
 import { AnnouncementPopup } from "./components/AnnouncementPopup";
 import { ForgotPasswordPage } from "./components/ForgotPasswordPage";
-import { AdminAvatarApprovals } from "./components/AdminAvatarApprovals";
 import { AdminAuditLogs } from "./components/AdminAuditLogs";
 import { AdminChat } from "./components/AdminChat";
 import { AdminTodoPanel } from "./components/AdminTodoPanel";
@@ -154,12 +153,11 @@ export default function App() {
             <div className="bg-black px-4 pb-24 sm:px-6">
               <div className="mx-auto max-w-7xl space-y-6">
                 <AdminOffCredits />
-                <AdminMarketComments />
+                <AdminApprovalCenter />
                 <MaintenancePanel />
                 <AdminTodoPanel />
                 <AdminProjectTools />
                 <AdminChat />
-                <AdminAvatarApprovals />
                 <AnnouncementAdmin />
                 <AdminAuditLogs />
               </div>
