@@ -15,6 +15,17 @@ type DropItem = {
   tech_coin_value: number;
 };
 
+type BoxType = {
+  id: string;
+  emoji: string;
+  name_tr: string;
+  name_en: string;
+  description_tr: string;
+  description_en: string;
+  accent: "white" | "cyan" | "purple" | "amber" | "emerald" | "rose" | "fuchsia";
+  multipliers: Record<Rarity, number>;
+};
+
 const RARITY_VALUES: Record<Rarity, number> = {
   common: 3,
   rare: 8,
@@ -22,6 +33,119 @@ const RARITY_VALUES: Record<Rarity, number> = {
   legendary: 45,
   glitch: 120,
 };
+
+const BOX_TYPES: BoxType[] = [
+  {
+    id: "standard_cache",
+    emoji: "📦",
+    name_tr: "Standard Cache",
+    name_en: "Standard Cache",
+    description_tr: "DropTech'in günlük klasik kutusu. Dengeli ama sade drop havuzu.",
+    description_en: "The classic daily DropTech box. Balanced and simple.",
+    accent: "white",
+    multipliers: { common: 1.15, rare: 0.95, epic: 0.75, legendary: 0.55, glitch: 0.35 },
+  },
+  {
+    id: "signal_crate",
+    emoji: "📡",
+    name_tr: "Signal Crate",
+    name_en: "Signal Crate",
+    description_tr: "Rare itemlara hafif eğilimli sinyal kutusu.",
+    description_en: "A signal-themed box with a slight Rare bias.",
+    accent: "cyan",
+    multipliers: { common: 0.82, rare: 1.35, epic: 1.05, legendary: 0.75, glitch: 0.55 },
+  },
+  {
+    id: "circuit_box",
+    emoji: "🔌",
+    name_tr: "Circuit Box",
+    name_en: "Circuit Box",
+    description_tr: "Donanım temalı, Rare ve Epic dengesi güçlü kutu.",
+    description_en: "Hardware-themed box with stronger Rare and Epic balance.",
+    accent: "emerald",
+    multipliers: { common: 0.75, rare: 1.2, epic: 1.25, legendary: 0.8, glitch: 0.55 },
+  },
+  {
+    id: "neon_vault",
+    emoji: "🟣",
+    name_tr: "Neon Vault",
+    name_en: "Neon Vault",
+    description_tr: "Parlak, hızlı ve Epic ağırlığı daha belirgin kasa.",
+    description_en: "Bright, fast and more Epic-focused.",
+    accent: "purple",
+    multipliers: { common: 0.62, rare: 1.05, epic: 1.55, legendary: 1.0, glitch: 0.7 },
+  },
+  {
+    id: "data_relic",
+    emoji: "💿",
+    name_tr: "Data Relic",
+    name_en: "Data Relic",
+    description_tr: "Eski sistemlerden kalma veri sandığı. Epic ve Legendary daha canlı.",
+    description_en: "A relic from old systems. Epic and Legendary feel stronger.",
+    accent: "cyan",
+    multipliers: { common: 0.55, rare: 0.95, epic: 1.55, legendary: 1.35, glitch: 0.8 },
+  },
+  {
+    id: "core_capsule",
+    emoji: "💠",
+    name_tr: "Core Capsule",
+    name_en: "Core Capsule",
+    description_tr: "Eka Core temalı kapsül. Legendary ağırlığı yüksek.",
+    description_en: "Eka Core themed capsule with higher Legendary weight.",
+    accent: "amber",
+    multipliers: { common: 0.45, rare: 0.85, epic: 1.3, legendary: 1.9, glitch: 0.9 },
+  },
+  {
+    id: "firewall_chest",
+    emoji: "🛡️",
+    name_tr: "Firewall Chest",
+    name_en: "Firewall Chest",
+    description_tr: "Savunma temalı özel sandık. Epic ve stabil Legendary oranı sunar.",
+    description_en: "Defense-themed chest with stable Epic and Legendary pressure.",
+    accent: "rose",
+    multipliers: { common: 0.5, rare: 0.9, epic: 1.45, legendary: 1.55, glitch: 0.75 },
+  },
+  {
+    id: "quantum_case",
+    emoji: "⚙️",
+    name_tr: "Quantum Case",
+    name_en: "Quantum Case",
+    description_tr: "Daha yüksek riskli ama nadir parıltısı güçlü kuantum kasası.",
+    description_en: "A higher-variance case with stronger rare shine.",
+    accent: "amber",
+    multipliers: { common: 0.38, rare: 0.75, epic: 1.35, legendary: 2.2, glitch: 1.05 },
+  },
+  {
+    id: "legend_vault",
+    emoji: "🏛️",
+    name_tr: "Legend Vault",
+    name_en: "Legend Vault",
+    description_tr: "Legendary odaklı ağır koleksiyon kasası.",
+    description_en: "A heavy collection box focused on Legendary items.",
+    accent: "amber",
+    multipliers: { common: 0.25, rare: 0.55, epic: 1.15, legendary: 3.1, glitch: 1.15 },
+  },
+  {
+    id: "glitch_rift",
+    emoji: "🕳️",
+    name_tr: "Glitch Rift",
+    name_en: "Glitch Rift",
+    description_tr: "Bozuk gerçeklik yarığı. Glitch item ağırlığı en yüksek kutu.",
+    description_en: "A broken-reality rift with the strongest Glitch weight.",
+    accent: "fuchsia",
+    multipliers: { common: 0.22, rare: 0.45, epic: 1.05, legendary: 2.0, glitch: 4.5 },
+  },
+  {
+    id: "founder_box",
+    emoji: "👑",
+    name_tr: "Founder Box",
+    name_en: "Founder Box",
+    description_tr: "Etkinlik/admin ödülleri için premium koleksiyon kutusu.",
+    description_en: "Premium collection box for events and admin rewards.",
+    accent: "purple",
+    multipliers: { common: 0.18, rare: 0.5, epic: 1.35, legendary: 2.8, glitch: 2.8 },
+  },
+];
 
 const DROP_ITEMS: DropItem[] = [
   { id: "broken_keycap", emoji: "⌨️", name_tr: "Kırık Klavye Tuşu", name_en: "Broken Keycap", description_tr: "Eski bir debug gecesinden kalma tuş.", description_en: "A keycap from an old debug night.", rarity: "common", weight: 90, tech_coin_value: RARITY_VALUES.common },
@@ -49,7 +173,6 @@ const DROP_ITEMS: DropItem[] = [
 export async function onRequestGet(context: any) {
   const auth = await requireOffUser(context);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
-
   try {
     await ensureTables(context);
     await ensureUserBoxRow(context, auth.user.id);
@@ -62,16 +185,13 @@ export async function onRequestGet(context: any) {
 export async function onRequestPost(context: any) {
   const auth = await requireOffUser(context);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
-
   try {
     await ensureTables(context);
     await ensureUserBoxRow(context, auth.user.id);
     const body = await context.request.json().catch(() => ({}));
     const action = String(body?.action || "open");
-
     if (action === "claim_daily") return Response.json(await claimDailyBox(context, auth.user.id));
-    if (action === "open") return Response.json(await openBox(context, auth.user.id));
-
+    if (action === "open") return Response.json(await openBox(context, auth.user.id, String(body?.box_type || "standard_cache")));
     return Response.json({ error: "Geçersiz DropTech işlemi." }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "DropTech işlemi tamamlanamadı." }, { status: 500 });
@@ -81,12 +201,23 @@ export async function onRequestPost(context: any) {
 async function ensureTables(context: any) {
   const db = context.env.DB;
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_boxes (user_id INTEGER PRIMARY KEY, box_count INTEGER NOT NULL DEFAULT 0, lifetime_opened INTEGER NOT NULL DEFAULT 0, last_daily_claim TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_user_boxes (user_id INTEGER NOT NULL, box_type TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, box_type))`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_inventory (user_id INTEGER NOT NULL, item_id TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, rarity TEXT NOT NULL, emoji TEXT NOT NULL, name_tr TEXT NOT NULL, name_en TEXT NOT NULL, description_tr TEXT NOT NULL, description_en TEXT NOT NULL, first_found_at TEXT DEFAULT CURRENT_TIMESTAMP, last_found_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, item_id))`).run();
-  await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_openings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, item_id TEXT NOT NULL, rarity TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_openings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, item_id TEXT NOT NULL, rarity TEXT NOT NULL, box_type TEXT DEFAULT 'standard_cache', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
 }
 
 async function ensureUserBoxRow(context: any, userId: number) {
   await context.env.DB.prepare(`INSERT OR IGNORE INTO droptech_boxes (user_id, box_count, lifetime_opened) VALUES (?, 0, 0)`).bind(userId).run();
+  for (const box of BOX_TYPES) {
+    await context.env.DB.prepare(`INSERT OR IGNORE INTO droptech_user_boxes (user_id, box_type, quantity) VALUES (?, ?, 0)`).bind(userId, box.id).run();
+  }
+
+  const legacy: any = await context.env.DB.prepare(`SELECT box_count FROM droptech_boxes WHERE user_id = ?`).bind(userId).first();
+  const legacyCount = Number(legacy?.box_count || 0);
+  if (legacyCount > 0) {
+    await context.env.DB.prepare(`UPDATE droptech_user_boxes SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND box_type = 'standard_cache'`).bind(legacyCount, userId).run();
+    await context.env.DB.prepare(`UPDATE droptech_boxes SET box_count = 0, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).bind(userId).run();
+  }
 }
 
 async function claimDailyBox(context: any, userId: number) {
@@ -95,17 +226,28 @@ async function claimDailyBox(context: any, userId: number) {
   if (row?.last_daily_claim === today) {
     return { ...await buildState(context, userId), claimed: false, message: "Bugünkü DropTech kutusu zaten alındı." };
   }
-
-  await context.env.DB.prepare(`UPDATE droptech_boxes SET box_count = box_count + 1, last_daily_claim = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).bind(today, userId).run();
-  return { ...await buildState(context, userId), claimed: true, message: "Günlük DropTech kutusu alındı." };
+  await addBox(context, userId, "standard_cache", 1);
+  await context.env.DB.prepare(`UPDATE droptech_boxes SET last_daily_claim = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).bind(today, userId).run();
+  return { ...await buildState(context, userId), claimed: true, message: "Günlük Standard Cache alındı." };
 }
 
-async function openBox(context: any, userId: number) {
-  const box: any = await context.env.DB.prepare(`SELECT box_count FROM droptech_boxes WHERE user_id = ?`).bind(userId).first();
-  if (Number(box?.box_count || 0) <= 0) throw new Error("Açacak DropTech kutun yok. Günlük kutunu alabilirsin.");
+async function addBox(context: any, userId: number, boxType: string, amount: number) {
+  const safeBoxType = BOX_TYPES.some((box) => box.id === boxType) ? boxType : "standard_cache";
+  await context.env.DB.prepare(`
+    INSERT INTO droptech_user_boxes (user_id, box_type, quantity, updated_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(user_id, box_type) DO UPDATE SET quantity = quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
+  `).bind(userId, safeBoxType, amount).run();
+}
 
-  const item = pickDropItem();
-  await context.env.DB.prepare(`UPDATE droptech_boxes SET box_count = box_count - 1, lifetime_opened = lifetime_opened + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND box_count > 0`).bind(userId).run();
+async function openBox(context: any, userId: number, boxType: string) {
+  const box = BOX_TYPES.find((entry) => entry.id === boxType) || BOX_TYPES[0];
+  const owned: any = await context.env.DB.prepare(`SELECT quantity FROM droptech_user_boxes WHERE user_id = ? AND box_type = ?`).bind(userId, box.id).first();
+  if (Number(owned?.quantity || 0) <= 0) throw new Error(`Açacak ${box.name_tr} kutun yok.`);
+
+  const item = pickDropItem(box.id);
+  await context.env.DB.prepare(`UPDATE droptech_user_boxes SET quantity = quantity - 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND box_type = ? AND quantity > 0`).bind(userId, box.id).run();
+  await context.env.DB.prepare(`UPDATE droptech_boxes SET lifetime_opened = lifetime_opened + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).bind(userId).run();
   await context.env.DB.prepare(`
     INSERT INTO droptech_inventory (user_id, item_id, quantity, rarity, emoji, name_tr, name_en, description_tr, description_en)
     VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
@@ -119,24 +261,28 @@ async function openBox(context: any, userId: number) {
       description_en = excluded.description_en,
       last_found_at = CURRENT_TIMESTAMP
   `).bind(userId, item.id, item.rarity, item.emoji, item.name_tr, item.name_en, item.description_tr, item.description_en).run();
-  await context.env.DB.prepare(`INSERT INTO droptech_openings (user_id, item_id, rarity) VALUES (?, ?, ?)`).bind(userId, item.id, item.rarity).run();
-
-  return { ...await buildState(context, userId), won: item };
+  await context.env.DB.prepare(`INSERT INTO droptech_openings (user_id, item_id, rarity, box_type) VALUES (?, ?, ?, ?)`).bind(userId, item.id, item.rarity, box.id).run();
+  return { ...await buildState(context, userId), won: item, opened_box: box };
 }
 
 async function buildState(context: any, userId: number) {
-  const box: any = await context.env.DB.prepare(`SELECT box_count, lifetime_opened, last_daily_claim, updated_at FROM droptech_boxes WHERE user_id = ?`).bind(userId).first();
+  const box: any = await context.env.DB.prepare(`SELECT lifetime_opened, last_daily_claim, updated_at FROM droptech_boxes WHERE user_id = ?`).bind(userId).first();
+  const boxRows = await context.env.DB.prepare(`SELECT box_type, quantity FROM droptech_user_boxes WHERE user_id = ?`).bind(userId).all();
   const inventoryRows = await context.env.DB.prepare(`SELECT * FROM droptech_inventory WHERE user_id = ? ORDER BY CASE rarity WHEN 'glitch' THEN 5 WHEN 'legendary' THEN 4 WHEN 'epic' THEN 3 WHEN 'rare' THEN 2 ELSE 1 END DESC, last_found_at DESC`).bind(userId).all();
-  const recentRows = await context.env.DB.prepare(`SELECT item_id, rarity, created_at FROM droptech_openings WHERE user_id = ? ORDER BY id DESC LIMIT 12`).bind(userId).all();
+  const recentRows = await context.env.DB.prepare(`SELECT item_id, rarity, box_type, created_at FROM droptech_openings WHERE user_id = ? ORDER BY id DESC LIMIT 12`).bind(userId).all();
 
   const today = new Date().toISOString().slice(0, 10);
+  const quantityMap = new Map((boxRows?.results || []).map((row: any) => [String(row.box_type), Number(row.quantity || 0)]));
+  const boxes = BOX_TYPES.map((boxType) => ({ ...boxType, quantity: quantityMap.get(boxType.id) || 0, odds: rarityOdds(boxType.id) }));
+  const boxCount = boxes.reduce((sum, boxItem) => sum + Number(boxItem.quantity || 0), 0);
   const inventory = (inventoryRows?.results || []).map(enrichInventoryItem);
   const ownedCount = Number(inventory.length || 0);
   const totalQuantity = inventory.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
   const collectionValue = inventory.reduce((sum: number, item: any) => sum + Number(item.quantity || 0) * Number(item.tech_coin_value || 0), 0);
 
   return {
-    box_count: Number(box?.box_count || 0),
+    box_count: boxCount,
+    boxes,
     lifetime_opened: Number(box?.lifetime_opened || 0),
     last_daily_claim: box?.last_daily_claim || null,
     can_claim_daily: box?.last_daily_claim !== today,
@@ -147,55 +293,51 @@ async function buildState(context: any, userId: number) {
     inventory,
     recent: recentRows?.results || [],
     items: DROP_ITEMS,
-    odds: rarityOdds(),
-    value_rules: {
-      mode: "collection_value_only",
-      payout_on_open: false,
-      trade_enabled: false,
-      market_enabled: false,
-      rarity_values: RARITY_VALUES,
-    },
+    box_types: BOX_TYPES,
+    odds: rarityOdds("standard_cache"),
+    odds_by_box: Object.fromEntries(BOX_TYPES.map((boxType) => [boxType.id, rarityOdds(boxType.id)])),
+    value_rules: { mode: "collection_value_only", payout_on_open: false, trade_enabled: false, market_enabled: false, rarity_values: RARITY_VALUES },
   };
 }
 
 function enrichInventoryItem(row: any) {
   const item = DROP_ITEMS.find((entry) => entry.id === row.item_id);
   const value = item?.tech_coin_value || RARITY_VALUES[row.rarity as Rarity] || 0;
-  return {
-    ...row,
-    tech_coin_value: value,
-    total_tech_coin_value: Number(row.quantity || 0) * value,
-  };
+  return { ...row, tech_coin_value: value, total_tech_coin_value: Number(row.quantity || 0) * value };
 }
 
-function pickDropItem() {
-  const total = DROP_ITEMS.reduce((sum, item) => sum + item.weight, 0);
+function pickDropItem(boxType: string) {
+  const box = BOX_TYPES.find((entry) => entry.id === boxType) || BOX_TYPES[0];
+  const total = DROP_ITEMS.reduce((sum, item) => sum + effectiveWeight(item, box), 0);
   let roll = Math.random() * total;
   for (const item of DROP_ITEMS) {
-    roll -= item.weight;
+    roll -= effectiveWeight(item, box);
     if (roll <= 0) return item;
   }
   return DROP_ITEMS[0];
 }
 
-function rarityOdds() {
-  const total = DROP_ITEMS.reduce((sum, item) => sum + item.weight, 0);
+function effectiveWeight(item: DropItem, box: BoxType) {
+  return item.weight * (box.multipliers[item.rarity] || 1);
+}
+
+function rarityOdds(boxType = "standard_cache") {
+  const box = BOX_TYPES.find((entry) => entry.id === boxType) || BOX_TYPES[0];
+  const total = DROP_ITEMS.reduce((sum, item) => sum + effectiveWeight(item, box), 0);
   const buckets: Record<Rarity, number> = { common: 0, rare: 0, epic: 0, legendary: 0, glitch: 0 };
-  for (const item of DROP_ITEMS) buckets[item.rarity] += item.weight;
+  for (const item of DROP_ITEMS) buckets[item.rarity] += effectiveWeight(item, box);
   return Object.fromEntries(Object.entries(buckets).map(([rarity, weight]) => [rarity, Number(((weight / total) * 100).toFixed(2))]));
 }
 
 async function requireOffUser(context: any) {
   const token = getCookie(context.request.headers.get("Cookie") || "", "session");
   if (!token) return { ok: false, status: 401, error: "Giriş yapman gerekiyor." };
-
   const user = await context.env.DB.prepare(`
     SELECT users.id, users.name, users.email, users.avatar_url,
       CASE WHEN lower(users.email) = ? THEN 'owner' ELSE COALESCE(users.role, 'client') END AS role
     FROM sessions JOIN users ON sessions.user_id = users.id
     WHERE sessions.token = ? AND sessions.expires_at > datetime('now')
   `).bind(OWNER_EMAIL, token).first();
-
   if (!user) return { ok: false, status: 401, error: "Oturum geçersiz." };
   if (user.role === "blocked") return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   if (!OFF_ROLES.includes(String(user.role))) return { ok: false, status: 403, error: "OFF erişimi gerekiyor." };
