@@ -182,14 +182,14 @@ export function OffPage() {
   if (activeGame !== "hub") {
     return (
       <>
-        <div className="fixed bottom-5 left-1/2 z-40 -translate-x-1/2 px-4">
+        <div className="fixed right-5 top-24 z-[80] px-2 sm:right-6">
           <button
             type="button"
             onClick={() => {
               setActiveGame("hub");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            className="rounded-full border border-white/10 bg-black/80 px-5 py-3 text-sm font-medium text-white shadow-2xl shadow-black/40 backdrop-blur-xl transition-all hover:bg-white/[0.1]"
+            className="rounded-full border border-cyan-300/20 bg-black/85 px-4 py-2.5 text-xs font-medium text-cyan-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-all hover:bg-cyan-300/10 sm:px-5 sm:py-3 sm:text-sm"
           >
             ← {copy.backHub}
           </button>
