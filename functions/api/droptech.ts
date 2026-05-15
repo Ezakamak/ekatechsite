@@ -223,7 +223,10 @@ export async function onRequestPost(context: any) {
     if (action === "heartbeat") return Response.json(await heartbeatPresence(context, auth.user.id));
     if (action === "sell_item") return Response.json(await sellItem(context, auth.user.id, String(body?.item_id || ""), Number(body?.quantity || 1)));
     if (action === "create_trade") return Response.json(await createTradeOffer(context, auth.user.id, body));
-    if (action === "accept_trade") return Response.json(await acceptTradeOffer(context, auth.user.id, Number(body?.trade_id || 0)));
+    if (action === "accept_trade") return Response.json(await acceptTradeRequest(context, auth.user.id, Number(body?.trade_id || 0)));
+    if (action === "update_trade_items") return Response.json(await updateTradeItems(context, auth.user.id, body));
+    if (action === "set_trade_ready") return Response.json(await setTradeReady(context, auth.user.id, Number(body?.trade_id || 0), Boolean(body?.ready)));
+    if (action === "confirm_trade") return Response.json(await confirmTrade(context, auth.user.id, Number(body?.trade_id || 0)));
     if (action === "decline_trade") return Response.json(await updateTradeStatus(context, auth.user.id, Number(body?.trade_id || 0), "declined"));
     if (action === "cancel_trade") return Response.json(await updateTradeStatus(context, auth.user.id, Number(body?.trade_id || 0), "cancelled"));
     return Response.json({ error: "Geçersiz DropTech işlemi." }, { status: 400 });
@@ -245,6 +248,10 @@ async function ensureTables(context: any) {
   await db.prepare(`CREATE TABLE IF NOT EXISTS coin_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, amount INTEGER NOT NULL, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await addColumnIfMissing(context, "droptech_openings", "box_type", "TEXT DEFAULT 'standard_cache'");
   await addColumnIfMissing(context, "droptech_trades", "updated_at", "TEXT DEFAULT CURRENT_TIMESTAMP");
+  await addColumnIfMissing(context, "droptech_trades", "proposer_ready", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "droptech_trades", "recipient_ready", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "droptech_trades", "proposer_confirmed", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "droptech_trades", "recipient_confirmed", "INTEGER DEFAULT 0");
   await ensureCoinColumns(context);
 }
 
@@ -359,37 +366,78 @@ async function sellItem(context: any, userId: number, itemId: string, quantity: 
 
 async function createTradeOffer(context: any, userId: number, body: any) {
   const recipientId = Number(body?.recipient_id || 0);
-  const offerItem = DROP_ITEMS.find((entry) => entry.id === String(body?.offer_item_id || ""));
-  const requestItem = DROP_ITEMS.find((entry) => entry.id === String(body?.request_item_id || ""));
-  const offerQty = Math.max(1, Math.floor(Number(body?.offer_quantity || 1)));
-  const requestQty = Math.max(1, Math.floor(Number(body?.request_quantity || 1)));
   if (!recipientId || recipientId === userId) throw new DropTechUserError("Takas için farklı bir online kullanıcı seç.");
-  if (!offerItem || !requestItem) throw new DropTechUserError("Takas eşyası bulunamadı.");
   const recipient: any = await context.env.DB.prepare(`SELECT users.id FROM users JOIN droptech_presence ON droptech_presence.user_id = users.id WHERE users.id = ? AND droptech_presence.last_seen_at >= datetime('now', '-90 seconds')`).bind(recipientId).first();
   if (!recipient) throw new DropTechUserError("Seçilen kullanıcı şu anda DropTech'te online görünmüyor.");
-  await assertInventoryQuantity(context, userId, offerItem.id, offerQty, "Teklif edeceğin eşyadan yeterli adet yok.");
-  await context.env.DB.prepare(`INSERT INTO droptech_trades (proposer_id, recipient_id, offer_item_id, offer_quantity, request_item_id, request_quantity, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')`).bind(userId, recipientId, offerItem.id, offerQty, requestItem.id, requestQty).run();
+  await context.env.DB.prepare(`INSERT INTO droptech_trades (proposer_id, recipient_id, offer_item_id, offer_quantity, request_item_id, request_quantity, status, proposer_ready, recipient_ready, proposer_confirmed, recipient_confirmed) VALUES (?, ?, '', 1, '', 1, 'pending_request', 0, 0, 0, 0)`).bind(userId, recipientId).run();
   return { ...await buildState(context, userId), trade_created: true };
 }
 
-async function acceptTradeOffer(context: any, userId: number, tradeId: number) {
-  const trade: any = await context.env.DB.prepare(`SELECT * FROM droptech_trades WHERE id = ? AND recipient_id = ? AND status = 'pending'`).bind(tradeId, userId).first();
-  if (!trade) throw new DropTechUserError("Aktif takas teklifi bulunamadı.");
-  await assertInventoryQuantity(context, trade.proposer_id, trade.offer_item_id, Number(trade.offer_quantity), "Teklif sahibinde bu eşya artık yeterli değil.");
-  await assertInventoryQuantity(context, trade.recipient_id, trade.request_item_id, Number(trade.request_quantity), "İstenen eşyadan yeterli adet yok.");
-
-  await removeInventoryItem(context, trade.proposer_id, trade.offer_item_id, Number(trade.offer_quantity));
-  await removeInventoryItem(context, trade.recipient_id, trade.request_item_id, Number(trade.request_quantity));
-  await addInventoryItem(context, trade.recipient_id, trade.offer_item_id, Number(trade.offer_quantity));
-  await addInventoryItem(context, trade.proposer_id, trade.request_item_id, Number(trade.request_quantity));
-  await context.env.DB.prepare(`UPDATE droptech_trades SET status = 'accepted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(trade.id).run();
+async function acceptTradeRequest(context: any, userId: number, tradeId: number) {
+  const result = await context.env.DB.prepare(`UPDATE droptech_trades SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND recipient_id = ? AND status IN ('pending_request', 'pending')`).bind(tradeId, userId).run();
+  if (Number(result?.meta?.changes || 0) === 0) throw new DropTechUserError("Aktif takas isteği bulunamadı.");
   return { ...await buildState(context, userId), trade_accepted: true };
 }
 
+async function updateTradeItems(context: any, userId: number, body: any) {
+  const tradeId = Number(body?.trade_id || 0);
+  const itemId = String(body?.item_id || "");
+  const quantity = Math.max(1, Math.floor(Number(body?.quantity || 1)));
+  const item = DROP_ITEMS.find((entry) => entry.id === itemId);
+  if (!item) throw new DropTechUserError("Takas eşyası bulunamadı.");
+  const trade: any = await context.env.DB.prepare(`SELECT * FROM droptech_trades WHERE id = ? AND (proposer_id = ? OR recipient_id = ?) AND status IN ('active', 'ready')`).bind(tradeId, userId, userId).first();
+  if (!trade) throw new DropTechUserError("Düzenlenecek aktif takas bulunamadı.");
+  await assertInventoryQuantity(context, userId, item.id, quantity, "Bu eşyadan yeterli adet yok.");
+  const isProposer = Number(trade.proposer_id) === userId;
+  const itemColumn = isProposer ? "offer_item_id" : "request_item_id";
+  const quantityColumn = isProposer ? "offer_quantity" : "request_quantity";
+  await context.env.DB.prepare(`UPDATE droptech_trades SET ${itemColumn} = ?, ${quantityColumn} = ?, status = 'active', proposer_ready = 0, recipient_ready = 0, proposer_confirmed = 0, recipient_confirmed = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(item.id, quantity, tradeId).run();
+  return { ...await buildState(context, userId), trade_updated: true };
+}
+
+async function setTradeReady(context: any, userId: number, tradeId: number, ready: boolean) {
+  const trade: any = await context.env.DB.prepare(`SELECT * FROM droptech_trades WHERE id = ? AND (proposer_id = ? OR recipient_id = ?) AND status IN ('active', 'ready')`).bind(tradeId, userId, userId).first();
+  if (!trade) throw new DropTechUserError("Hazır yapılacak aktif takas bulunamadı.");
+  const isProposer = Number(trade.proposer_id) === userId;
+  const itemId = String(isProposer ? trade.offer_item_id : trade.request_item_id || "");
+  const quantity = Number(isProposer ? trade.offer_quantity : trade.request_quantity || 1);
+  if (ready) {
+    if (!itemId) throw new DropTechUserError("Hazır olmadan önce takasa eşya koy.");
+    await assertInventoryQuantity(context, userId, itemId, quantity, "Hazır olduğun eşya envanterinde yeterli değil.");
+  }
+  const column = isProposer ? "proposer_ready" : "recipient_ready";
+  const otherReady = Boolean(Number(isProposer ? trade.recipient_ready : trade.proposer_ready));
+  const nextStatus = ready && otherReady ? "ready" : "active";
+  await context.env.DB.prepare(`UPDATE droptech_trades SET ${column} = ?, status = ?, proposer_confirmed = 0, recipient_confirmed = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(ready ? 1 : 0, nextStatus, tradeId).run();
+  return { ...await buildState(context, userId), trade_updated: true };
+}
+
+async function confirmTrade(context: any, userId: number, tradeId: number) {
+  const trade: any = await context.env.DB.prepare(`SELECT * FROM droptech_trades WHERE id = ? AND (proposer_id = ? OR recipient_id = ?) AND status = 'ready'`).bind(tradeId, userId, userId).first();
+  if (!trade) throw new DropTechUserError("Son onay bekleyen takas bulunamadı.");
+  if (!Number(trade.proposer_ready) || !Number(trade.recipient_ready) || !trade.offer_item_id || !trade.request_item_id) throw new DropTechUserError("Son onaydan önce iki taraf da eşya koyup hazır olmalı.");
+  await assertInventoryQuantity(context, trade.proposer_id, trade.offer_item_id, Number(trade.offer_quantity), "Teklif sahibinde bu eşya artık yeterli değil.");
+  await assertInventoryQuantity(context, trade.recipient_id, trade.request_item_id, Number(trade.request_quantity), "Diğer oyuncuda bu eşya artık yeterli değil.");
+  const isProposer = Number(trade.proposer_id) === userId;
+  const confirmColumn = isProposer ? "proposer_confirmed" : "recipient_confirmed";
+  await context.env.DB.prepare(`UPDATE droptech_trades SET ${confirmColumn} = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'ready'`).bind(tradeId).run();
+  const refreshed: any = await context.env.DB.prepare(`SELECT * FROM droptech_trades WHERE id = ? AND status = 'ready'`).bind(tradeId).first();
+  if (refreshed && Number(refreshed.proposer_confirmed) && Number(refreshed.recipient_confirmed)) {
+    await assertInventoryQuantity(context, refreshed.proposer_id, refreshed.offer_item_id, Number(refreshed.offer_quantity), "Teklif sahibinde bu eşya artık yeterli değil.");
+    await assertInventoryQuantity(context, refreshed.recipient_id, refreshed.request_item_id, Number(refreshed.request_quantity), "Diğer oyuncuda bu eşya artık yeterli değil.");
+    await removeInventoryItem(context, refreshed.proposer_id, refreshed.offer_item_id, Number(refreshed.offer_quantity));
+    await removeInventoryItem(context, refreshed.recipient_id, refreshed.request_item_id, Number(refreshed.request_quantity));
+    await addInventoryItem(context, refreshed.recipient_id, refreshed.offer_item_id, Number(refreshed.offer_quantity));
+    await addInventoryItem(context, refreshed.proposer_id, refreshed.request_item_id, Number(refreshed.request_quantity));
+    await context.env.DB.prepare(`UPDATE droptech_trades SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'ready'`).bind(tradeId).run();
+  }
+  return { ...await buildState(context, userId), trade_confirmed: true };
+}
+
 async function updateTradeStatus(context: any, userId: number, tradeId: number, status: "declined" | "cancelled") {
-  const where = status === "declined" ? "recipient_id" : "proposer_id";
-  const result = await context.env.DB.prepare(`UPDATE droptech_trades SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND ${where} = ? AND status = 'pending'`).bind(status, tradeId, userId).run();
-  if (Number(result?.meta?.changes || 0) === 0) throw new DropTechUserError("Güncellenecek aktif takas teklifi bulunamadı.");
+  const actorColumn = status === "declined" ? "recipient_id" : "proposer_id";
+  const result = await context.env.DB.prepare(`UPDATE droptech_trades SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (${actorColumn} = ? OR (status <> 'pending_request' AND (proposer_id = ? OR recipient_id = ?))) AND status IN ('pending_request', 'pending', 'active', 'ready')`).bind(status, tradeId, userId, userId, userId).run();
+  if (Number(result?.meta?.changes || 0) === 0) throw new DropTechUserError("Güncellenecek aktif takas bulunamadı.");
   return { ...await buildState(context, userId), trade_updated: true };
 }
 
@@ -417,7 +465,7 @@ async function getOnlineUsers(context: any, userId: number) {
 }
 
 async function getTradeOffers(context: any, userId: number) {
-  const rows = await context.env.DB.prepare(`SELECT t.*, proposer.name AS proposer_name, recipient.name AS recipient_name FROM droptech_trades t JOIN users proposer ON proposer.id = t.proposer_id JOIN users recipient ON recipient.id = t.recipient_id WHERE (t.proposer_id = ? OR t.recipient_id = ?) AND (t.status = 'pending' OR t.updated_at >= datetime('now', '-1 day')) ORDER BY CASE t.status WHEN 'pending' THEN 0 ELSE 1 END, t.updated_at DESC LIMIT 30`).bind(userId, userId).all();
+  const rows = await context.env.DB.prepare(`SELECT t.*, proposer.name AS proposer_name, recipient.name AS recipient_name FROM droptech_trades t JOIN users proposer ON proposer.id = t.proposer_id JOIN users recipient ON recipient.id = t.recipient_id WHERE (t.proposer_id = ? OR t.recipient_id = ?) AND (t.status IN ('pending_request', 'pending', 'active', 'ready') OR t.updated_at >= datetime('now', '-1 day')) ORDER BY CASE t.status WHEN 'pending_request' THEN 0 WHEN 'pending' THEN 0 WHEN 'active' THEN 1 WHEN 'ready' THEN 2 ELSE 3 END, t.updated_at DESC LIMIT 30`).bind(userId, userId).all();
   return (rows?.results || []).map(enrichTradeOffer);
 }
 

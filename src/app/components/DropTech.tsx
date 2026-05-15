@@ -54,7 +54,11 @@ type TradeOffer = {
   recipient_name: string;
   offer_quantity: number;
   request_quantity: number;
-  status: "pending" | "accepted" | "declined" | "cancelled";
+  status: "pending_request" | "pending" | "active" | "ready" | "completed" | "accepted" | "declined" | "cancelled";
+  proposer_ready?: number;
+  recipient_ready?: number;
+  proposer_confirmed?: number;
+  recipient_confirmed?: number;
   offer_item?: DropItem | null;
   request_item?: DropItem | null;
 };
@@ -145,10 +149,6 @@ export function DropTech() {
   const stripViewportRef = useRef<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<Rarity | "all">("all");
   const [tradeUserId, setTradeUserId] = useState("");
-  const [offerItemId, setOfferItemId] = useState("");
-  const [requestItemId, setRequestItemId] = useState("");
-  const [offerQty, setOfferQty] = useState(1);
-  const [requestQty, setRequestQty] = useState(1);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const copy = useMemo(() => tr ? {
@@ -184,15 +184,26 @@ export function DropTech() {
     trade: "Online takas",
     online: "Online kullanıcılar",
     noOnline: "Şu an başka online kullanıcı yok.",
-    offer: "Vereceğin eşya",
-    request: "İstediğin eşya",
-    sendTrade: "Takas teklifi gönder",
-    incoming: "Gelen teklifler",
-    outgoing: "Giden teklifler",
-    accept: "Kabul et",
+    offer: "Oyuncu A eşyası",
+    request: "Oyuncu B eşyası",
+    sendTrade: "Takas isteği gönder",
+    incoming: "Takaslar",
+    outgoing: "Giden istekler",
+    accept: "İsteği kabul et",
     decline: "Reddet",
     cancel: "İptal et",
     qty: "Adet",
+    tradeFlow: "1) İstek gönderilir  2) Karşı taraf kabul eder  3) İki taraf eşya koyar  4) İki taraf Hazır der  5) Son onayda ikisi de onaylar",
+    selectItem: "Eşya seç",
+    saveItem: "Eşyayı koy",
+    ready: "Hazır",
+    unready: "Hazırı kaldır",
+    finalConfirm: "Son onay",
+    confirm: "Onayla",
+    waitingOther: "Diğer oyuncu bekleniyor",
+    requestPending: "İstek bekliyor",
+    activeTrade: "Eşya koyma aşaması",
+    completed: "Tamamlandı",
     valueNote: "Kutun varsa ücretsiz açılır. Kutun yoksa seçili kutu Tech Coin bakiyenle satın alınıp açılır.",
   } : {
     loading: "Loading DropTech...",
@@ -227,15 +238,26 @@ export function DropTech() {
     trade: "Online trade",
     online: "Online users",
     noOnline: "No other online users right now.",
-    offer: "Your item",
-    request: "Requested item",
-    sendTrade: "Send trade offer",
-    incoming: "Incoming offers",
-    outgoing: "Outgoing offers",
-    accept: "Accept",
+    offer: "Player A item",
+    request: "Player B item",
+    sendTrade: "Send trade request",
+    incoming: "Trades",
+    outgoing: "Outgoing requests",
+    accept: "Accept request",
     decline: "Decline",
     cancel: "Cancel",
     qty: "Qty",
+    tradeFlow: "1) Request is sent  2) Other player accepts  3) Both add items  4) Both mark Ready  5) Both approve final confirmation",
+    selectItem: "Select item",
+    saveItem: "Add item",
+    ready: "Ready",
+    unready: "Unready",
+    finalConfirm: "Final confirmation",
+    confirm: "Confirm",
+    waitingOther: "Waiting for other player",
+    requestPending: "Request pending",
+    activeTrade: "Adding items",
+    completed: "Completed",
     valueNote: "Owned boxes open for free. If you do not own the selected box, it is bought and opened with your Tech Coin balance.",
   }, [tr]);
 
@@ -254,8 +276,8 @@ export function DropTech() {
   const onlineUsers = state?.online_users || [];
   const trades = state?.trades || [];
   const currentUserId = Number(state?.user_id || 0);
-  const incomingTrades = trades.filter((trade) => trade.status === "pending" && Number(trade.recipient_id) === currentUserId);
-  const outgoingTrades = trades.filter((trade) => trade.status === "pending" && Number(trade.proposer_id) === currentUserId);
+  const openStatuses = ["pending_request", "pending", "active", "ready"];
+  const incomingTrades = trades.filter((trade) => openStatuses.includes(trade.status) && (Number(trade.recipient_id) === currentUserId || Number(trade.proposer_id) === currentUserId));
 
   async function loadState() {
     setLoading(true);
@@ -265,8 +287,6 @@ export function DropTech() {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "DropTech verisi alınamadı.");
       setState(data);
-      if (!offerItemId && data?.inventory?.[0]?.item_id) setOfferItemId(data.inventory[0].item_id);
-      if (!requestItemId && data?.items?.[0]?.id) setRequestItemId(data.items[0].id);
       if (!tradeUserId && data?.online_users?.[0]?.id) setTradeUserId(String(data.online_users[0].id));
       if (data?.boxes?.[0]?.id && !data.boxes.some((box: DropBox) => box.id === selectedBoxId)) setSelectedBoxId(data.boxes[0].id);
     } catch (caught) {
@@ -312,20 +332,31 @@ export function DropTech() {
   async function sendTrade() {
     setMessage(null);
     try {
-      await postAction({ action: "create_trade", recipient_id: Number(tradeUserId), offer_item_id: offerItemId, offer_quantity: offerQty, request_item_id: requestItemId, request_quantity: requestQty }, "Takas teklifi gönderilemedi.");
-      setMessage({ type: "success", text: tr ? "Takas teklifi gönderildi." : "Trade offer sent." });
+      await postAction({ action: "create_trade", recipient_id: Number(tradeUserId) }, "Takas isteği gönderilemedi.");
+      setMessage({ type: "success", text: tr ? "Takas isteği gönderildi." : "Trade request sent." });
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Takas teklifi gönderilemedi." });
     }
   }
 
-  async function respondTrade(tradeId: number, action: "accept_trade" | "decline_trade" | "cancel_trade") {
+  async function respondTrade(tradeId: number, action: "accept_trade" | "decline_trade" | "cancel_trade" | "set_trade_ready" | "confirm_trade", extra: Record<string, unknown> = {}) {
     setMessage(null);
     try {
-      await postAction({ action, trade_id: tradeId }, "Takas güncellenemedi.");
+      await postAction({ action, trade_id: tradeId, ...extra }, "Takas güncellenemedi.");
       setMessage({ type: "success", text: tr ? "Takas güncellendi." : "Trade updated." });
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Takas güncellenemedi." });
+    }
+  }
+
+
+  async function updateTradeItems(tradeId: number, itemId: string, quantity: number) {
+    setMessage(null);
+    try {
+      await postAction({ action: "update_trade_items", trade_id: tradeId, item_id: itemId, quantity }, "Takas eşyası güncellenemedi.");
+      setMessage({ type: "success", text: tr ? "Takas eşyası koyuldu." : "Trade item added." });
+    } catch (caught) {
+      setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Takas eşyası güncellenemedi." });
     }
   }
 
@@ -432,10 +463,11 @@ export function DropTech() {
         </section>
 
 
-        <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <section className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
             <div className="flex items-center justify-between gap-3"><h2 className="text-3xl font-medium">{copy.trade}</h2><Repeat2 className="h-6 w-6 text-cyan-200" /></div>
-            <p className="mt-2 text-sm text-white/45">{copy.online}: {formatNumber(onlineUsers.length, locale)}</p>
+            <p className="mt-2 text-sm leading-6 text-white/45">{copy.tradeFlow}</p>
+            <p className="mt-3 text-sm text-white/45">{copy.online}: {formatNumber(onlineUsers.length, locale)}</p>
             <div className="mt-5 grid gap-3">
               <label className="grid gap-2 text-sm text-white/60">{copy.online}
                 <select value={tradeUserId} onChange={(event) => setTradeUserId(event.target.value)} className="rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-white outline-none">
@@ -443,28 +475,12 @@ export function DropTech() {
                   {onlineUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
                 </select>
               </label>
-              <label className="grid gap-2 text-sm text-white/60">{copy.offer}
-                <select value={offerItemId} onChange={(event) => setOfferItemId(event.target.value)} className="rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-white outline-none">
-                  {inventoryItems.map((item) => <option key={item.item_id || item.id} value={item.item_id || item.id}>{item.emoji} {nameOf(item, tr)} x{item.quantity}</option>)}
-                </select>
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-2 text-sm text-white/60">{copy.qty}<input type="number" min={1} value={offerQty} onChange={(event) => setOfferQty(Math.max(1, Number(event.target.value || 1)))} className="rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-white outline-none" /></label>
-                <label className="grid gap-2 text-sm text-white/60">{copy.request}
-                  <select value={requestItemId} onChange={(event) => setRequestItemId(event.target.value)} className="rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-white outline-none">
-                    {(state?.items || []).map((item) => <option key={item.id} value={item.id}>{item.emoji} {nameOf(item, tr)} · {item.series_name_tr || item.series_id}</option>)}
-                  </select>
-                </label>
-              </div>
-              <label className="grid gap-2 text-sm text-white/60">{copy.qty}<input type="number" min={1} value={requestQty} onChange={(event) => setRequestQty(Math.max(1, Number(event.target.value || 1)))} className="rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-white outline-none" /></label>
-              <button onClick={sendTrade} disabled={!tradeUserId || !offerItemId || !requestItemId || !inventoryItems.length} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-40"><Repeat2 className="h-4 w-4" /> {copy.sendTrade}</button>
+              <button onClick={sendTrade} disabled={!tradeUserId} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-40"><Repeat2 className="h-4 w-4" /> {copy.sendTrade}</button>
             </div>
           </div>
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
             <h2 className="text-3xl font-medium">{copy.incoming}</h2>
-            <div className="mt-4 grid gap-3">{incomingTrades.length ? incomingTrades.map((trade) => <TradeCard key={trade.id} trade={trade} tr={tr} locale={locale} primaryLabel={copy.accept} secondaryLabel={copy.decline} onPrimary={() => respondTrade(trade.id, "accept_trade")} onSecondary={() => respondTrade(trade.id, "decline_trade")} />) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">—</p>}</div>
-            <h2 className="mt-6 text-2xl font-medium">{copy.outgoing}</h2>
-            <div className="mt-4 grid gap-3">{outgoingTrades.length ? outgoingTrades.map((trade) => <TradeCard key={trade.id} trade={trade} tr={tr} locale={locale} primaryLabel={copy.cancel} onPrimary={() => respondTrade(trade.id, "cancel_trade")} />) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">—</p>}</div>
+            <div className="mt-4 grid gap-3">{incomingTrades.length ? incomingTrades.map((trade) => <TradeCard key={trade.id} trade={trade} currentUserId={currentUserId} inventoryItems={inventoryItems} tr={tr} locale={locale} copy={copy} onAccept={() => respondTrade(trade.id, "accept_trade")} onDecline={() => respondTrade(trade.id, "decline_trade")} onCancel={() => respondTrade(trade.id, "cancel_trade")} onUpdateItems={(itemId, quantity) => updateTradeItems(trade.id, itemId, quantity)} onReady={(ready) => respondTrade(trade.id, "set_trade_ready", { ready })} onConfirm={() => respondTrade(trade.id, "confirm_trade")} />) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">—</p>}</div>
           </div>
         </section>
 
@@ -489,11 +505,40 @@ function ValueRow({ label, value, locale }: { label: string; value: number; loca
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button onClick={onClick} className={`rounded-full border px-4 py-2 text-xs font-medium transition ${active ? "border-white/40 bg-white text-black" : "border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.08]"}`}>{children}</button>;
 }
-function TradeCard({ trade, tr, locale, primaryLabel, secondaryLabel, onPrimary, onSecondary }: { trade: TradeOffer; tr: boolean; locale: string; primaryLabel: string; secondaryLabel?: string; onPrimary: () => void; onSecondary?: () => void }) {
-  const offer = trade.offer_item;
-  const request = trade.request_item;
-  return <div className="rounded-[1.5rem] border border-white/10 bg-black/30 p-4"><p className="text-xs uppercase tracking-[0.16em] text-white/35">{trade.proposer_name} → {trade.recipient_name}</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><MiniTradeItem label={tr ? "Verilen" : "Offer"} item={offer} quantity={Number(trade.offer_quantity || 0)} tr={tr} locale={locale} /><MiniTradeItem label={tr ? "İstenen" : "Request"} item={request} quantity={Number(trade.request_quantity || 0)} tr={tr} locale={locale} /></div><div className="mt-4 flex flex-wrap gap-2"><button onClick={onPrimary} className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200">{primaryLabel}</button>{secondaryLabel && onSecondary && <button onClick={onSecondary} className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-semibold text-white/70 hover:bg-white/[0.08]">{secondaryLabel}</button>}</div></div>;
+function TradeCard({ trade, currentUserId, inventoryItems, tr, locale, copy, onAccept, onDecline, onCancel, onUpdateItems, onReady, onConfirm }: { trade: TradeOffer; currentUserId: number; inventoryItems: InventoryItem[]; tr: boolean; locale: string; copy: Record<string, string>; onAccept: () => void; onDecline: () => void; onCancel: () => void; onUpdateItems: (itemId: string, quantity: number) => void; onReady: (ready: boolean) => void; onConfirm: () => void }) {
+  const isProposer = Number(trade.proposer_id) === currentUserId;
+  const myReady = Boolean(Number(isProposer ? trade.proposer_ready : trade.recipient_ready));
+  const otherReady = Boolean(Number(isProposer ? trade.recipient_ready : trade.proposer_ready));
+  const myConfirmed = Boolean(Number(isProposer ? trade.proposer_confirmed : trade.recipient_confirmed));
+  const [itemId, setItemId] = useState(isProposer ? (trade.offer_item?.id || "") : (trade.request_item?.id || ""));
+  const [quantity, setQuantity] = useState(Number(isProposer ? trade.offer_quantity : trade.request_quantity || 1));
+  const statusText = trade.status === "ready" ? copy.finalConfirm : trade.status === "active" ? copy.activeTrade : trade.status === "completed" || trade.status === "accepted" ? copy.completed : copy.requestPending;
+  const canEdit = ["active", "ready"].includes(trade.status) && !myReady;
+  const canReady = ["active", "ready"].includes(trade.status) && (isProposer ? Boolean(trade.offer_item) : Boolean(trade.request_item));
+  const canConfirm = trade.status === "ready" && myReady && otherReady && !myConfirmed;
+  const canAcceptRequest = ["pending_request", "pending"].includes(trade.status) && !isProposer;
+
+  return <div className="rounded-[1.5rem] border border-white/10 bg-black/30 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-xs uppercase tracking-[0.16em] text-white/35">{trade.proposer_name} → {trade.recipient_name}</p>
+      <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[11px] font-semibold text-cyan-100">{statusText}</span>
+    </div>
+    <div className="mt-3 grid gap-3 sm:grid-cols-2"><MiniTradeItem label={copy.offer} item={trade.offer_item} quantity={Number(trade.offer_quantity || 0)} ready={Boolean(Number(trade.proposer_ready))} confirmed={Boolean(Number(trade.proposer_confirmed))} tr={tr} locale={locale} /><MiniTradeItem label={copy.request} item={trade.request_item} quantity={Number(trade.request_quantity || 0)} ready={Boolean(Number(trade.recipient_ready))} confirmed={Boolean(Number(trade.recipient_confirmed))} tr={tr} locale={locale} /></div>
+    {canEdit && <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3 sm:grid-cols-[1fr_96px_auto]">
+      <label className="grid gap-2 text-xs text-white/55">{copy.selectItem}<select value={itemId} onChange={(event) => setItemId(event.target.value)} className="rounded-2xl border border-white/10 bg-black/60 px-3 py-2 text-white outline-none"><option value="">—</option>{inventoryItems.map((item) => <option key={item.item_id || item.id} value={item.item_id || item.id}>{item.emoji} {nameOf(item, tr)} x{item.quantity}</option>)}</select></label>
+      <label className="grid gap-2 text-xs text-white/55">{copy.qty}<input type="number" min={1} value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value || 1)))} className="rounded-2xl border border-white/10 bg-black/60 px-3 py-2 text-white outline-none" /></label>
+      <button onClick={() => itemId && onUpdateItems(itemId, quantity)} disabled={!itemId} className="self-end rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200 disabled:opacity-40">{copy.saveItem}</button>
+    </div>}
+    {trade.status === "ready" && <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm text-amber-100"><p className="font-semibold">{copy.finalConfirm}</p><p className="mt-1 text-xs opacity-75">{myConfirmed ? copy.waitingOther : copy.confirm}</p></div>}
+    <div className="mt-4 flex flex-wrap gap-2">
+      {canAcceptRequest && <button onClick={onAccept} className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200">{copy.accept}</button>}
+      {canReady && <button onClick={() => onReady(!myReady)} className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200">{myReady ? copy.unready : copy.ready}</button>}
+      {canConfirm && <button onClick={onConfirm} className="rounded-full bg-amber-200 px-4 py-2 text-xs font-semibold text-black hover:bg-amber-100">{copy.confirm}</button>}
+      {canAcceptRequest && <button onClick={onDecline} className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-semibold text-white/70 hover:bg-white/[0.08]">{copy.decline}</button>}
+      {trade.status !== "completed" && trade.status !== "accepted" && <button onClick={onCancel} className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-semibold text-white/70 hover:bg-white/[0.08]">{copy.cancel}</button>}
+    </div>
+  </div>;
 }
-function MiniTradeItem({ label, item, quantity, tr, locale }: { label: string; item?: DropItem | null; quantity: number; tr: boolean; locale: string }) {
-  return <div className={`rounded-2xl border p-3 ${item ? rarityClass[item.rarity] : "border-white/10 bg-white/[0.04]"}`}><p className="text-[10px] uppercase tracking-[0.16em] opacity-55">{label}</p><div className="mt-2 flex items-center gap-2"><span className="text-2xl">{item?.emoji || "?"}</span><div><p className="text-sm font-semibold">{nameOf(item, tr) || "—"}</p><p className="text-xs opacity-65">x{formatNumber(quantity, locale)} · {item ? `${formatNumber(Number(item.tech_coin_value || 0) * quantity, locale)} TC` : ""}</p></div></div></div>;
+function MiniTradeItem({ label, item, quantity, ready, confirmed, tr, locale }: { label: string; item?: DropItem | null; quantity: number; ready?: boolean; confirmed?: boolean; tr: boolean; locale: string }) {
+  return <div className={`rounded-2xl border p-3 ${item ? rarityClass[item.rarity] : "border-white/10 bg-white/[0.04]"}`}><div className="flex items-center justify-between gap-2"><p className="text-[10px] uppercase tracking-[0.16em] opacity-55">{label}</p><p className="text-[10px] uppercase tracking-[0.16em] opacity-55">{confirmed ? (tr ? "Onaylandı" : "Confirmed") : ready ? (tr ? "Hazır" : "Ready") : ""}</p></div><div className="mt-2 flex items-center gap-2"><span className="text-2xl">{item?.emoji || "?"}</span><div><p className="text-sm font-semibold">{nameOf(item, tr) || "—"}</p><p className="text-xs opacity-65">x{formatNumber(quantity, locale)} · {item ? `${formatNumber(Number(item.tech_coin_value || 0) * quantity, locale)} TC` : ""}</p></div></div></div>;
 }
