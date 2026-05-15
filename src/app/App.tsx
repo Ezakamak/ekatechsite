@@ -43,6 +43,7 @@ import { OffPage } from "./components/OffPage";
 import { CoreClash } from "./components/CoreClashVisualEffects";
 import { AutoEnterLobbies } from "./components/AutoEnterLobbies";
 import { GamePresenceManager } from "./components/GamePresenceManager";
+import { OffSoundEngine } from "./components/OffSoundEngine";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -141,6 +142,7 @@ export default function App() {
       <MaintenanceGate />
       <AutoEnterLobbies />
       <GamePresenceManager />
+      <OffSoundEngine />
       <div className="min-h-screen bg-black dark">
         <Navbar />
 
