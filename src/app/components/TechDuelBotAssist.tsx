@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Sparkles, RefreshCcw } from "lucide-react";
+import { Bot, Sparkles } from "lucide-react";
 import { useLanguage } from "../i18n";
 
 type Lobby = {
@@ -27,8 +27,6 @@ export function TechDuelBotAssist() {
           action: "Botla Oyna",
           loading: "Kontrol ediliyor...",
           noLobby: "Bot için açık lobby yok.",
-          success: "BOT Player 2 olarak bağlandı.",
-          refresh: "Yenile",
         }
       : {
           title: "Player 2 is empty",
@@ -36,8 +34,6 @@ export function TechDuelBotAssist() {
           action: "Play with Bot",
           loading: "Checking...",
           noLobby: "No open lobby for bot.",
-          success: "BOT connected as Player 2.",
-          refresh: "Refresh",
         },
     [tr]
   );
@@ -45,7 +41,8 @@ export function TechDuelBotAssist() {
   const [user, setUser] = useState<User | null>(null);
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [hidden, setHidden] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadState();
@@ -54,6 +51,7 @@ export function TechDuelBotAssist() {
   }, []);
 
   async function loadState(showLoading = true) {
+    if (hidden) return;
     if (showLoading) setLoading(true);
     try {
       const response = await fetch("/api/duels", { credentials: "same-origin", cache: "no-store" });
@@ -68,8 +66,9 @@ export function TechDuelBotAssist() {
       ) || null;
       setUser(nextUser);
       setLobby(openMine);
-    } catch (error) {
-      if (showLoading) setStatus({ type: "error", text: error instanceof Error ? error.message : copy.noLobby });
+      if (!openMine) setError(null);
+    } catch (caught) {
+      if (showLoading) setError(caught instanceof Error ? caught.message : copy.noLobby);
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -78,7 +77,7 @@ export function TechDuelBotAssist() {
   async function playWithBot() {
     if (!lobby) return;
     setLoading(true);
-    setStatus(null);
+    setError(null);
     try {
       const response = await fetch("/api/duels/bot", {
         method: "POST",
@@ -89,16 +88,16 @@ export function TechDuelBotAssist() {
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || copy.noLobby);
-      setStatus({ type: "success", text: data?.message || copy.success });
-      await loadState(false);
-    } catch (error) {
-      setStatus({ type: "error", text: error instanceof Error ? error.message : copy.noLobby });
+      setHidden(true);
+      setLobby(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : copy.noLobby);
     } finally {
       setLoading(false);
     }
   }
 
-  if (!user || (!lobby && !status)) return null;
+  if (hidden || !user || !lobby) return null;
 
   return (
     <aside className="fixed bottom-24 right-5 z-[120] w-[calc(100vw-2.5rem)] max-w-sm overflow-hidden rounded-[1.75rem] border border-cyan-300/20 bg-black/85 text-white shadow-2xl shadow-black/50 backdrop-blur-xl sm:right-6 sm:w-96">
@@ -117,33 +116,25 @@ export function TechDuelBotAssist() {
         </div>
       </div>
 
-      {status && (
-        <div className={`m-4 rounded-2xl border px-4 py-3 text-xs ${status.type === "success" ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-red-300/20 bg-red-300/10 text-red-100"}`}>
-          {status.text}
+      {error && (
+        <div className="m-4 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-xs text-red-100">
+          {error}
         </div>
       )}
 
-      {lobby ? (
-        <div className="space-y-3 p-4 pt-4">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-xs text-white/45">
-            Lobby #{lobby.id} · {lobby.mode || "classic"} · Best of {lobby.round_count || 5}
-          </div>
-          <button
-            type="button"
-            onClick={playWithBot}
-            disabled={loading}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-40"
-          >
-            <Sparkles className="h-4 w-4" /> {loading ? copy.loading : copy.action}
-          </button>
+      <div className="space-y-3 p-4 pt-4">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-xs text-white/45">
+          Lobby #{lobby.id} · {lobby.mode || "classic"} · Best of {lobby.round_count || 5}
         </div>
-      ) : (
-        <div className="p-4 pt-0">
-          <button type="button" onClick={() => loadState()} className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/70 hover:bg-white/[0.1]">
-            <RefreshCcw className="h-4 w-4" /> {copy.refresh}
-          </button>
-        </div>
-      )}
+        <button
+          type="button"
+          onClick={playWithBot}
+          disabled={loading}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-40"
+        >
+          <Sparkles className="h-4 w-4" /> {loading ? copy.loading : copy.action}
+        </button>
+      </div>
     </aside>
   );
 }
