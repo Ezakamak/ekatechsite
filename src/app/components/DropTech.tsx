@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Box, Gift, PackageOpen, RefreshCw, Sparkles } from "lucide-react";
+import { Gift, PackageOpen, RefreshCw, Sparkles } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 
@@ -17,11 +17,7 @@ type DropItem = {
   tech_coin_value?: number;
 };
 
-type InventoryItem = DropItem & {
-  item_id?: string;
-  quantity: number;
-  total_tech_coin_value?: number;
-};
+type InventoryItem = DropItem & { item_id?: string; quantity: number; total_tech_coin_value?: number };
 
 type DropBox = {
   id: string;
@@ -33,6 +29,7 @@ type DropBox = {
   accent: string;
   quantity: number;
   odds: Record<Rarity, number>;
+  tech_coin_value?: number;
 };
 
 type DropTechState = {
@@ -79,7 +76,7 @@ function descOf(item: DropItem | InventoryItem | DropBox | null | undefined, tr:
   return tr ? item.description_tr : item.description_en;
 }
 function formatNumber(value: number, locale: string) {
-  return new Intl.NumberFormat(locale).format(Number(value || 0));
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value || 0));
 }
 function buildStrip(items: DropItem[], won?: DropItem | null) {
   if (!items.length) return [];
@@ -110,6 +107,8 @@ export function DropTech() {
     opened: "Açılan",
     collection: "Koleksiyon",
     collectionValue: "Koleksiyon değeri",
+    boxValue: "Kutu değeri",
+    expectedValue: "Beklenen değer",
     itemValue: "Eşya değeri",
     totalValue: "Toplam değer",
     claim: "Günlük kutuyu al",
@@ -124,7 +123,7 @@ export function DropTech() {
     owned: "Sahip olunan",
     empty: "Henüz eşya yok. Günlük kutunu alıp aç.",
     add: "Envantere eklendi",
-    valueNote: "Koleksiyon değeri sadece envanterde duran değerdir; kutu açınca cüzdana eklenmez.",
+    valueNote: "Kutu değeri, drop ihtimallerine göre beklenen ortalama koleksiyon değeridir. Kutu açınca cüzdana Tech Coin eklenmez.",
   } : {
     loading: "Loading DropTech...",
     title: "DropTech",
@@ -134,6 +133,8 @@ export function DropTech() {
     opened: "Opened",
     collection: "Collection",
     collectionValue: "Collection value",
+    boxValue: "Box value",
+    expectedValue: "Expected value",
     itemValue: "Item value",
     totalValue: "Total value",
     claim: "Claim daily box",
@@ -148,7 +149,7 @@ export function DropTech() {
     owned: "Owned",
     empty: "No items yet. Claim and open your daily box.",
     add: "Added to inventory",
-    valueNote: "Collection value only; opening a box does not add Tech Coin to your wallet.",
+    valueNote: "Box value is the average expected collection value based on drop odds. Opening a box does not add Tech Coin to your wallet.",
   }, [tr]);
 
   const boxes = state?.boxes || [];
@@ -216,6 +217,7 @@ export function DropTech() {
   const strip = buildStrip(state?.items || [], won);
   const boxCount = Number(state?.box_count || 0);
   const collectionValue = Number(state?.collection_value || 0);
+  const selectedBoxValue = Number(selectedBox?.tech_coin_value || 0);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
@@ -230,15 +232,15 @@ export function DropTech() {
         </section>
 
         <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-3xl font-medium">{copy.boxTypes}</h2><p className="mt-2 text-sm text-white/45">{nameOf(selectedBox, tr)} · x{selectedQuantity}</p></div><button onClick={claimDaily} disabled={!state?.can_claim_daily || opening} className="inline-flex items-center justify-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-3 text-sm font-medium text-cyan-100 hover:bg-cyan-300/15 disabled:opacity-40"><PackageOpen className="h-4 w-4" /> {state?.can_claim_daily ? copy.claim : copy.claimed}</button></div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-3xl font-medium">{copy.boxTypes}</h2><p className="mt-2 text-sm text-white/45">{nameOf(selectedBox, tr)} · x{selectedQuantity} · {copy.expectedValue}: {formatNumber(selectedBoxValue, locale)} TC</p></div><button onClick={claimDaily} disabled={!state?.can_claim_daily || opening} className="inline-flex items-center justify-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-3 text-sm font-medium text-cyan-100 hover:bg-cyan-300/15 disabled:opacity-40"><PackageOpen className="h-4 w-4" /> {state?.can_claim_daily ? copy.claim : copy.claimed}</button></div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-            {boxes.map((box) => <button key={box.id} type="button" onClick={() => setSelectedBoxId(box.id)} className={`rounded-[1.35rem] border p-4 text-left transition ${boxClass[box.accent] || boxClass.white} ${box.id === selectedBoxId ? "ring-2 ring-white/60" : "opacity-80 hover:opacity-100"}`}><div className="flex items-start justify-between"><span className="text-3xl">{box.emoji}</span><span className="rounded-full bg-black/25 px-3 py-1 text-xs font-semibold">x{formatNumber(Number(box.quantity || 0), locale)}</span></div><h3 className="mt-3 font-semibold">{nameOf(box, tr)}</h3><p className="mt-2 line-clamp-2 text-xs leading-5 opacity-65">{descOf(box, tr)}</p></button>)}
+            {boxes.map((box) => <button key={box.id} type="button" onClick={() => setSelectedBoxId(box.id)} className={`rounded-[1.35rem] border p-4 text-left transition ${boxClass[box.accent] || boxClass.white} ${box.id === selectedBoxId ? "ring-2 ring-white/60" : "opacity-80 hover:opacity-100"}`}><div className="flex items-start justify-between"><span className="text-3xl">{box.emoji}</span><span className="rounded-full bg-black/25 px-3 py-1 text-xs font-semibold">x{formatNumber(Number(box.quantity || 0), locale)}</span></div><h3 className="mt-3 font-semibold">{nameOf(box, tr)}</h3><p className="mt-2 line-clamp-2 text-xs leading-5 opacity-65">{descOf(box, tr)}</p><div className="mt-3 inline-flex items-center gap-1 rounded-full bg-black/25 px-3 py-1 text-xs font-semibold"><CoinIcon small /> {formatNumber(Number(box.tech_coin_value || 0), locale)} TC</div></button>)}
           </div>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
-            <div className="grid gap-3 sm:grid-cols-4"><Stat label={copy.boxes} value={formatNumber(boxCount, locale)} /><Stat label={copy.opened} value={formatNumber(Number(state?.lifetime_opened || 0), locale)} /><Stat label={copy.collection} value={`${formatNumber(Number(state?.owned_count || 0), locale)}/${formatNumber(Number(state?.collection_total || 0), locale)}`} /><Stat label={copy.collectionValue} value={`${formatNumber(collectionValue, locale)} TC`} featured /></div>
+            <div className="grid gap-3 sm:grid-cols-4"><Stat label={copy.boxes} value={formatNumber(boxCount, locale)} /><Stat label={copy.opened} value={formatNumber(Number(state?.lifetime_opened || 0), locale)} /><Stat label={copy.collection} value={`${formatNumber(Number(state?.owned_count || 0), locale)}/${formatNumber(Number(state?.collection_total || 0), locale)}`} /><Stat label={copy.boxValue} value={`${formatNumber(selectedBoxValue, locale)} TC`} featured /></div>
             <p className="mt-4 rounded-2xl border border-amber-300/15 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-100/80">{copy.valueNote}</p>
             <button onClick={openBox} disabled={selectedQuantity <= 0 || opening} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-40"><Sparkles className="h-4 w-4" /> {opening ? copy.opening : copy.open}</button>
             <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-black/35 p-4"><p className="text-sm font-medium text-white/75">{copy.odds}</p><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{rarityOrder.map((rarity) => <div key={rarity} className={`rounded-2xl border px-3 py-2 text-xs ${rarityClass[rarity]}`}><p className="font-semibold">{rarityText[rarity]}</p><p className="mt-1 opacity-70">%{selectedOdds?.[rarity] ?? 0}</p></div>)}</div></div>
@@ -246,7 +248,7 @@ export function DropTech() {
 
           <div className="relative min-h-[420px] overflow-hidden rounded-[2rem] border border-white/10 bg-black/50 p-5 shadow-2xl shadow-purple-500/10 backdrop-blur-xl sm:p-6">
             <div className="relative z-10 flex min-h-[380px] flex-col items-center justify-center gap-6 text-center">
-              {!opening && !won && <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center gap-5"><div className={`relative flex h-40 w-40 items-center justify-center rounded-[2rem] border shadow-2xl ${boxClass[selectedBox?.accent || "purple"] || boxClass.purple}`}><span className="text-7xl">{selectedBox?.emoji || "📦"}</span><span className="absolute -right-3 -top-3 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100">x{selectedQuantity}</span></div><div><p className="font-medium">{nameOf(selectedBox, tr)}</p><p className="mt-2 max-w-sm text-sm leading-6 text-white/50">{selectedQuantity > 0 ? descOf(selectedBox, tr) : copy.noBox}</p></div></motion.div>}
+              {!opening && !won && <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center gap-5"><div className={`relative flex h-40 w-40 items-center justify-center rounded-[2rem] border shadow-2xl ${boxClass[selectedBox?.accent || "purple"] || boxClass.purple}`}><span className="text-7xl">{selectedBox?.emoji || "📦"}</span><span className="absolute -right-3 -top-3 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100">x{selectedQuantity}</span></div><div><p className="font-medium">{nameOf(selectedBox, tr)}</p><p className="mt-2 max-w-sm text-sm leading-6 text-white/50">{selectedQuantity > 0 ? descOf(selectedBox, tr) : copy.noBox}</p><div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm"><CoinIcon /> {formatNumber(selectedBoxValue, locale)} TC</div></div></motion.div>}
               {opening && <div className="w-full space-y-8"><motion.div animate={{ rotate: [0, -3, 3, -2, 2, 0], scale: [1, 1.04, 1] }} transition={{ duration: 0.7, repeat: Infinity }} className={`mx-auto flex h-32 w-32 items-center justify-center rounded-[2rem] border shadow-2xl ${boxClass[selectedBox?.accent || "purple"] || boxClass.purple}`}><span className="text-6xl">{selectedBox?.emoji || "📦"}</span></motion.div><div className="relative mx-auto max-w-3xl overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/55 py-4"><div className="pointer-events-none absolute left-1/2 top-0 z-20 h-full w-px bg-white/80 shadow-[0_0_30px_rgba(255,255,255,.7)]" /><motion.div animate={{ x: [0, -1660] }} transition={{ duration: 2.35, ease: [0.12, 0.72, 0.18, 1] }} className="flex gap-3 px-8">{strip.map((item, index) => <div key={`${item.id}-${index}`} className={`flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-2xl border text-center shadow-xl ${rarityClass[item.rarity]}`}><span className="text-3xl">{item.emoji}</span><span className="mt-1 max-w-20 truncate text-[10px]">{nameOf(item, tr)}</span></div>)}</motion.div></div></div>}
               <AnimatePresence>{!opening && won && <motion.div initial={{ opacity: 0, scale: 0.78, y: 22 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }} className={`w-full max-w-md rounded-[2rem] border p-6 shadow-2xl ${rarityClass[won.rarity]}`}><p className="text-xs uppercase tracking-[0.24em] opacity-65">{copy.won}</p><div className="mt-4 text-7xl">{won.emoji}</div><h2 className="mt-4 text-3xl font-semibold">{nameOf(won, tr)}</h2><p className="mt-2 text-sm uppercase tracking-[0.18em] opacity-70">{rarityText[won.rarity]}</p><p className="mt-4 text-sm leading-6 opacity-75">{descOf(won, tr)}</p><div className="mt-4 inline-flex items-center gap-2 rounded-full border border-black/10 bg-black/20 px-4 py-2 text-sm font-semibold"><CoinIcon /> {formatNumber(Number(won.tech_coin_value || 0), locale)} TC</div><button onClick={() => setWon(null)} className="mt-5 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200">{copy.add}</button></motion.div>}</AnimatePresence>
             </div>
