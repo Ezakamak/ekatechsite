@@ -115,6 +115,8 @@ export async function createPlayer(context: any, lobbyId: number, userId: number
 export async function ensureTurnIfReady(context: any, lobbyId: number) {
   const lobby = await getLobby(context, lobbyId);
   if (!lobby || lobby.status !== "in_progress" || !lobby.opponent_user_id) return;
+  if (await finalizeIfHpDepleted(context, lobbyId)) return;
+
   const players = await getPlayers(context, lobbyId);
   if (players.length < 2 || players.some((p: any) => !p.entered_at)) return;
   const activeTurn = await context.env.DB.prepare("SELECT id FROM core_clash_turns WHERE lobby_id = ? AND status = 'active' LIMIT 1").bind(lobbyId).first();
@@ -124,11 +126,19 @@ export async function ensureTurnIfReady(context: any, lobbyId: number) {
 }
 
 export async function startNextTurn(context: any, lobbyId: number, turnNumber: number) {
+  if (await finalizeIfHpDepleted(context, lobbyId)) return;
+  const lobby = await getLobby(context, lobbyId);
+  if (!lobby || lobby.status !== "in_progress") return;
+
   const players = await getPlayers(context, lobbyId);
+  if (players.length < 2) return;
   for (const p of players) await refreshPlayerForTurn(context, p, turnNumber);
+
+  if (await finalizeIfHpDepleted(context, lobbyId)) return;
+
   const deadline = new Date(Date.now() + TURN_SECONDS * 1000).toISOString();
   await context.env.DB.prepare("INSERT OR IGNORE INTO core_clash_turns (lobby_id, turn_number, deadline_at, status) VALUES (?, ?, ?, 'active')").bind(lobbyId, turnNumber, deadline).run();
-  await context.env.DB.prepare("UPDATE core_clash_lobbies SET turn_number = ?, deadline_at = ?, updated_at = datetime('now') WHERE id = ?").bind(turnNumber, deadline, lobbyId).run();
+  await context.env.DB.prepare("UPDATE core_clash_lobbies SET turn_number = ?, deadline_at = ?, updated_at = datetime('now') WHERE id = ? AND status = 'in_progress'").bind(turnNumber, deadline, lobbyId).run();
 }
 
 export async function refreshPlayerForTurn(context: any, player: PlayerState, turnNumber: number) {
@@ -146,13 +156,18 @@ export async function refreshPlayerForTurn(context: any, player: PlayerState, tu
 }
 
 export async function buildState(context: any, lobbyId: number, userId: number) {
+  await finalizeIfHpDepleted(context, lobbyId);
   await ensureTurnIfReady(context, lobbyId);
+
   const lobby = await getLobby(context, lobbyId);
   const players = await getPlayers(context, lobbyId);
   const myPlayer = players.find((p: any) => Number(p.user_id) === Number(userId));
   if (!lobby || !myPlayer) throw new Error("Maç bulunamadı.");
+
   await context.env.DB.prepare("UPDATE core_clash_players SET entered_at = COALESCE(entered_at, datetime('now')), updated_at = datetime('now') WHERE lobby_id = ? AND user_id = ?").bind(lobbyId, userId).run();
+  await finalizeIfHpDepleted(context, lobbyId);
   await ensureTurnIfReady(context, lobbyId);
+
   const latestLobby = await getLobby(context, lobbyId);
   const latestPlayers = await getPlayers(context, lobbyId);
   const turn = await context.env.DB.prepare("SELECT * FROM core_clash_turns WHERE lobby_id = ? ORDER BY turn_number DESC LIMIT 1").bind(lobbyId).first();
@@ -160,6 +175,7 @@ export async function buildState(context: any, lobbyId: number, userId: number) 
   const opponent = me === "creator" ? "opponent" : "creator";
   const sideRows: any = Object.fromEntries(latestPlayers.map((p: any) => [p.side, p]));
   const parsed = parseResolution(turn?.resolution || "");
+
   return {
     user_id: userId,
     lobby: latestLobby,
@@ -176,13 +192,36 @@ export async function buildState(context: any, lobbyId: number, userId: number) 
     selected: { creator: turn?.creator_card_id ? "selected" : null, opponent: turn?.opponent_card_id ? "selected" : null },
     turn_number: Number(latestLobby.turn_number || 0),
     deadline_at: latestLobby.deadline_at,
-    turn_status: turn?.status || "waiting",
+    turn_status: latestLobby.status === "completed" ? "completed" : turn?.status || "waiting",
     resolution_id: turn?.status === "resolved" ? `${latestLobby.id}:${turn.turn_number}:${turn.resolved_at || "done"}` : null,
     resolution_steps: parsed.steps,
     last_resolution: parsed.text || turn?.resolution || null,
     map: mapData(latestLobby.map_key),
     turn_seconds: TURN_SECONDS,
   };
+}
+
+export async function finalizeIfHpDepleted(context: any, lobbyId: number) {
+  const lobby = await getLobby(context, lobbyId);
+  if (!lobby || lobby.status !== "in_progress") return false;
+
+  const players = await getPlayers(context, lobbyId);
+  const creator = players.find((p: any) => p.side === "creator");
+  const opponent = players.find((p: any) => p.side === "opponent");
+  if (!creator || !opponent) return false;
+
+  const creatorHp = Number(creator.hp || 0);
+  const opponentHp = Number(opponent.hp || 0);
+  if (creatorHp > 0 && opponentHp > 0) return false;
+
+  let winner: number | null = null;
+  if (creatorHp <= 0 && opponentHp <= 0) winner = creatorHp >= opponentHp ? Number(creator.user_id) : Number(opponent.user_id);
+  else if (creatorHp <= 0) winner = Number(opponent.user_id);
+  else if (opponentHp <= 0) winner = Number(creator.user_id);
+
+  await context.env.DB.prepare("UPDATE core_clash_turns SET status = CASE WHEN status = 'active' THEN 'resolved' ELSE status END, resolved_at = COALESCE(resolved_at, datetime('now')) WHERE lobby_id = ?").bind(lobbyId).run();
+  await context.env.DB.prepare("UPDATE core_clash_lobbies SET status = 'completed', winner_user_id = ?, deadline_at = NULL, updated_at = datetime('now') WHERE id = ? AND status = 'in_progress'").bind(winner, lobbyId).run();
+  return true;
 }
 
 export async function getLobby(context: any, lobbyId: number) {
