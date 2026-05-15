@@ -5,10 +5,8 @@ import {
   ArrowLeft,
   Award,
   BarChart3,
-  BookOpen,
   CheckCircle2,
   CircleDollarSign,
-  Eye,
   LineChart,
   ListFilter,
   Newspaper,
@@ -20,7 +18,6 @@ import {
   TrendingDown,
   TrendingUp,
   Trophy,
-  Users,
 } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
@@ -59,6 +56,8 @@ type LeaderboardRow = {
   investedValue: number;
   holdingsCount: number;
   tradesCount: number;
+  marketProfit?: number;
+  profitPercent?: number;
 };
 
 type MarketState = {
@@ -73,11 +72,14 @@ type MarketState = {
 };
 
 const FAVORITES_KEY = "ekatrade-favorites";
+const PAGE_SIZE = 5;
+
 const FALLBACK_STOCKS: Stock[] = [
   { symbol: "EKA", name: "EKA Yazılım", sector: "Teknoloji", descriptionTr: "Bulut yazılım ve otomasyon çözümleri üreten kurgu şirket.", descriptionEn: "A fictional cloud software and automation company.", price: 124, previousPrice: 124, change: 0, volatility: 0.055, risk: "medium" },
   { symbol: "THY", name: "Türk Hava Yolları", sector: "Ulaşım", descriptionTr: "OFF simülasyon varlığıdır; gerçek şirket/hisse verisi değildir.", descriptionEn: "OFF simulation asset; not real company/stock data.", price: 142, previousPrice: 142, change: 0, volatility: 0.068, risk: "high" },
   { symbol: "MGROS", name: "Migros", sector: "Perakende", descriptionTr: "OFF simülasyon varlığıdır; gerçek şirket/hisse verisi değildir.", descriptionEn: "OFF simulation asset; not real company/stock data.", price: 82, previousPrice: 82, change: 0, volatility: 0.04, risk: "low" },
 ];
+
 const FALLBACK_STATE: MarketState = {
   day: 1,
   cash: 0,
@@ -114,6 +116,15 @@ function writeFavorites(value: Set<string>) {
   if (typeof window !== "undefined") window.localStorage.setItem(FAVORITES_KEY, JSON.stringify([...value]));
 }
 
+function shuffleSymbols(symbols: string[]) {
+  const next = [...symbols];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[randomIndex]] = [next[randomIndex], next[index]];
+  }
+  return next;
+}
+
 async function readJson(response: Response) {
   const raw = await response.text();
   let data: any = null;
@@ -139,6 +150,8 @@ export function MarketAcademy() {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"all" | "owned" | "favorites">("all");
   const [favorites, setFavorites] = useState<Set<string>>(() => readFavorites());
+  const [stockOrder, setStockOrder] = useState<string[]>([]);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [detailSymbol, setDetailSymbol] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(10);
   const [message, setMessage] = useState<string | null>(null);
@@ -149,6 +162,7 @@ export function MarketAcademy() {
   const selectedStock = state.stocks.find((stock) => stock.symbol === selectedSymbol) || state.stocks[0] || FALLBACK_STOCKS[0];
   const selectedOwned = safeNumber(state.holdings[selectedStock.symbol]);
   const orderValue = selectedStock.price * Math.max(0, safeNumber(quantity));
+  const stockSignature = useMemo(() => state.stocks.map((stock) => stock.symbol).sort().join("|"), [state.stocks]);
 
   const portfolio = useMemo(() => {
     const rows = state.stocks
@@ -174,16 +188,26 @@ export function MarketAcademy() {
 
   const sectors = useMemo(() => ["all", ...Array.from(new Set(state.stocks.map((stock) => stock.sector))).sort((a, b) => a.localeCompare(b, "tr"))], [state.stocks]);
 
+  const orderedStocks = useMemo(() => {
+    const stockMap = new Map(state.stocks.map((stock) => [stock.symbol, stock]));
+    const ordered = stockOrder.map((symbol) => stockMap.get(symbol)).filter(Boolean) as Stock[];
+    const missing = state.stocks.filter((stock) => !stockOrder.includes(stock.symbol));
+    return [...ordered, ...missing];
+  }, [state.stocks, stockOrder]);
+
   const filteredStocks = useMemo(() => {
     const lowered = query.trim().toLocaleLowerCase("tr-TR");
-    return state.stocks.filter((stock) => {
+    return orderedStocks.filter((stock) => {
       if (selectedSector !== "all" && stock.sector !== selectedSector) return false;
       if (view === "owned" && safeNumber(state.holdings[stock.symbol]) <= 0) return false;
       if (view === "favorites" && !favorites.has(stock.symbol)) return false;
       if (!lowered) return true;
       return `${stock.symbol} ${stock.name} ${stock.sector}`.toLocaleLowerCase("tr-TR").includes(lowered);
     });
-  }, [state.stocks, state.holdings, selectedSector, query, view, favorites]);
+  }, [orderedStocks, state.holdings, selectedSector, query, view, favorites]);
+
+  const visibleStocks = useMemo(() => filteredStocks.slice(0, visibleCount), [filteredStocks, visibleCount]);
+  const hasMoreStocks = visibleCount < filteredStocks.length;
 
   const summary = useMemo(() => {
     const sorted = [...state.stocks].sort((a, b) => b.change - a.change);
@@ -241,6 +265,19 @@ export function MarketAcademy() {
     }, 60_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const symbols = state.stocks.map((stock) => stock.symbol);
+    setStockOrder((current) => {
+      const currentSignature = [...current].sort().join("|");
+      if (current.length && currentSignature === stockSignature) return current.filter((symbol) => symbols.includes(symbol));
+      return shuffleSymbols(symbols);
+    });
+  }, [stockSignature, state.stocks]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [selectedSector, query, view, favorites.size]);
 
   useEffect(() => {
     if (!state.stocks.some((stock) => stock.symbol === selectedSymbol)) setSelectedSymbol(state.stocks[0]?.symbol || "EKA");
@@ -342,7 +379,7 @@ export function MarketAcademy() {
         <DailySummaryCard copy={copy} locale={locale} summary={summary} />
 
         <section className="grid gap-6 2xl:grid-cols-[1.25fr_0.75fr]">
-          <MarketBoard copy={copy} tr={tr} locale={locale} state={state} sectors={sectors} selectedSector={selectedSector} filteredStocks={filteredStocks} selectedSymbol={selectedSymbol} query={query} view={view} favorites={favorites} onSector={setSelectedSector} onQuery={setQuery} onView={setView} onFavorite={toggleFavorite} onSelect={setSelectedSymbol} onDetails={setDetailSymbol} busy={busy} online={online} onRefresh={() => loadMarket(false)} onReset={resetPortfolio} />
+          <MarketBoard copy={copy} tr={tr} locale={locale} state={state} sectors={sectors} selectedSector={selectedSector} visibleStocks={visibleStocks} totalFiltered={filteredStocks.length} selectedSymbol={selectedSymbol} query={query} view={view} favorites={favorites} hasMore={hasMoreStocks} visibleCount={visibleStocks.length} onLoadMore={() => setVisibleCount((value) => value + PAGE_SIZE)} onSector={setSelectedSector} onQuery={setQuery} onView={setView} onFavorite={toggleFavorite} onSelect={setSelectedSymbol} onDetails={setDetailSymbol} busy={busy} online={online} onRefresh={() => loadMarket(false)} onReset={resetPortfolio} />
           <aside className="space-y-6">
             <OrderPanel copy={copy} locale={locale} stock={selectedStock} selectedSymbol={selectedSymbol} stocks={state.stocks} quantity={quantity} owned={selectedOwned} orderValue={orderValue} busy={busy} online={online} onSymbol={setSelectedSymbol} onQuantity={setQuantity} onTrade={handleTrade} />
             <RiskCard label={risk.label} text={risk.text} tone={risk.tone} title={copy.risk} />
@@ -413,10 +450,10 @@ function SummaryTile({ icon, title, label, detail, tone }: { icon: ReactNode; ti
   return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl"><div className={`flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] ${toneClass}`}>{icon}</div><p className="mt-4 text-sm text-white/40">{title}</p><p className={`mt-2 text-2xl font-semibold ${toneClass}`}>{label}</p><p className="mt-1 line-clamp-1 text-sm text-white/45">{detail}</p></div>;
 }
 
-function MarketBoard(props: { copy: any; tr: boolean; locale: string; state: MarketState; sectors: string[]; selectedSector: string; filteredStocks: Stock[]; selectedSymbol: string; query: string; view: "all" | "owned" | "favorites"; favorites: Set<string>; onSector: (sector: string) => void; onQuery: (query: string) => void; onView: (view: "all" | "owned" | "favorites") => void; onFavorite: (symbol: string) => void; onSelect: (symbol: string) => void; onDetails: (symbol: string) => void; busy: boolean; online: boolean; onRefresh: () => void; onReset: () => void }) {
-  const { copy, tr, locale, state, sectors, selectedSector, filteredStocks, selectedSymbol, query, view, favorites, onSector, onQuery, onView, onFavorite, onSelect, onDetails, busy, online, onRefresh, onReset } = props;
+function MarketBoard(props: { copy: any; tr: boolean; locale: string; state: MarketState; sectors: string[]; selectedSector: string; visibleStocks: Stock[]; totalFiltered: number; selectedSymbol: string; query: string; view: "all" | "owned" | "favorites"; favorites: Set<string>; hasMore: boolean; visibleCount: number; onLoadMore: () => void; onSector: (sector: string) => void; onQuery: (query: string) => void; onView: (view: "all" | "owned" | "favorites") => void; onFavorite: (symbol: string) => void; onSelect: (symbol: string) => void; onDetails: (symbol: string) => void; busy: boolean; online: boolean; onRefresh: () => void; onReset: () => void }) {
+  const { copy, tr, locale, state, sectors, selectedSector, visibleStocks, totalFiltered, selectedSymbol, query, view, favorites, hasMore, visibleCount, onLoadMore, onSector, onQuery, onView, onFavorite, onSelect, onDetails, busy, online, onRefresh, onReset } = props;
   const countForSector = (sector: string) => sector === "all" ? state.stocks.length : state.stocks.filter((stock) => stock.sector === sector).length;
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-4 backdrop-blur-xl sm:p-6"><div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between"><div><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.market}</p><h2 className="mt-2 text-3xl font-medium">{copy.fictionalStocks}</h2></div><div className="flex flex-wrap gap-3"><button type="button" disabled={busy} onClick={onRefresh} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-50"><LineChart className="h-4 w-4" /> {copy.refresh}</button><button type="button" disabled={busy || !online} onClick={onReset} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/75 transition-all hover:bg-white/[0.1] disabled:opacity-40"><RefreshCcw className="h-4 w-4" /> {copy.reset}</button></div></div><div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto]"><label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white/70"><Search className="h-4 w-4 text-cyan-200" /><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder={copy.searchPlaceholder} className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/30" /></label><div className="grid grid-cols-3 gap-2 sm:flex"><FilterButton active={view === "all"} onClick={() => onView("all")}>{copy.allStocks}</FilterButton><FilterButton active={view === "owned"} onClick={() => onView("owned")}>{copy.onlyOwned}</FilterButton><FilterButton active={view === "favorites"} onClick={() => onView("favorites")}>{copy.favorites}</FilterButton></div></div><div className="mt-5 flex gap-2 overflow-x-auto pb-2">{sectors.map((sector) => <button key={sector} type="button" onClick={() => onSector(sector)} className={`shrink-0 rounded-full border px-4 py-2 text-sm transition-all ${selectedSector === sector ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100" : "border-white/10 bg-black/25 text-white/55 hover:bg-white/[0.07] hover:text-white"}`}>{sector === "all" ? copy.allSectors : sector} <span className="ml-1 text-xs opacity-60">{countForSector(sector)}</span></button>)}</div><div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/45">{copy.sectorHint}: <span className="text-white/75">{selectedSector === "all" ? copy.allSectors : selectedSector}</span> · {copy.showing} <span className="text-white/75">{filteredStocks.length}</span></div><div className="mt-5 grid gap-4 xl:grid-cols-2">{filteredStocks.map((stock) => <StockCard key={stock.symbol} copy={copy} tr={tr} locale={locale} stock={stock} selected={selectedSymbol === stock.symbol} favorite={favorites.has(stock.symbol)} owned={safeNumber(state.holdings[stock.symbol])} history={state.history[stock.symbol] || [stock.price]} onSelect={() => onSelect(stock.symbol)} onDetails={() => onDetails(stock.symbol)} onFavorite={(event) => { event.stopPropagation(); onFavorite(stock.symbol); }} />)}</div>{filteredStocks.length === 0 ? <p className="mt-5 rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/45">{copy.noStockResult}</p> : null}</div>;
+  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-4 backdrop-blur-xl sm:p-6"><div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between"><div><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.market}</p><h2 className="mt-2 text-3xl font-medium">{copy.fictionalStocks}</h2></div><div className="flex flex-wrap gap-3"><button type="button" disabled={busy} onClick={onRefresh} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-50"><LineChart className="h-4 w-4" /> {copy.refresh}</button><button type="button" disabled={busy || !online} onClick={onReset} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/75 transition-all hover:bg-white/[0.1] disabled:opacity-40"><RefreshCcw className="h-4 w-4" /> {copy.reset}</button></div></div><div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto]"><label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white/70"><Search className="h-4 w-4 text-cyan-200" /><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder={copy.searchPlaceholder} className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/30" /></label><div className="grid grid-cols-3 gap-2 sm:flex"><FilterButton active={view === "all"} onClick={() => onView("all")}>{copy.allStocks}</FilterButton><FilterButton active={view === "owned"} onClick={() => onView("owned")}>{copy.onlyOwned}</FilterButton><FilterButton active={view === "favorites"} onClick={() => onView("favorites")}>{copy.favorites}</FilterButton></div></div><div className="mt-5 flex gap-2 overflow-x-auto pb-2">{sectors.map((sector) => <button key={sector} type="button" onClick={() => onSector(sector)} className={`shrink-0 rounded-full border px-4 py-2 text-sm transition-all ${selectedSector === sector ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100" : "border-white/10 bg-black/25 text-white/55 hover:bg-white/[0.07] hover:text-white"}`}>{sector === "all" ? copy.allSectors : sector} <span className="ml-1 text-xs opacity-60">{countForSector(sector)}</span></button>)}</div><div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/45">{copy.sectorHint}: <span className="text-white/75">{selectedSector === "all" ? copy.allSectors : selectedSector}</span> · {copy.showing} <span className="text-white/75">{Math.min(visibleCount, totalFiltered)}/{totalFiltered}</span></div><div className="mt-5 grid gap-4 xl:grid-cols-2">{visibleStocks.map((stock) => <StockCard key={stock.symbol} copy={copy} tr={tr} locale={locale} stock={stock} selected={selectedSymbol === stock.symbol} favorite={favorites.has(stock.symbol)} owned={safeNumber(state.holdings[stock.symbol])} history={state.history[stock.symbol] || [stock.price]} onSelect={() => onSelect(stock.symbol)} onDetails={() => onDetails(stock.symbol)} onFavorite={(event) => { event.stopPropagation(); onFavorite(stock.symbol); }} />)}</div>{hasMore ? <button type="button" onClick={onLoadMore} className="mt-5 w-full rounded-full border border-cyan-300/25 bg-cyan-300/10 px-5 py-3 text-sm font-medium text-cyan-100 transition-all hover:bg-cyan-300/15">{copy.loadMoreStocks}</button> : null}{totalFiltered === 0 ? <p className="mt-5 rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/45">{copy.noStockResult}</p> : null}</div>;
 }
 
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
@@ -485,7 +522,7 @@ function PortfolioCard({ copy, portfolio, locale }: { copy: any; portfolio: any;
 }
 
 function LeaderboardCard({ copy, locale, rows }: { copy: any; locale: string; rows: LeaderboardRow[] }) {
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.leaderboard}</p><Trophy className="h-5 w-5 text-amber-200" /></div><div className="mt-5 space-y-3">{rows.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/45">{copy.emptyLeaderboard}</p> : rows.map((row) => <div key={row.userId} className="flex items-center gap-3 rounded-3xl border border-white/10 bg-black/25 p-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-semibold">#{row.rank}</span>{row.avatar_url ? <img src={row.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">{row.name.slice(0, 1).toUpperCase()}</span>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{row.name}</p><p className="text-xs text-white/35">{row.holdingsCount} {copy.shares} · {row.tradesCount} {copy.trades}</p></div><CoinAmount amount={row.totalValue} locale={locale} size="sm" /></div>)}</div></div>;
+  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.leaderboard}</p><Trophy className="h-5 w-5 text-amber-200" /></div><div className="mt-5 space-y-3">{rows.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/45">{copy.emptyLeaderboard}</p> : rows.map((row) => { const profit = safeNumber(row.marketProfit ?? row.totalValue); return <div key={row.userId} className="flex items-center gap-3 rounded-3xl border border-white/10 bg-black/25 p-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-semibold">#{row.rank}</span>{row.avatar_url ? <img src={row.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">{row.name.slice(0, 1).toUpperCase()}</span>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{row.name}</p><p className="text-xs text-white/35">{row.holdingsCount} {copy.shares} · {row.tradesCount} {copy.trades} · {profit >= 0 ? "+" : ""}{formatPrice(safeNumber(row.profitPercent), locale)}%</p></div><span className={profit >= 0 ? "text-emerald-300" : "text-red-300"}><CoinAmount amount={profit} locale={locale} prefix={profit >= 0 ? "+" : ""} size="sm" /></span></div>; })}</div></div>;
 }
 
 function AchievementCard({ copy, achievements }: { copy: any; achievements: Array<{ key: string; title: string; desc: string; done: boolean; icon: ReactNode }> }) {
@@ -525,6 +562,7 @@ const trCopy = {
   allSectors: "Tümü",
   sectorHint: "Sektör filtresi",
   showing: "gösterilen",
+  loadMoreStocks: "Daha fazla hisse göster",
   allStocks: "Tümü",
   onlyOwned: "Elde olan",
   favorites: "Favoriler",
@@ -625,6 +663,7 @@ const enCopy = {
   allSectors: "All",
   sectorHint: "Sector filter",
   showing: "showing",
+  loadMoreStocks: "Show 5 more stocks",
   allStocks: "All",
   onlyOwned: "Owned",
   favorites: "Favorites",
