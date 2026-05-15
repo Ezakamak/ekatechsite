@@ -1,6 +1,8 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const MIN_INITIAL_PRICE = 25;
 const MAX_INITIAL_PRICE = 250;
+const MIN_SYMBOL_LENGTH = 2;
+const MAX_SYMBOL_LENGTH = 8;
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
@@ -43,7 +45,9 @@ export async function onRequestPost(context: any) {
     const initialPrice = Number(body?.initialPrice ?? body?.initial_price);
     const risk = normalizeRisk(body?.risk);
 
-    if (!symbol) return json({ error: "Sembol zorunlu. 2-8 karakter, sadece harf/rakam kullan." }, 400);
+    if (!symbol || symbol.length < MIN_SYMBOL_LENGTH || symbol.length > MAX_SYMBOL_LENGTH) {
+      return json({ error: `Sembol zorunlu. ${MIN_SYMBOL_LENGTH}-${MAX_SYMBOL_LENGTH} karakter, sadece harf/rakam kullan.` }, 400);
+    }
     if (!name || name.length < 3) return json({ error: "Şirket/hisse adı zorunlu ve en az 3 karakter olmalı." }, 400);
     if (!sector || sector.length < 3) return json({ error: "Sektör zorunlu ve en az 3 karakter olmalı." }, 400);
     if (!descriptionTr || descriptionTr.length < 20) return json({ error: "Açıklama zorunlu ve en az 20 karakter olmalı." }, 400);
@@ -119,7 +123,7 @@ async function requireUser(context: any) {
 }
 
 function normalizeSymbol(value: unknown) {
-  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, MAX_SYMBOL_LENGTH);
 }
 
 function normalizeRisk(value: unknown) {
