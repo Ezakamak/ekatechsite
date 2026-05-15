@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Cpu, LogOut, Pickaxe, RefreshCcw, Server, Timer, Wallet, Zap } from "lucide-react";
+import { Cpu, IceCreamBowl, LogOut, Pickaxe, RefreshCcw, Server, Snowflake, Timer, Wallet, Zap } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 
@@ -17,13 +17,23 @@ type MinerSession = {
   totalClaimed: number;
 };
 
+type MinerCooldown = {
+  sessionId: number;
+  until: string;
+  usedSeconds: number;
+  cooldownSeconds: number;
+  remainingSeconds: number;
+};
+
 type MinerServer = {
   id: string;
   nameTr: string;
   nameEn: string;
   accent: "cyan" | "purple" | "amber";
   occupied: boolean;
+  cooling?: boolean;
   session?: MinerSession | null;
+  cooldown?: MinerCooldown | null;
 };
 
 type MinerState = {
@@ -33,6 +43,7 @@ type MinerState = {
     sessionMinutes: number;
     coinsPerMinute: number;
     maxCoinsPerSession: number;
+    cooldownDivisor?: number;
   };
   wallet: {
     balance: number;
@@ -64,23 +75,30 @@ export function TechCoinMiner() {
           subtitle: "3 miner server var. Her kullanıcı aynı anda sadece 1 server kullanabilir. Server seç, 1 saat boyunca dakikada küçük miktar Tech Coin üret.",
           refresh: "Yenile",
           connect: "Server'a bağlan",
-          claim: "Coinleri aktar",
+          claim: "Biriken Coinleri Cüzdana Aktar",
           leave: "Serverdan ayrıl",
           occupied: "Kullanılıyor",
           available: "Boşta",
+          cooling: "Soğuyor",
           mine: "Sen kullanıyorsun",
           user: "Kullanıcı",
           remaining: "Kalan süre",
           elapsed: "Geçen süre",
           claimable: "Aktarılabilir",
           totalClaimed: "Toplam aktarılan",
+          cooldownRemaining: "Soğuma süresi",
+          usedTime: "Kullanım süresi",
+          cooldownRule: "Soğuma payı",
+          cooldownRuleValue: "Kullanım süresinin 1/5'i",
           rate: "Kazanç hızı",
           rateValue: "1 Tech Coin / dakika",
           maxSession: "Maksimum oturum",
           maxSessionValue: "60 dakika",
           wallet: "Tech Coin cüzdanı",
-          rule: "1 saatin sonunda server otomatik boşalır; başka kullanıcı oturabilir.",
+          rule: "1 saatin sonunda server otomatik boşalır, ardından kullanım süresinin 1/5’i kadar soğuma moduna girer.",
           empty: "Bu server boşta. Bağlanırsan diğer serverlara aynı anda bağlanamazsın.",
+          cooldownText: "Server soğuma modunda. Geri sayım bitince tekrar kullanılabilir.",
+          autoClaimNote: "Aktarmazsan coinlerin kaybolmaz; süre sonunda otomatik cüzdana eklenir.",
           loading: "Miner serverlara bağlanılıyor...",
           error: "Miner verisi alınamadı.",
         }
@@ -90,23 +108,30 @@ export function TechCoinMiner() {
           subtitle: "There are 3 miner servers. Each user can use only 1 server at a time. Pick a server and earn a small amount of Tech Coin every minute for 1 hour.",
           refresh: "Refresh",
           connect: "Connect to server",
-          claim: "Claim coins",
+          claim: "Transfer Earned Coins to Wallet",
           leave: "Leave server",
           occupied: "Occupied",
           available: "Available",
+          cooling: "Cooling",
           mine: "You are using this",
           user: "User",
           remaining: "Time left",
           elapsed: "Elapsed time",
           claimable: "Claimable",
           totalClaimed: "Total claimed",
+          cooldownRemaining: "Cooldown left",
+          usedTime: "Used time",
+          cooldownRule: "Cooldown rule",
+          cooldownRuleValue: "1/5 of used time",
           rate: "Earning rate",
           rateValue: "1 Tech Coin / minute",
           maxSession: "Max session",
           maxSessionValue: "60 minutes",
           wallet: "Tech Coin wallet",
-          rule: "After 1 hour, the server is automatically released so another user can sit in.",
+          rule: "After 1 hour, the server is released automatically, then enters cooldown for 1/5 of the used time.",
           empty: "This server is available. If you connect, you cannot use another server at the same time.",
+          cooldownText: "Server is cooling down. It can be used again when the countdown ends.",
+          autoClaimNote: "Coins are not lost if you do not transfer them; they are automatically added to your wallet when the session ends.",
           loading: "Connecting to miner servers...",
           error: "Could not load miner data.",
         },
@@ -204,13 +229,17 @@ export function TechCoinMiner() {
           </div>
         )}
 
-        <section className="grid gap-4 lg:grid-cols-3">
+        <section className="grid gap-4 lg:grid-cols-4">
           <Metric icon={<Wallet className="h-5 w-5" />} label={copy.wallet} value={<CoinAmount amount={balance} locale={locale} />} />
           <Metric icon={<Zap className="h-5 w-5" />} label={copy.rate} value={copy.rateValue} />
           <Metric icon={<Timer className="h-5 w-5" />} label={copy.maxSession} value={copy.maxSessionValue} />
+          <Metric icon={<Snowflake className="h-5 w-5" />} label={copy.cooldownRule} value={copy.cooldownRuleValue} />
         </section>
 
-        <p className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{copy.rule}</p>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <p className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{copy.rule}</p>
+          <p className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">{copy.autoClaimNote}</p>
+        </div>
 
         {loading && !state ? (
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-8 text-white/55 backdrop-blur-xl">{copy.loading}</div>
@@ -222,6 +251,7 @@ export function TechCoinMiner() {
                 server={server}
                 copy={copy}
                 locale={locale}
+                language={language}
                 nowTick={nowTick}
                 hasCurrentSession={hasCurrentSession}
                 loading={loading}
@@ -237,9 +267,11 @@ export function TechCoinMiner() {
   );
 }
 
-function MinerServerCard({ server, copy, locale, nowTick, hasCurrentSession, loading, onStart, onClaim, onLeave }: { server: MinerServer; copy: any; locale: string; nowTick: number; hasCurrentSession: boolean; loading: boolean; onStart: () => void; onClaim: () => void; onLeave: () => void }) {
+function MinerServerCard({ server, copy, locale, language, nowTick, hasCurrentSession, loading, onStart, onClaim, onLeave }: { server: MinerServer; copy: any; locale: string; language: string; nowTick: number; hasCurrentSession: boolean; loading: boolean; onStart: () => void; onClaim: () => void; onLeave: () => void }) {
   const session = server.session || null;
+  const cooldown = server.cooldown || null;
   const isMine = Boolean(session?.isMine);
+  const isCooling = Boolean(server.cooling && cooldown);
   const accent = server.accent;
   const accentClasses = {
     cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-100",
@@ -250,19 +282,22 @@ function MinerServerCard({ server, copy, locale, nowTick, hasCurrentSession, loa
   const remaining = session ? Math.max(0, session.remainingSeconds - nowTick) : 0;
   const elapsed = session ? Math.min(3600, session.elapsedSeconds + nowTick) : 0;
   const progress = session ? Math.min(100, (elapsed / 3600) * 100) : 0;
+  const cooldownRemaining = cooldown ? Math.max(0, cooldown.remainingSeconds - nowTick) : 0;
+  const cooldownProgress = cooldown ? Math.max(0, Math.min(100, ((cooldown.cooldownSeconds - cooldownRemaining) / Math.max(1, cooldown.cooldownSeconds)) * 100)) : 0;
+  const displayName = language === "tr" ? server.nameTr : server.nameEn;
 
   return (
-    <motion.article initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
+    <motion.article initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className={`overflow-hidden rounded-[2rem] border p-5 backdrop-blur-xl sm:p-6 ${isCooling ? "border-cyan-200/20 bg-cyan-200/[0.055]" : "border-white/10 bg-white/[0.045]"}`}>
       <div className="flex items-start justify-between gap-4">
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${accentClasses}`}>
-          <Server className="h-6 w-6" />
+        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${isCooling ? "border-cyan-200/25 bg-cyan-200/10 text-cyan-100" : accentClasses}`}>
+          {isCooling ? <Snowflake className="h-6 w-6 animate-pulse" /> : <Server className="h-6 w-6" />}
         </div>
-        <span className={`rounded-full border px-3 py-1 text-xs ${isMine ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : server.occupied ? "border-red-300/20 bg-red-300/10 text-red-100" : accentClasses}`}>
-          {isMine ? copy.mine : server.occupied ? copy.occupied : copy.available}
+        <span className={`rounded-full border px-3 py-1 text-xs ${isMine ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : isCooling ? "border-cyan-200/25 bg-cyan-200/10 text-cyan-100" : server.occupied ? "border-red-300/20 bg-red-300/10 text-red-100" : accentClasses}`}>
+          {isMine ? copy.mine : isCooling ? copy.cooling : server.occupied ? copy.occupied : copy.available}
         </span>
       </div>
 
-      <h2 className="mt-5 text-2xl font-medium">{server.nameTr}</h2>
+      <h2 className="mt-5 text-2xl font-medium">{displayName}</h2>
 
       {session ? (
         <div className="mt-5 space-y-4">
@@ -299,6 +334,24 @@ function MinerServerCard({ server, copy, locale, nowTick, hasCurrentSession, loa
               </button>
             </div>
           ) : null}
+        </div>
+      ) : isCooling && cooldown ? (
+        <div className="mt-5 space-y-4">
+          <div className="rounded-2xl border border-cyan-200/20 bg-cyan-200/10 p-4 text-cyan-100">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <IceCreamBowl className="h-4 w-4" /> {copy.cooldownText}
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-cyan-100" style={{ width: `${cooldownProgress}%` }} />
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SmallStat label={copy.cooldownRemaining} value={formatTime(cooldownRemaining)} />
+            <SmallStat label={copy.usedTime} value={formatTime(cooldown.usedSeconds)} />
+          </div>
+          <button type="button" disabled className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-200/10 px-5 py-3 text-sm font-medium text-cyan-100/60">
+            <Snowflake className="h-4 w-4" /> {copy.cooling} · {formatTime(cooldownRemaining)}
+          </button>
         </div>
       ) : (
         <div className="mt-5 space-y-4">
