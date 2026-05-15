@@ -50,8 +50,9 @@ type TechCoinWallet = {
 };
 
 type OnlineUser = { id: number; name: string; avatar_url?: string | null; last_seen_at?: string };
+type BattleState = "lobby" | "countdown" | "opening_round" | "revealing_result" | "score_update" | "next_round_transition" | "finished" | "cancelled";
 type BattleRound = { round_number: number; box_type: string; creator_points: number; opponent_points: number; creator_item?: DropItem | null; opponent_item?: DropItem | null };
-type BattleLobby = { id: number; creator_user_id: number; opponent_user_id?: number | null; opponent_is_bot?: number; status: "waiting" | "in_progress" | "completed"; creator_name: string; opponent_name?: string | null; box_sequence: string[]; boxes?: DropBox[]; cost: number; creator_score?: number; opponent_score?: number; winner_user_id?: number | null; winner_side?: "creator" | "opponent" | null; rounds?: BattleRound[]; emotes?: { id: number; user_id: number; name: string; emoji: string; created_at: string }[] };
+type BattleLobby = { id: number; creator_user_id: number; opponent_user_id?: number | null; opponent_is_bot?: number; status: "waiting" | "in_progress" | "completed" | "cancelled"; battle_state?: BattleState | null; current_round?: number | null; creator_name: string; creator_avatar_url?: string | null; opponent_name?: string | null; opponent_avatar_url?: string | null; box_sequence: string[]; boxes?: DropBox[]; cost: number; creator_score?: number; opponent_score?: number; winner_user_id?: number | null; winner_side?: "creator" | "opponent" | null; rounds?: BattleRound[]; emotes?: { id: number; user_id: number; name: string; emoji: string; created_at: string }[] };
 
 type TradeOffer = {
   id: number;
@@ -382,6 +383,10 @@ export function DropTech() {
     }
   }
 
+  async function openBattleRound(battleId: number) {
+    return postAction({ action: "battle_next_round", battle_id: battleId }, "Battle round açılamadı.");
+  }
+
   async function joinBattle(battleId: number, bot = false) {
     setMessage(null);
     try {
@@ -567,6 +572,7 @@ export function DropTech() {
         <BattleArena
           battles={battles}
           boxes={boxes}
+          items={state?.items || []}
           currentUserId={currentUserId}
           sequence={battleSequence}
           setSequence={setBattleSequence}
@@ -578,6 +584,7 @@ export function DropTech() {
           onJoin={(id) => joinBattle(id)}
           onBot={(id) => joinBattle(id, true)}
           onEmoji={sendBattleEmoji}
+          onNextRound={openBattleRound}
         />
 
         <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
@@ -601,7 +608,7 @@ function ValueRow({ label, value, locale }: { label: string; value: number; loca
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button onClick={onClick} className={`rounded-full border px-4 py-2 text-xs font-medium transition ${active ? "border-white/40 bg-white text-black" : "border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.08]"}`}>{children}</button>;
 }
-function BattleArena({ battles, boxes, currentUserId, sequence, setSequence, battleCost, walletBalance, tr, locale, onCreate, onJoin, onBot, onEmoji }: { battles: BattleLobby[]; boxes: DropBox[]; currentUserId: number; sequence: string[]; setSequence: (value: string[]) => void; battleCost: number; walletBalance: number; tr: boolean; locale: string; onCreate: () => void; onJoin: (id: number) => void; onBot: (id: number) => void; onEmoji: (id: number, emoji: string) => void }) {
+function BattleArena({ battles, boxes, items, currentUserId, sequence, setSequence, battleCost, walletBalance, tr, locale, onCreate, onJoin, onBot, onEmoji, onNextRound }: { battles: BattleLobby[]; boxes: DropBox[]; items: DropItem[]; currentUserId: number; sequence: string[]; setSequence: (value: string[]) => void; battleCost: number; walletBalance: number; tr: boolean; locale: string; onCreate: () => void; onJoin: (id: number) => void; onBot: (id: number) => void; onEmoji: (id: number, emoji: string) => void; onNextRound: (id: number) => Promise<DropTechState> }) {
   const openBattles = battles.filter((battle) => battle.status === "waiting");
   const myBattles = battles.filter((battle) => battle.creator_user_id === currentUserId || battle.opponent_user_id === currentUserId).slice(0, 4);
   const selectedBoxes = sequence.map((id) => boxes.find((box) => box.id === id)).filter(Boolean) as DropBox[];
@@ -618,16 +625,17 @@ function BattleArena({ battles, boxes, currentUserId, sequence, setSequence, bat
       <div className="flex flex-wrap gap-2"><button onClick={() => sequence.length < 8 && setSequence([...sequence, boxes[0]?.id || "standard_cache"])} className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold text-white/70">+ Round</button><button onClick={() => sequence.length > 1 && setSequence(sequence.slice(0, -1))} className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold text-white/70">- Round</button><button onClick={onCreate} disabled={!canCreate} className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2 text-xs font-semibold text-black hover:bg-gray-200 disabled:opacity-40"><Sparkles className="h-4 w-4" /> {tr ? "Lobi oluştur" : "Create lobby"}</button></div>
     </div>
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
-      <div><h3 className="text-sm uppercase tracking-[0.18em] text-white/40">{tr ? "Açık lobiler" : "Open lobbies"}</h3><div className="mt-3 grid gap-3">{openBattles.length ? openBattles.map((battle) => <BattleCard key={battle.id} battle={battle} currentUserId={currentUserId} tr={tr} locale={locale} onJoin={onJoin} onBot={onBot} onEmoji={onEmoji} />) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">{tr ? "Henüz açık battle yok." : "No open battles yet."}</p>}</div></div>
-      <div><h3 className="text-sm uppercase tracking-[0.18em] text-white/40">{tr ? "Benim savaşlarım" : "My battles"}</h3><div className="mt-3 grid gap-3">{myBattles.length ? myBattles.map((battle) => <BattleCard key={battle.id} battle={battle} currentUserId={currentUserId} tr={tr} locale={locale} onJoin={onJoin} onBot={onBot} onEmoji={onEmoji} />) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">—</p>}</div></div>
+      <div><h3 className="text-sm uppercase tracking-[0.18em] text-white/40">{tr ? "Açık lobiler" : "Open lobbies"}</h3><div className="mt-3 grid gap-3">{openBattles.length ? openBattles.map((battle) => <BattleCard key={battle.id} battle={battle} allItems={items} currentUserId={currentUserId} tr={tr} locale={locale} onJoin={onJoin} onBot={onBot} onEmoji={onEmoji} onNextRound={onNextRound} />) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">{tr ? "Henüz açık battle yok." : "No open battles yet."}</p>}</div></div>
+      <div><h3 className="text-sm uppercase tracking-[0.18em] text-white/40">{tr ? "Benim savaşlarım" : "My battles"}</h3><div className="mt-3 grid gap-3">{myBattles.length ? myBattles.map((battle) => <BattleCard key={battle.id} battle={battle} allItems={items} currentUserId={currentUserId} tr={tr} locale={locale} onJoin={onJoin} onBot={onBot} onEmoji={onEmoji} onNextRound={onNextRound} />) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">—</p>}</div></div>
     </div>
   </section>;
 }
 
-function BattleCard({ battle, currentUserId, tr, locale, onJoin, onBot, onEmoji }: { battle: BattleLobby; currentUserId: number; tr: boolean; locale: string; onJoin: (id: number) => void; onBot: (id: number) => void; onEmoji: (id: number, emoji: string) => void }) {
+function BattleCard({ battle, allItems = [], currentUserId, tr, locale, onJoin, onBot, onEmoji, onNextRound }: { battle: BattleLobby; allItems?: DropItem[]; currentUserId: number; tr: boolean; locale: string; onJoin: (id: number) => void; onBot: (id: number) => void; onEmoji: (id: number, emoji: string) => void; onNextRound: (id: number) => Promise<DropTechState> }) {
   const isCreator = battle.creator_user_id === currentUserId;
   const isParticipant = isCreator || battle.opponent_user_id === currentUserId;
   const winnerText = battle.winner_side === "creator" ? battle.creator_name : battle.winner_user_id ? battle.opponent_name : (tr ? "Bot" : "Bot");
+  if (battle.status === "in_progress" && isParticipant) return <LiveBattleCard battle={battle} allItems={allItems} tr={tr} locale={locale} onEmoji={onEmoji} onNextRound={onNextRound} />;
   return <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/35 p-4">
     <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-fuchsia-400/20 blur-2xl" />
     <div className="relative flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.16em] text-white/35">#{battle.id} · {battle.status}</p><h4 className="mt-1 font-semibold">{battle.creator_name} VS {battle.opponent_name || (tr ? "Bekleniyor" : "Waiting")}</h4></div><span className="inline-flex items-center gap-1 rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-xs text-amber-100"><CoinIcon small /> {formatNumber(Number(battle.cost || 0), locale)} TC</span></div>
@@ -635,6 +643,137 @@ function BattleCard({ battle, currentUserId, tr, locale, onJoin, onBot, onEmoji 
     {battle.rounds?.length ? <div className="relative mt-4 grid gap-2">{battle.rounds.map((round) => <div key={round.round_number} className="grid grid-cols-[32px_1fr_1fr] items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-xs"><span className="text-white/35">R{round.round_number}</span><span className="animate-pulse rounded-xl px-2 py-1">{round.creator_item?.emoji} {nameOf(round.creator_item, tr)} · {round.creator_points}</span><span className="animate-pulse rounded-xl px-2 py-1">{round.opponent_item?.emoji} {nameOf(round.opponent_item, tr)} · {round.opponent_points}</span></div>)}</div> : null}
     <div className="relative mt-4 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-white/55">{tr ? "Skor" : "Score"}: <b className="text-white">{Number(battle.creator_score || 0)}</b> - <b className="text-white">{Number(battle.opponent_score || 0)}</b>{battle.status === "completed" ? <> · 🏆 {winnerText || "—"}</> : null}</p><div className="flex flex-wrap gap-2">{battle.status === "waiting" && !isCreator && <button onClick={() => onJoin(battle.id)} className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200">{tr ? "Katıl" : "Join"}</button>}{battle.status === "waiting" && isCreator && <button onClick={() => onBot(battle.id)} className="inline-flex items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200"><Bot className="h-4 w-4" /> Bot</button>}{isParticipant && ["🔥", "😂", "😱", "💎", "🤖", "⚡", "🏆", "😭"].map((emoji) => <button key={emoji} onClick={() => onEmoji(battle.id, emoji)} className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-sm hover:bg-white/[0.1]">{emoji}</button>)}</div></div>
     {battle.emotes?.length ? <div className="relative mt-3 flex flex-wrap gap-2 text-xs text-white/55"><Send className="h-4 w-4" /> {battle.emotes.slice(0, 6).map((emote) => <span key={emote.id} className="rounded-full bg-black/35 px-2 py-1">{emote.emoji} {emote.name}</span>)}</div> : null}
+  </div>;
+}
+
+
+function LiveBattleCard({ battle, allItems, tr, locale, onEmoji, onNextRound }: { battle: BattleLobby; allItems: DropItem[]; tr: boolean; locale: string; onEmoji: (id: number, emoji: string) => void; onNextRound: (id: number) => Promise<DropTechState> }) {
+  const totalRounds = battle.box_sequence.length || battle.boxes?.length || 1;
+  const [phase, setPhase] = useState<BattleState>(battle.battle_state || "countdown");
+  const [countdown, setCountdown] = useState(3);
+  const [activeRound, setActiveRound] = useState<BattleRound | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const lastStartedRef = useRef(0);
+  const previousRounds = (battle.rounds || []).filter((round) => !activeRound || round.round_number < activeRound.round_number);
+  const displayedRounds = revealed && activeRound ? [...previousRounds, activeRound] : previousRounds;
+  const creatorScore = displayedRounds.reduce((sum, round) => sum + Number(round.creator_points || 0), 0);
+  const opponentScore = displayedRounds.reduce((sum, round) => sum + Number(round.opponent_points || 0), 0);
+  const nextRoundNumber = Math.min((battle.rounds?.length || 0) + 1, totalRounds);
+  const currentRoundNumber = activeRound?.round_number || nextRoundNumber;
+  const currentBox = (battle.boxes || []).find((box) => box.id === (activeRound?.box_type || battle.box_sequence[currentRoundNumber - 1])) || battle.boxes?.[currentRoundNumber - 1] || null;
+  const pool = allItems.filter((item) => item.series_id === (activeRound?.box_type || currentBox?.id));
+  const creatorStrip = buildStrip(pool.length ? pool : allItems, activeRound?.creator_item || null);
+  const opponentStrip = buildStrip(pool.length ? pool : allItems, activeRound?.opponent_item || null);
+  const progress = Math.round((displayedRounds.length / totalRounds) * 100);
+
+  useEffect(() => {
+    if (battle.id) {
+      setPhase("countdown");
+      setCountdown(3);
+      setActiveRound(null);
+      setRevealed(false);
+      lastStartedRef.current = battle.rounds?.length || 0;
+    }
+  }, [battle.id]);
+
+  useEffect(() => {
+    if (phase !== "countdown" || busy || activeRound || (battle.rounds?.length || 0) >= totalRounds) return undefined;
+    setCountdown(3);
+    const interval = window.setInterval(() => setCountdown((value) => Math.max(1, value - 1)), 1000);
+    const timer = window.setTimeout(() => {
+      window.clearInterval(interval);
+      void startNextRound();
+    }, 3000);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(timer);
+    };
+  }, [phase, busy, activeRound, battle.rounds?.length, totalRounds]);
+
+  async function startNextRound() {
+    const targetRound = (battle.rounds?.length || 0) + 1;
+    if (busy || targetRound > totalRounds || lastStartedRef.current >= targetRound) return;
+    lastStartedRef.current = targetRound;
+    setBusy(true);
+    setPhase("opening_round");
+    setRevealed(false);
+    try {
+      const data = await onNextRound(battle.id);
+      const refreshed = (data.battles || []).find((entry) => Number(entry.id) === Number(battle.id));
+      const serverRound = refreshed?.rounds?.find((round) => Number(round.round_number) === targetRound) || null;
+      if (!serverRound) throw new Error(tr ? "Server round sonucu alınamadı." : "Server round result was not returned.");
+      setActiveRound(serverRound);
+      window.setTimeout(() => {
+        setPhase("revealing_result");
+        setRevealed(true);
+        window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+        window.setTimeout(() => {
+          setPhase("score_update");
+          window.setTimeout(() => {
+            if (targetRound >= totalRounds) {
+              setPhase("finished");
+              void onNextRound(battle.id).then(() => window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "win" } }))).catch(() => undefined);
+            } else {
+              setPhase("next_round_transition");
+              window.setTimeout(() => {
+                setActiveRound(null);
+                setRevealed(false);
+                setBusy(false);
+                setPhase("countdown");
+              }, 1100);
+            }
+          }, 1300);
+        }, 1200);
+      }, 4300);
+    } catch {
+      setBusy(false);
+      setPhase("countdown");
+      lastStartedRef.current = Math.max(0, targetRound - 1);
+    }
+  }
+
+  const statusText = phase === "countdown" ? (tr ? `Round ${currentRoundNumber} geri sayım` : `Round ${currentRoundNumber} countdown`) : phase === "opening_round" ? (tr ? "Canlı açılış" : "Live opening") : phase === "revealing_result" ? (tr ? "Sonuç gösteriliyor" : "Revealing result") : phase === "score_update" ? (tr ? "Skor güncellendi" : "Score updated") : phase === "next_round_transition" ? (tr ? "Sonraki round hazırlanıyor" : "Preparing next round") : (tr ? "Final hesaplanıyor" : "Calculating final");
+
+  return <div className="relative overflow-hidden rounded-[1.75rem] border border-fuchsia-300/25 bg-black/55 p-4 shadow-2xl shadow-fuchsia-500/10 sm:p-5">
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(217,70,239,0.18),transparent_45%)]" />
+    <div className="relative flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div><p className="text-xs uppercase tracking-[0.2em] text-fuchsia-100/55">#{battle.id} · {statusText}</p><h3 className="mt-1 text-2xl font-semibold text-white">Round {currentRoundNumber}/{totalRounds} · {currentBox ? `${currentBox.emoji} ${nameOf(currentBox, tr)}` : "Case"}</h3></div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-white/50"><span>{tr ? "Battle states" : "Battle states"}: countdown → opening_round → revealing_result → score_update</span>{["🔥", "😂", "😱", "💎", "🤖", "⚡", "🏆", "😭"].map((emoji) => <button key={emoji} onClick={() => onEmoji(battle.id, emoji)} className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-sm hover:bg-white/[0.1]">{emoji}</button>)}</div>
+    </div>
+    {phase === "countdown" && <div className="relative mt-5 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-300/10 p-8 text-center"><p className="text-sm uppercase tracking-[0.25em] text-cyan-100/60">{tr ? "Senkron başlangıç" : "Synchronized start"}</p><p className="mt-3 text-7xl font-black text-white">{countdown}</p></div>}
+    <div className="relative mt-5 grid gap-4 lg:grid-cols-[1fr_0.08fr_1fr]">
+      <BattlePlayerPanel label="Player 1" name={battle.creator_name} avatarUrl={battle.creator_avatar_url} score={creatorScore} item={activeRound?.creator_item || null} points={activeRound?.creator_points || 0} strip={creatorStrip} phase={phase} revealed={revealed} tr={tr} locale={locale} />
+      <div className="hidden items-center justify-center text-2xl font-black text-white/30 lg:flex">VS</div>
+      <BattlePlayerPanel label="Player 2" name={battle.opponent_name || (tr ? "Bot/Oyuncu" : "Bot/Player")} avatarUrl={battle.opponent_avatar_url} score={opponentScore} item={activeRound?.opponent_item || null} points={activeRound?.opponent_points || 0} strip={opponentStrip} phase={phase} revealed={revealed} tr={tr} locale={locale} />
+    </div>
+    <div className="relative mt-5 rounded-[1.25rem] border border-white/10 bg-white/[0.035] p-4">
+      <div className="flex items-center justify-between text-xs uppercase tracking-[0.16em] text-white/40"><span>{tr ? "Battle progress" : "Battle progress"}</span><span>{displayedRounds.length}/{totalRounds}</span></div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-fuchsia-300 transition-all duration-700" style={{ width: `${progress}%` }} /></div>
+      <div className="mt-3 flex flex-wrap gap-2">{(battle.boxes || []).map((box, index) => <span key={`${box.id}-${index}`} className={`rounded-full px-3 py-1 text-xs ${index < displayedRounds.length ? "bg-emerald-300/15 text-emerald-100" : index === currentRoundNumber - 1 ? "bg-cyan-300/15 text-cyan-100" : "bg-white/[0.06] text-white/40"}`}>{index < displayedRounds.length ? "✓" : index === currentRoundNumber - 1 ? "●" : "○"} {box.emoji} {nameOf(box, tr)}</span>)}</div>
+    </div>
+  </div>;
+}
+
+function BattlePlayerPanel({ label, name, avatarUrl, score, item, points, strip, phase, revealed, tr, locale }: { label: string; name: string; avatarUrl?: string | null; score: number; item?: DropItem | null; points: number; strip: DropItem[]; phase: BattleState; revealed: boolean; tr: boolean; locale: string }) {
+  const spinning = phase === "opening_round" && item;
+  const reelRef = useRef<HTMLDivElement | null>(null);
+  const [travel, setTravel] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const update = () => setTravel(reelRef.current ? reelRef.current.clientWidth / 2 - STRIP_STOP_OFFSET : null);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [strip, item]);
+  return <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-4">
+    <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white text-sm font-bold text-black">{avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}</div><div><p className="text-xs uppercase tracking-[0.18em] text-white/35">{label}</p><p className="font-semibold text-white">{name}</p></div></div><div className="text-right"><p className="text-xs uppercase tracking-[0.16em] text-white/35">{tr ? "Toplam skor" : "Total score"}</p><p className="inline-flex items-center gap-1 text-2xl font-bold text-white"><CoinIcon small /> {formatNumber(score, locale)}</p></div></div>
+    <div ref={reelRef} className="relative mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/60 py-4">
+      <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-full w-0.5 -translate-x-1/2 bg-white shadow-[0_0_18px_rgba(255,255,255,0.9)]" />
+      <motion.div className="flex gap-3 pl-8" initial={{ x: 0 }} animate={spinning && travel !== null ? { x: travel } : { x: 0 }} transition={{ duration: 4.1, ease: [0.12, 0.76, 0.18, 1] }}>
+        {strip.map((entry, index) => <div key={`${entry.id}-${index}`} className={`flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-2xl border p-2 text-center ${rarityClass[entry.rarity]}`}><span className="text-3xl">{entry.emoji}</span><span className="mt-1 line-clamp-1 text-[10px] font-semibold">{nameOf(entry, tr)}</span></div>)}
+      </motion.div>
+    </div>
+    <AnimatePresence>{revealed && item ? <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`mt-4 rounded-2xl border p-4 ${rarityClass[item.rarity]}`}><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="text-4xl">{item.emoji}</span><div><p className="font-semibold">{nameOf(item, tr)}</p><p className="text-xs uppercase tracking-[0.16em] opacity-65">{rarityText[item.rarity]}</p></div></div><span className="inline-flex items-center gap-1 rounded-full bg-black/25 px-3 py-1 text-sm font-bold"><CoinIcon small /> +{formatNumber(points, locale)}</span></div></motion.div> : <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/40">{tr ? "Sonuç animasyon bitince gösterilir." : "Result appears after the reel lands."}</div>}</AnimatePresence>
   </div>;
 }
 
