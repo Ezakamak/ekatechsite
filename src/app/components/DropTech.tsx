@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Box, Gift, PackageOpen, RefreshCw, Sparkles } from "lucide-react";
+import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 
 type Rarity = "common" | "rare" | "epic" | "legendary" | "glitch";
@@ -13,12 +14,14 @@ type DropItem = {
   description_tr: string;
   description_en: string;
   rarity: Rarity;
+  tech_coin_value?: number;
 };
 
 type InventoryItem = DropItem & {
   item_id?: string;
   quantity: number;
   last_found_at?: string | null;
+  total_tech_coin_value?: number;
 };
 
 type DropTechState = {
@@ -28,6 +31,7 @@ type DropTechState = {
   collection_total: number;
   owned_count: number;
   total_quantity: number;
+  collection_value?: number;
   inventory: InventoryItem[];
   items: DropItem[];
   odds: Record<Rarity, number>;
@@ -93,10 +97,13 @@ export function DropTech() {
   const copy = useMemo(() => tr ? {
     loading: "DropTech yükleniyor...",
     title: "DropTech",
-    subtitle: "Kutu aç, OFF'a özel koleksiyon parçalarını topla. Eşyalar kullanılmaz; sadece koleksiyonunda görünür.",
+    subtitle: "Kutu aç, OFF'a özel koleksiyon parçalarını topla. Eşyalar kullanılmaz; sadece koleksiyonunda Tech Coin değeriyle görünür.",
     boxes: "Kutu",
     opened: "Açılan",
     collection: "Koleksiyon",
+    collectionValue: "Koleksiyon değeri",
+    itemValue: "Eşya değeri",
+    totalValue: "Toplam değer",
     claim: "Günlük kutuyu al",
     claimed: "Bugünkü kutu alındı",
     open: "Kutuyu aç",
@@ -109,13 +116,17 @@ export function DropTech() {
     owned: "Sahip olunan",
     empty: "Henüz eşya yok. Günlük kutunu alıp aç.",
     add: "Envantere eklendi",
+    valueNote: "Bu değer sadece envanterde duran koleksiyon değeridir; kutu açınca Tech Coin bakiyesine eklenmez.",
   } : {
     loading: "Loading DropTech...",
     title: "DropTech",
-    subtitle: "Open boxes and collect OFF-exclusive items. Items are not usable; they only appear in your collection.",
+    subtitle: "Open boxes and collect OFF-exclusive items. Items are not usable; they only appear with Tech Coin value in your collection.",
     boxes: "Boxes",
     opened: "Opened",
     collection: "Collection",
+    collectionValue: "Collection value",
+    itemValue: "Item value",
+    totalValue: "Total value",
     claim: "Claim daily box",
     claimed: "Daily box claimed",
     open: "Open box",
@@ -128,6 +139,7 @@ export function DropTech() {
     owned: "Owned",
     empty: "No items yet. Claim and open your daily box.",
     add: "Added to inventory",
+    valueNote: "This is collection value only; opening a box does not add Tech Coin to your wallet.",
   }, [tr]);
 
   const visibleInventory = useMemo(() => {
@@ -215,6 +227,7 @@ export function DropTech() {
 
   const strip = buildStrip(state?.items || [], won);
   const boxCount = Number(state?.box_count || 0);
+  const collectionValue = Number(state?.collection_value || 0);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
@@ -239,11 +252,13 @@ export function DropTech() {
 
         <section className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
               <Stat label={copy.boxes} value={formatNumber(boxCount, locale)} />
               <Stat label={copy.opened} value={formatNumber(Number(state?.lifetime_opened || 0), locale)} />
               <Stat label={copy.collection} value={`${formatNumber(Number(state?.owned_count || 0), locale)}/${formatNumber(Number(state?.collection_total || 0), locale)}`} />
+              <Stat label={copy.collectionValue} value={`${formatNumber(collectionValue, locale)} TC`} featured />
             </div>
+            <p className="mt-4 rounded-2xl border border-amber-300/15 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-100/80">{copy.valueNote}</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button onClick={claimDaily} disabled={!state?.can_claim_daily || opening} className="inline-flex items-center justify-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-3 text-sm font-medium text-cyan-100 hover:bg-cyan-300/15 disabled:opacity-40">
                 <PackageOpen className="h-4 w-4" /> {state?.can_claim_daily ? copy.claim : copy.claimed}
@@ -297,6 +312,9 @@ export function DropTech() {
                   <h2 className="mt-4 text-3xl font-semibold">{itemName(won, tr)}</h2>
                   <p className="mt-2 text-sm uppercase tracking-[0.18em] opacity-70">{rarityText[won.rarity]}</p>
                   <p className="mt-4 text-sm leading-6 opacity-75">{itemDescription(won, tr)}</p>
+                  <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-black/10 bg-black/20 px-4 py-2 text-sm font-semibold">
+                    <CoinIcon /> {formatNumber(Number(won.tech_coin_value || 0), locale)} TC
+                  </div>
                   <button onClick={() => setWon(null)} className="mt-5 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200">{copy.add}</button>
                 </motion.div>}
               </AnimatePresence>
@@ -308,7 +326,7 @@ export function DropTech() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-3xl font-medium">{copy.inventory}</h2>
-              <p className="mt-2 text-sm text-white/45">{copy.owned}: {formatNumber(Number(state?.total_quantity || 0), locale)}</p>
+              <p className="mt-2 text-sm text-white/45">{copy.owned}: {formatNumber(Number(state?.total_quantity || 0), locale)} · {copy.collectionValue}: {formatNumber(collectionValue, locale)} TC</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>{copy.all}</FilterButton>
@@ -325,6 +343,16 @@ export function DropTech() {
               <h3 className="mt-4 font-semibold">{itemName(item, tr)}</h3>
               <p className="mt-1 text-xs uppercase tracking-[0.16em] opacity-60">{rarityText[item.rarity]}</p>
               <p className="mt-3 text-sm leading-6 opacity-70">{itemDescription(item, tr)}</p>
+              <div className="mt-4 grid gap-2 text-xs">
+                <div className="flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2">
+                  <span className="opacity-65">{copy.itemValue}</span>
+                  <span className="inline-flex items-center gap-1 font-semibold"><CoinIcon small /> {formatNumber(Number(item.tech_coin_value || 0), locale)} TC</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2">
+                  <span className="opacity-65">{copy.totalValue}</span>
+                  <span className="inline-flex items-center gap-1 font-semibold"><CoinIcon small /> {formatNumber(Number(item.total_tech_coin_value || 0), locale)} TC</span>
+                </div>
+              </div>
             </div>)}
             {!visibleInventory.length && <div className="col-span-full rounded-[1.5rem] border border-white/10 bg-black/25 p-6 text-white/45">{copy.empty}</div>}
           </div>
@@ -334,8 +362,12 @@ export function DropTech() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-white/10 bg-black/35 p-4"><p className="text-xs uppercase tracking-[0.16em] text-white/35">{label}</p><p className="mt-2 text-2xl font-semibold text-white">{value}</p></div>;
+function Stat({ label, value, featured = false }: { label: string; value: string; featured?: boolean }) {
+  return <div className={`rounded-2xl border p-4 ${featured ? "border-amber-300/20 bg-amber-300/10" : "border-white/10 bg-black/35"}`}><p className="text-xs uppercase tracking-[0.16em] text-white/35">{label}</p><p className="mt-2 text-2xl font-semibold text-white">{value}</p></div>;
+}
+
+function CoinIcon({ small = false }: { small?: boolean }) {
+  return <span className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-amber-300/25 bg-black/40 ${small ? "h-4 w-4" : "h-5 w-5"}`}><img src={coinIcon} alt="Tech Coin" className="h-full w-full object-cover" /></span>;
 }
 
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
