@@ -105,6 +105,7 @@ async function ensureTables(context: any) {
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_user_boxes (user_id INTEGER NOT NULL, box_type TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, box_type))`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_inventory (user_id INTEGER NOT NULL, item_id TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, rarity TEXT NOT NULL, emoji TEXT NOT NULL, name_tr TEXT NOT NULL, name_en TEXT NOT NULL, description_tr TEXT NOT NULL, description_en TEXT NOT NULL, first_found_at TEXT DEFAULT CURRENT_TIMESTAMP, last_found_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, item_id))`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_openings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, item_id TEXT NOT NULL, rarity TEXT NOT NULL, box_type TEXT DEFAULT 'standard_cache', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await addColumnIfMissing(context, "droptech_openings", "box_type", "TEXT DEFAULT 'standard_cache'");
 }
 
 async function ensureUserBoxRow(context: any, userId: number) {
@@ -238,6 +239,16 @@ function rarityOdds(boxType = "standard_cache") {
   const buckets: Record<Rarity, number> = { common: 0, rare: 0, epic: 0, legendary: 0, glitch: 0 };
   for (const item of DROP_ITEMS) buckets[item.rarity] += effectiveWeight(item, box);
   return Object.fromEntries(Object.entries(buckets).map(([rarity, weight]) => [rarity, Number(((weight / total) * 100).toFixed(2))]));
+}
+
+async function addColumnIfMissing(context: any, table: string, column: string, definition: string) {
+  const rows = await context.env.DB.prepare(`PRAGMA table_info(${quoteIdent(table)})`).all();
+  const exists = (rows?.results || []).some((row: any) => String(row.name || "") === column);
+  if (!exists) await context.env.DB.prepare(`ALTER TABLE ${quoteIdent(table)} ADD COLUMN ${quoteIdent(column)} ${definition}`).run();
+}
+
+function quoteIdent(value: string) {
+  return `"${String(value).replaceAll('"', '""')}"`;
 }
 
 async function requireOffUser(context: any) {
