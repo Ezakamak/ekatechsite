@@ -35,116 +35,17 @@ const RARITY_VALUES: Record<Rarity, number> = {
 };
 
 const BOX_TYPES: BoxType[] = [
-  {
-    id: "standard_cache",
-    emoji: "📦",
-    name_tr: "Standard Cache",
-    name_en: "Standard Cache",
-    description_tr: "DropTech'in günlük klasik kutusu. Dengeli ama sade drop havuzu.",
-    description_en: "The classic daily DropTech box. Balanced and simple.",
-    accent: "white",
-    multipliers: { common: 1.15, rare: 0.95, epic: 0.75, legendary: 0.55, glitch: 0.35 },
-  },
-  {
-    id: "signal_crate",
-    emoji: "📡",
-    name_tr: "Signal Crate",
-    name_en: "Signal Crate",
-    description_tr: "Rare itemlara hafif eğilimli sinyal kutusu.",
-    description_en: "A signal-themed box with a slight Rare bias.",
-    accent: "cyan",
-    multipliers: { common: 0.82, rare: 1.35, epic: 1.05, legendary: 0.75, glitch: 0.55 },
-  },
-  {
-    id: "circuit_box",
-    emoji: "🔌",
-    name_tr: "Circuit Box",
-    name_en: "Circuit Box",
-    description_tr: "Donanım temalı, Rare ve Epic dengesi güçlü kutu.",
-    description_en: "Hardware-themed box with stronger Rare and Epic balance.",
-    accent: "emerald",
-    multipliers: { common: 0.75, rare: 1.2, epic: 1.25, legendary: 0.8, glitch: 0.55 },
-  },
-  {
-    id: "neon_vault",
-    emoji: "🟣",
-    name_tr: "Neon Vault",
-    name_en: "Neon Vault",
-    description_tr: "Parlak, hızlı ve Epic ağırlığı daha belirgin kasa.",
-    description_en: "Bright, fast and more Epic-focused.",
-    accent: "purple",
-    multipliers: { common: 0.62, rare: 1.05, epic: 1.55, legendary: 1.0, glitch: 0.7 },
-  },
-  {
-    id: "data_relic",
-    emoji: "💿",
-    name_tr: "Data Relic",
-    name_en: "Data Relic",
-    description_tr: "Eski sistemlerden kalma veri sandığı. Epic ve Legendary daha canlı.",
-    description_en: "A relic from old systems. Epic and Legendary feel stronger.",
-    accent: "cyan",
-    multipliers: { common: 0.55, rare: 0.95, epic: 1.55, legendary: 1.35, glitch: 0.8 },
-  },
-  {
-    id: "core_capsule",
-    emoji: "💠",
-    name_tr: "Core Capsule",
-    name_en: "Core Capsule",
-    description_tr: "Eka Core temalı kapsül. Legendary ağırlığı yüksek.",
-    description_en: "Eka Core themed capsule with higher Legendary weight.",
-    accent: "amber",
-    multipliers: { common: 0.45, rare: 0.85, epic: 1.3, legendary: 1.9, glitch: 0.9 },
-  },
-  {
-    id: "firewall_chest",
-    emoji: "🛡️",
-    name_tr: "Firewall Chest",
-    name_en: "Firewall Chest",
-    description_tr: "Savunma temalı özel sandık. Epic ve stabil Legendary oranı sunar.",
-    description_en: "Defense-themed chest with stable Epic and Legendary pressure.",
-    accent: "rose",
-    multipliers: { common: 0.5, rare: 0.9, epic: 1.45, legendary: 1.55, glitch: 0.75 },
-  },
-  {
-    id: "quantum_case",
-    emoji: "⚙️",
-    name_tr: "Quantum Case",
-    name_en: "Quantum Case",
-    description_tr: "Daha yüksek riskli ama nadir parıltısı güçlü kuantum kasası.",
-    description_en: "A higher-variance case with stronger rare shine.",
-    accent: "amber",
-    multipliers: { common: 0.38, rare: 0.75, epic: 1.35, legendary: 2.2, glitch: 1.05 },
-  },
-  {
-    id: "legend_vault",
-    emoji: "🏛️",
-    name_tr: "Legend Vault",
-    name_en: "Legend Vault",
-    description_tr: "Legendary odaklı ağır koleksiyon kasası.",
-    description_en: "A heavy collection box focused on Legendary items.",
-    accent: "amber",
-    multipliers: { common: 0.25, rare: 0.55, epic: 1.15, legendary: 3.1, glitch: 1.15 },
-  },
-  {
-    id: "glitch_rift",
-    emoji: "🕳️",
-    name_tr: "Glitch Rift",
-    name_en: "Glitch Rift",
-    description_tr: "Bozuk gerçeklik yarığı. Glitch item ağırlığı en yüksek kutu.",
-    description_en: "A broken-reality rift with the strongest Glitch weight.",
-    accent: "fuchsia",
-    multipliers: { common: 0.22, rare: 0.45, epic: 1.05, legendary: 2.0, glitch: 4.5 },
-  },
-  {
-    id: "founder_box",
-    emoji: "👑",
-    name_tr: "Founder Box",
-    name_en: "Founder Box",
-    description_tr: "Etkinlik/admin ödülleri için premium koleksiyon kutusu.",
-    description_en: "Premium collection box for events and admin rewards.",
-    accent: "purple",
-    multipliers: { common: 0.18, rare: 0.5, epic: 1.35, legendary: 2.8, glitch: 2.8 },
-  },
+  { id: "standard_cache", emoji: "📦", name_tr: "Standard Cache", name_en: "Standard Cache", description_tr: "DropTech'in günlük klasik kutusu. Dengeli ama sade drop havuzu.", description_en: "The classic daily DropTech box. Balanced and simple.", accent: "white", multipliers: { common: 1.15, rare: 0.95, epic: 0.75, legendary: 0.55, glitch: 0.35 } },
+  { id: "signal_crate", emoji: "📡", name_tr: "Signal Crate", name_en: "Signal Crate", description_tr: "Rare itemlara hafif eğilimli sinyal kutusu.", description_en: "A signal-themed box with a slight Rare bias.", accent: "cyan", multipliers: { common: 0.82, rare: 1.35, epic: 1.05, legendary: 0.75, glitch: 0.55 } },
+  { id: "circuit_box", emoji: "🔌", name_tr: "Circuit Box", name_en: "Circuit Box", description_tr: "Donanım temalı, Rare ve Epic dengesi güçlü kutu.", description_en: "Hardware-themed box with stronger Rare and Epic balance.", accent: "emerald", multipliers: { common: 0.75, rare: 1.2, epic: 1.25, legendary: 0.8, glitch: 0.55 } },
+  { id: "neon_vault", emoji: "🟣", name_tr: "Neon Vault", name_en: "Neon Vault", description_tr: "Parlak, hızlı ve Epic ağırlığı daha belirgin kasa.", description_en: "Bright, fast and more Epic-focused.", accent: "purple", multipliers: { common: 0.62, rare: 1.05, epic: 1.55, legendary: 1.0, glitch: 0.7 } },
+  { id: "data_relic", emoji: "💿", name_tr: "Data Relic", name_en: "Data Relic", description_tr: "Eski sistemlerden kalma veri sandığı. Epic ve Legendary daha canlı.", description_en: "A relic from old systems. Epic and Legendary feel stronger.", accent: "cyan", multipliers: { common: 0.55, rare: 0.95, epic: 1.55, legendary: 1.35, glitch: 0.8 } },
+  { id: "core_capsule", emoji: "💠", name_tr: "Core Capsule", name_en: "Core Capsule", description_tr: "Eka Core temalı kapsül. Legendary ağırlığı yüksek.", description_en: "Eka Core themed capsule with higher Legendary weight.", accent: "amber", multipliers: { common: 0.45, rare: 0.85, epic: 1.3, legendary: 1.9, glitch: 0.9 } },
+  { id: "firewall_chest", emoji: "🛡️", name_tr: "Firewall Chest", name_en: "Firewall Chest", description_tr: "Savunma temalı özel sandık. Epic ve stabil Legendary oranı sunar.", description_en: "Defense-themed chest with stable Epic and Legendary pressure.", accent: "rose", multipliers: { common: 0.5, rare: 0.9, epic: 1.45, legendary: 1.55, glitch: 0.75 } },
+  { id: "quantum_case", emoji: "⚙️", name_tr: "Quantum Case", name_en: "Quantum Case", description_tr: "Daha yüksek riskli ama nadir parıltısı güçlü kuantum kasası.", description_en: "A higher-variance case with stronger rare shine.", accent: "amber", multipliers: { common: 0.38, rare: 0.75, epic: 1.35, legendary: 2.2, glitch: 1.05 } },
+  { id: "legend_vault", emoji: "🏛️", name_tr: "Legend Vault", name_en: "Legend Vault", description_tr: "Legendary odaklı ağır koleksiyon kasası.", description_en: "A heavy collection box focused on Legendary items.", accent: "amber", multipliers: { common: 0.25, rare: 0.55, epic: 1.15, legendary: 3.1, glitch: 1.15 } },
+  { id: "glitch_rift", emoji: "🕳️", name_tr: "Glitch Rift", name_en: "Glitch Rift", description_tr: "Bozuk gerçeklik yarığı. Glitch item ağırlığı en yüksek kutu.", description_en: "A broken-reality rift with the strongest Glitch weight.", accent: "fuchsia", multipliers: { common: 0.22, rare: 0.45, epic: 1.05, legendary: 2.0, glitch: 4.5 } },
+  { id: "founder_box", emoji: "👑", name_tr: "Founder Box", name_en: "Founder Box", description_tr: "Etkinlik/admin ödülleri için premium koleksiyon kutusu.", description_en: "Premium collection box for events and admin rewards.", accent: "purple", multipliers: { common: 0.18, rare: 0.5, epic: 1.35, legendary: 2.8, glitch: 2.8 } },
 ];
 
 const DROP_ITEMS: DropItem[] = [
@@ -223,9 +124,7 @@ async function ensureUserBoxRow(context: any, userId: number) {
 async function claimDailyBox(context: any, userId: number) {
   const today = new Date().toISOString().slice(0, 10);
   const row: any = await context.env.DB.prepare(`SELECT last_daily_claim FROM droptech_boxes WHERE user_id = ?`).bind(userId).first();
-  if (row?.last_daily_claim === today) {
-    return { ...await buildState(context, userId), claimed: false, message: "Bugünkü DropTech kutusu zaten alındı." };
-  }
+  if (row?.last_daily_claim === today) return { ...await buildState(context, userId), claimed: false, message: "Bugünkü DropTech kutusu zaten alındı." };
   await addBox(context, userId, "standard_cache", 1);
   await context.env.DB.prepare(`UPDATE droptech_boxes SET last_daily_claim = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).bind(today, userId).run();
   return { ...await buildState(context, userId), claimed: true, message: "Günlük Standard Cache alındı." };
@@ -251,18 +150,10 @@ async function openBox(context: any, userId: number, boxType: string) {
   await context.env.DB.prepare(`
     INSERT INTO droptech_inventory (user_id, item_id, quantity, rarity, emoji, name_tr, name_en, description_tr, description_en)
     VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(user_id, item_id) DO UPDATE SET
-      quantity = quantity + 1,
-      rarity = excluded.rarity,
-      emoji = excluded.emoji,
-      name_tr = excluded.name_tr,
-      name_en = excluded.name_en,
-      description_tr = excluded.description_tr,
-      description_en = excluded.description_en,
-      last_found_at = CURRENT_TIMESTAMP
+    ON CONFLICT(user_id, item_id) DO UPDATE SET quantity = quantity + 1, rarity = excluded.rarity, emoji = excluded.emoji, name_tr = excluded.name_tr, name_en = excluded.name_en, description_tr = excluded.description_tr, description_en = excluded.description_en, last_found_at = CURRENT_TIMESTAMP
   `).bind(userId, item.id, item.rarity, item.emoji, item.name_tr, item.name_en, item.description_tr, item.description_en).run();
   await context.env.DB.prepare(`INSERT INTO droptech_openings (user_id, item_id, rarity, box_type) VALUES (?, ?, ?, ?)`).bind(userId, item.id, item.rarity, box.id).run();
-  return { ...await buildState(context, userId), won: item, opened_box: box };
+  return { ...await buildState(context, userId), won: item, opened_box: withBoxValue(box) };
 }
 
 async function buildState(context: any, userId: number) {
@@ -273,7 +164,7 @@ async function buildState(context: any, userId: number) {
 
   const today = new Date().toISOString().slice(0, 10);
   const quantityMap = new Map((boxRows?.results || []).map((row: any) => [String(row.box_type), Number(row.quantity || 0)]));
-  const boxes = BOX_TYPES.map((boxType) => ({ ...boxType, quantity: quantityMap.get(boxType.id) || 0, odds: rarityOdds(boxType.id) }));
+  const boxes = BOX_TYPES.map((boxType) => ({ ...withBoxValue(boxType), quantity: quantityMap.get(boxType.id) || 0, odds: rarityOdds(boxType.id) }));
   const boxCount = boxes.reduce((sum, boxItem) => sum + Number(boxItem.quantity || 0), 0);
   const inventory = (inventoryRows?.results || []).map(enrichInventoryItem);
   const ownedCount = Number(inventory.length || 0);
@@ -293,10 +184,18 @@ async function buildState(context: any, userId: number) {
     inventory,
     recent: recentRows?.results || [],
     items: DROP_ITEMS,
-    box_types: BOX_TYPES,
+    box_types: BOX_TYPES.map(withBoxValue),
     odds: rarityOdds("standard_cache"),
     odds_by_box: Object.fromEntries(BOX_TYPES.map((boxType) => [boxType.id, rarityOdds(boxType.id)])),
-    value_rules: { mode: "collection_value_only", payout_on_open: false, trade_enabled: false, market_enabled: false, rarity_values: RARITY_VALUES },
+    value_rules: {
+      mode: "collection_value_only",
+      box_value_mode: "expected_value_from_drop_odds",
+      formula: "sum(item_probability * item_tech_coin_value)",
+      payout_on_open: false,
+      trade_enabled: false,
+      market_enabled: false,
+      rarity_values: RARITY_VALUES,
+    },
   };
 }
 
@@ -304,6 +203,18 @@ function enrichInventoryItem(row: any) {
   const item = DROP_ITEMS.find((entry) => entry.id === row.item_id);
   const value = item?.tech_coin_value || RARITY_VALUES[row.rarity as Rarity] || 0;
   return { ...row, tech_coin_value: value, total_tech_coin_value: Number(row.quantity || 0) * value };
+}
+
+function withBoxValue(box: BoxType) {
+  return { ...box, tech_coin_value: boxExpectedValue(box.id), value_formula: "expected_drop_value" };
+}
+
+function boxExpectedValue(boxType = "standard_cache") {
+  const box = BOX_TYPES.find((entry) => entry.id === boxType) || BOX_TYPES[0];
+  const totalWeight = DROP_ITEMS.reduce((sum, item) => sum + effectiveWeight(item, box), 0);
+  if (!totalWeight) return 0;
+  const expected = DROP_ITEMS.reduce((sum, item) => sum + (effectiveWeight(item, box) / totalWeight) * Number(item.tech_coin_value || 0), 0);
+  return Number(expected.toFixed(2));
 }
 
 function pickDropItem(boxType: string) {
