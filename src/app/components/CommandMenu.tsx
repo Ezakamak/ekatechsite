@@ -22,10 +22,17 @@ type Command = {
   action: () => void;
 };
 
+function isGameLikeRoute() {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  return path === "/off" || path === "/core-clash";
+}
+
 export function CommandMenu() {
   const { language, setLanguage } = useLanguage();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [hiddenOnRoute, setHiddenOnRoute] = useState(isGameLikeRoute);
   const tr = language === "tr";
 
   const scrollTo = (selector: string) => {
@@ -99,7 +106,24 @@ export function CommandMenu() {
   });
 
   useEffect(() => {
+    const syncRouteVisibility = () => {
+      const shouldHide = isGameLikeRoute();
+      setHiddenOnRoute(shouldHide);
+      if (shouldHide) setOpen(false);
+    };
+
+    window.addEventListener("popstate", syncRouteVisibility);
+    window.addEventListener("ekatech-route-change", syncRouteVisibility);
+
+    return () => {
+      window.removeEventListener("popstate", syncRouteVisibility);
+      window.removeEventListener("ekatech-route-change", syncRouteVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (hiddenOnRoute) return;
       const isCommandKey = event.metaKey || event.ctrlKey;
       if (isCommandKey && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -113,11 +137,13 @@ export function CommandMenu() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [hiddenOnRoute]);
 
   useEffect(() => {
     if (!open) setQuery("");
   }, [open]);
+
+  if (hiddenOnRoute) return null;
 
   return (
     <>
