@@ -42,7 +42,10 @@ async function ensureTables(context: any) {
 async function buildLeaderboard(context: any): Promise<LeaderboardRow[]> {
   const db = context.env.DB;
   const users = (await db.prepare(`
-    SELECT DISTINCT users.id, users.name, users.avatar_url
+    SELECT
+      DISTINCT users.id,
+      users.name,
+      CASE WHEN COALESCE(users.avatar_approved, 0) = 1 THEN users.avatar_url ELSE '' END AS avatar_url
     FROM users
     INNER JOIN market_transactions ON market_transactions.user_id = users.id
     LIMIT 50
