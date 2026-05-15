@@ -118,10 +118,20 @@ async function ensureTables(context: any) {
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_user_boxes (user_id INTEGER NOT NULL, box_type TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, box_type))`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_inventory (user_id INTEGER NOT NULL, item_id TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, rarity TEXT NOT NULL, emoji TEXT NOT NULL, name_tr TEXT NOT NULL, name_en TEXT NOT NULL, description_tr TEXT NOT NULL, description_en TEXT NOT NULL, first_found_at TEXT DEFAULT CURRENT_TIMESTAMP, last_found_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, item_id))`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_openings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, item_id TEXT NOT NULL, rarity TEXT NOT NULL, box_type TEXT DEFAULT 'standard_cache', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
-  await db.prepare(`CREATE TABLE IF NOT EXISTS tech_coin_wallets (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 100, lifetime_earned INTEGER DEFAULT 0, lifetime_spent INTEGER DEFAULT 0, best_round INTEGER DEFAULT 0, perfect_clears INTEGER DEFAULT 0, total_rounds INTEGER DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS tech_coin_wallets (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 100, lifetime_earned INTEGER DEFAULT 0, lifetime_spent INTEGER DEFAULT 0, best_round INTEGER DEFAULT 0, perfect_clears INTEGER DEFAULT 0, total_rounds INTEGER DEFAULT 0, updated_at TEXT)`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS tech_coin_events (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, event_type TEXT NOT NULL, amount INTEGER NOT NULL, balance_after INTEGER NOT NULL, round_gain INTEGER DEFAULT 0, details TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await addColumnIfMissing(context, "droptech_openings", "box_type", "TEXT DEFAULT 'standard_cache'");
+  await ensureTechCoinWalletColumns(context);
+}
+
+async function ensureTechCoinWalletColumns(context: any) {
+  await addColumnIfMissing(context, "tech_coin_wallets", "balance", "INTEGER DEFAULT 100");
+  await addColumnIfMissing(context, "tech_coin_wallets", "lifetime_earned", "INTEGER DEFAULT 0");
   await addColumnIfMissing(context, "tech_coin_wallets", "lifetime_spent", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "tech_coin_wallets", "best_round", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "tech_coin_wallets", "perfect_clears", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "tech_coin_wallets", "total_rounds", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "tech_coin_wallets", "updated_at", "TEXT");
 }
 
 async function ensureUserBoxRow(context: any, userId: number) {
@@ -139,6 +149,7 @@ async function ensureUserBoxRow(context: any, userId: number) {
 }
 
 async function ensureTechCoinWallet(context: any, userId: number) {
+  await ensureTechCoinWalletColumns(context);
   await context.env.DB.prepare(`
     INSERT OR IGNORE INTO tech_coin_wallets (user_id, balance, lifetime_earned, lifetime_spent, best_round, perfect_clears, total_rounds)
     VALUES (?, 100, 0, 0, 0, 0, 0)
@@ -170,20 +181,6 @@ async function spendTechCoinForDropTech(context: any, userId: number, amount: nu
   `).bind(userId, -amount, Number(wallet?.balance || 0), details.slice(0, 240)).run();
 
   return wallet;
-}
-
-async function refundTechCoinForDropTech(context: any, userId: number, amount: number, details: string) {
-  const wallet: any = await getTechCoinWallet(context, userId);
-  const nextBalance = Number(wallet?.balance || 0) + amount;
-  await context.env.DB.prepare(`
-    UPDATE tech_coin_wallets
-    SET balance = ?, updated_at = datetime('now')
-    WHERE user_id = ?
-  `).bind(nextBalance, userId).run();
-  await context.env.DB.prepare(`
-    INSERT INTO tech_coin_events (user_id, event_type, amount, balance_after, round_gain, details)
-    VALUES (?, 'droptech_refund', ?, ?, 0, ?)
-  `).bind(userId, amount, nextBalance, details.slice(0, 240)).run();
 }
 
 async function claimDailyBox(context: any, userId: number) {
