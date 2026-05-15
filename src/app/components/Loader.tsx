@@ -7,11 +7,11 @@ type LoaderProps = {
 };
 
 const drops = [
-  { type: "square", delay: 0.15 },
-  { type: "triangle", delay: 0.55 },
-  { type: "circle", delay: 0.95 },
-  { type: "diamond", delay: 1.35 },
-  { type: "square", delay: 1.75 },
+  { type: "square", delay: 0.15, x: -6, rotate: 96, mass: 1.05 },
+  { type: "triangle", delay: 0.55, x: 8, rotate: -84, mass: 1.18 },
+  { type: "circle", delay: 0.95, x: -4, rotate: 44, mass: 0.92 },
+  { type: "diamond", delay: 1.35, x: 7, rotate: 132, mass: 1.12 },
+  { type: "square", delay: 1.75, x: -2, rotate: -118, mass: 1.25 },
 ] as const;
 
 const burstPieces = [
@@ -23,6 +23,15 @@ const burstPieces = [
   { type: "circle", x: -190, y: 20, rotate: 130 },
   { type: "triangle", x: 140, y: 160, rotate: -120 },
 ] as const;
+
+const splashPieces = [
+  { x: -30, y: -34, size: 4, delay: 0 },
+  { x: -18, y: -44, size: 3, delay: 0.018 },
+  { x: -6, y: -28, size: 5, delay: 0.036 },
+  { x: 10, y: -40, size: 3, delay: 0.012 },
+  { x: 22, y: -31, size: 4, delay: 0.03 },
+  { x: 34, y: -24, size: 3, delay: 0.048 },
+];
 
 function Shape({ type, small = false }: { type: string; small?: boolean }) {
   const size = small ? "w-5 h-5" : "w-8 h-8";
@@ -62,6 +71,81 @@ function Shape({ type, small = false }: { type: string; small?: boolean }) {
   );
 }
 
+function FluidFill({ fillPercent, impact, burst }: { fillPercent: number; impact: number; burst: boolean }) {
+  const safeFill = Math.max(0, Math.min(100, fillPercent));
+  const waveLift = impact === 0 ? 0 : Math.min(10, 3 + impact * 1.15);
+
+  return (
+    <div className="absolute inset-x-0 bottom-0 overflow-hidden" style={{ height: `${safeFill}%` }}>
+      <motion.div
+        className="absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,rgba(0,212,255,0.34),rgba(139,92,246,0.22)_68%,rgba(255,255,255,0.10))]"
+        initial={false}
+        animate={{ opacity: burst ? [0.8, 1, 0.25] : 1 }}
+        transition={{ duration: burst ? 0.45 : 0.2 }}
+        style={{ height: "100%" }}
+      />
+
+      <motion.svg
+        key={`front-wave-${impact}`}
+        className="absolute -top-7 left-[-50%] h-14 w-[200%] drop-shadow-[0_0_18px_rgba(0,212,255,0.35)]"
+        viewBox="0 0 320 56"
+        preserveAspectRatio="none"
+        initial={{ x: -34, y: waveLift, scaleY: 0.65 }}
+        animate={{ x: 0, y: [waveLift, -4, 2, 0], scaleY: [0.65, 1.35, 0.86, 1] }}
+        transition={{ duration: 0.82, ease: [0.2, 0.75, 0.22, 1] }}
+      >
+        <path
+          d="M0 25 C28 2 52 47 82 24 C112 2 138 46 168 24 C198 3 226 45 254 24 C284 2 302 32 320 18 L320 56 L0 56 Z"
+          fill="rgba(0,212,255,0.42)"
+        />
+      </motion.svg>
+
+      <motion.svg
+        key={`back-wave-${impact}`}
+        className="absolute -top-6 left-[-45%] h-12 w-[190%] opacity-80"
+        viewBox="0 0 320 48"
+        preserveAspectRatio="none"
+        initial={{ x: 18, y: waveLift * 0.45, scaleY: 0.72 }}
+        animate={{ x: -18, y: [waveLift * 0.45, 3, -2, 0], scaleY: [0.72, 1.18, 0.92, 1] }}
+        transition={{ duration: 1.05, ease: [0.2, 0.72, 0.22, 1] }}
+      >
+        <path
+          d="M0 22 C34 41 58 4 92 22 C126 40 150 6 184 22 C218 40 244 7 276 22 C298 34 312 25 320 20 L320 48 L0 48 Z"
+          fill="rgba(139,92,246,0.32)"
+        />
+      </motion.svg>
+
+      <motion.div
+        key={`shine-${impact}`}
+        className="absolute left-[-20%] top-0 h-10 w-[140%] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.30),transparent_62%)]"
+        initial={{ opacity: 0.15, x: -18, y: -10 }}
+        animate={{ opacity: [0.15, 0.55, 0.18], x: 18, y: [-10, -16, -8] }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
+      />
+    </div>
+  );
+}
+
+function Splash({ impact, fillPercent, burst }: { impact: number; fillPercent: number; burst: boolean }) {
+  if (impact === 0 || burst) return null;
+  const bottom = Math.max(12, Math.min(88, fillPercent + 2));
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[12] overflow-hidden">
+      {splashPieces.map((piece, index) => (
+        <motion.span
+          key={`${impact}-${index}`}
+          className="absolute left-1/2 rounded-full bg-cyan-100/75 shadow-[0_0_12px_rgba(0,212,255,0.75)]"
+          style={{ width: piece.size, height: piece.size, bottom: `${bottom}%` }}
+          initial={{ x: 0, y: 0, opacity: 0.95, scale: 0.7 }}
+          animate={{ x: [0, piece.x * 0.45, piece.x], y: [0, piece.y, piece.y + 22], opacity: [0.95, 0.9, 0], scale: [0.7, 1.15, 0.35] }}
+          transition={{ duration: 0.58, delay: piece.delay, ease: [0.16, 0.75, 0.28, 1] }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function Loader({ show }: LoaderProps) {
   const [impact, setImpact] = useState(0);
   const [burst, setBurst] = useState(false);
@@ -71,6 +155,8 @@ export function Loader({ show }: LoaderProps) {
   useEffect(() => {
     if (!show) return;
 
+    setImpact(0);
+    setBurst(false);
     boxControls.set({
       y: 0,
       scale: 1,
@@ -82,32 +168,33 @@ export function Loader({ show }: LoaderProps) {
       window.setTimeout(() => {
         setImpact((value) => value + 1);
 
+        const force = drop.mass;
         boxControls.start({
-          y: [0, 9, -4, 2, 0],
-          scale: [1, 1.08, 0.96, 1.02, 1],
-          rotate: [0, -1.4, 1.2, -0.5, 0],
+          y: [0, 8 * force, -4 * force, 2, 0],
+          scale: [1, 1 + 0.08 * force, 0.96, 1.018, 1],
+          rotate: [0, -1.1 * force, 1.35 * force, -0.45, 0],
           transition: {
-            duration: 0.32,
-            ease: "easeOut",
+            duration: 0.36,
+            ease: [0.16, 0.78, 0.25, 1],
           },
         });
-      }, (drop.delay + 0.62) * 1000)
+      }, (drop.delay + 0.72) * 1000)
     );
 
     const burstTimer = window.setTimeout(() => {
       setBurst(true);
 
       boxControls.start({
-        y: [0, 4, -2],
-        scale: [1, 1.18, 0.15],
+        y: [0, 6, -5],
+        scale: [1, 1.22, 0.12],
         rotate: [0, -3, 8],
         opacity: [1, 1, 0],
         transition: {
-          duration: 0.45,
+          duration: 0.48,
           ease: "easeOut",
         },
       });
-    }, 2650);
+    }, 2850);
 
     return () => {
       impactTimers.forEach((timer) => window.clearTimeout(timer));
@@ -137,22 +224,24 @@ export function Loader({ show }: LoaderProps) {
                   key={index}
                   className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2"
                   initial={{
-                    y: -260,
+                    x: drop.x,
+                    y: -280,
                     opacity: 0,
                     rotate: 0,
-                    scale: 0.95,
+                    scale: 0.96,
                   }}
                   animate={{
-                    y: [-260, -80, 0],
-                    opacity: [0, 1, 1, 0],
-                    rotate: [0, 20, 70],
-                    scale: [0.95, 1, 0.5],
+                    x: [drop.x, drop.x * 0.5, 0],
+                    y: [-280, -170, -66, 0, 8],
+                    opacity: [0, 1, 1, 1, 0],
+                    rotate: [0, drop.rotate * 0.18, drop.rotate * 0.55, drop.rotate, drop.rotate + 34],
+                    scale: [0.96, 1, 1, 0.72, 0.42],
                   }}
                   transition={{
-                    duration: 0.68,
+                    duration: 0.82,
                     delay: drop.delay,
-                    times: [0, 0.82, 1],
-                    ease: "easeIn",
+                    times: [0, 0.2, 0.62, 0.88, 1],
+                    ease: [0.18, 0.02, 0.9, 0.28],
                   }}
                 >
                   <Shape type={drop.type} />
@@ -172,15 +261,15 @@ export function Loader({ show }: LoaderProps) {
                     rotate: 0,
                   }}
                   animate={{
-                    x: piece.x,
-                    y: piece.y,
+                    x: [0, piece.x * 0.82, piece.x],
+                    y: [0, piece.y * 0.72, piece.y + 42],
                     opacity: [1, 1, 0],
                     scale: [0.8, 1.15, 0.4],
                     rotate: piece.rotate,
                   }}
                   transition={{
-                    duration: 0.75,
-                    ease: "easeOut",
+                    duration: 0.88,
+                    ease: [0.18, 0.72, 0.24, 1],
                     delay: index * 0.025,
                   }}
                 >
@@ -198,16 +287,8 @@ export function Loader({ show }: LoaderProps) {
               }}
               animate={boxControls}
             >
-              <motion.div
-                className="absolute bottom-0 left-0 right-0 bg-[linear-gradient(to_top,rgba(0,212,255,0.28),rgba(139,92,246,0.16))]"
-                animate={{
-                  height: `${fillPercent}%`,
-                }}
-                transition={{
-                  duration: 0.25,
-                  ease: "easeOut",
-                }}
-              />
+              <FluidFill fillPercent={fillPercent} impact={impact} burst={burst} />
+              <Splash impact={impact} fillPercent={fillPercent} burst={burst} />
 
               <motion.div
                 className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,212,255,0.18),transparent_62%)]"
@@ -223,10 +304,12 @@ export function Loader({ show }: LoaderProps) {
                 }}
               />
 
+              <div className="pointer-events-none absolute inset-0 rounded-3xl border border-white/10 shadow-[inset_0_0_28px_rgba(255,255,255,0.08)]" />
+
               <img
                 src={logo}
                 alt="EkaTech Logo"
-                className="relative z-10 w-28 h-28 object-contain"
+                className="relative z-20 w-28 h-28 object-contain drop-shadow-[0_0_22px_rgba(255,255,255,0.16)]"
               />
             </motion.div>
 
