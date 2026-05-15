@@ -7,6 +7,7 @@ type PlayerState = { id: number; user_id: number; side: "creator" | "opponent"; 
 const MAX_HAND = 6;
 const MAX_ENERGY = 8;
 const MAX_TURNS = 30;
+const BOT_EMAIL_MARKER = ".bot@ekatech.local";
 const PASS_CARD: Card = { id: "pass", name: "Pass", type: "pass", cost: 0 };
 const CARDS: Record<string, Card> = {
   glitch_strike: { id: "glitch_strike", name: "Glitch Strike", type: "attack", cost: 2 },
@@ -40,6 +41,8 @@ export async function onRequestGet(context: any) {
     if (!lobbyId) return Response.json({ error: "Lobby seçilmedi." }, { status: 400 });
     await markEntered(context, lobbyId, auth.user.id);
     await ensureTurnIfReady(context, lobbyId);
+    await maybePlayBotCard(context, lobbyId);
+    await resolveIfReady(context, lobbyId);
     await resolveExpiredTurn(context, lobbyId);
     return Response.json(await buildState(context, lobbyId, auth.user.id));
   } catch (error) {
@@ -58,6 +61,8 @@ export async function onRequestPost(context: any) {
 
     await markEntered(context, lobbyId, auth.user.id);
     await ensureTurnIfReady(context, lobbyId);
+    await maybePlayBotCard(context, lobbyId);
+    await resolveIfReady(context, lobbyId);
     await resolveExpiredTurn(context, lobbyId);
 
     const lobby = await getLobby(context, lobbyId);
@@ -83,6 +88,7 @@ export async function onRequestPost(context: any) {
     await context.env.DB.prepare(`UPDATE core_clash_players SET energy = energy - ?, hand_json = ?, discard_json = ?, updated_at = datetime('now') WHERE id = ?`).bind(card.cost, JSON.stringify(hand.slice(0, MAX_HAND)), JSON.stringify(discard), player.id).run();
     await context.env.DB.prepare(`UPDATE core_clash_turns SET ${column} = ? WHERE id = ? AND ${column} IS NULL`).bind(cardId, turn.id).run();
 
+    await maybePlayBotCard(context, lobbyId);
     await resolveIfReady(context, lobbyId);
     return Response.json(await buildState(context, lobbyId, auth.user.id));
   } catch (error) {
@@ -104,6 +110,66 @@ async function resolveExpiredTurn(context: any, lobbyId: number) {
 async function resolveIfReady(context: any, lobbyId: number) {
   const turn = await context.env.DB.prepare("SELECT * FROM core_clash_turns WHERE lobby_id = ? AND status = 'active' ORDER BY turn_number DESC LIMIT 1").bind(lobbyId).first();
   if (turn && turn.creator_card_id && turn.opponent_card_id) await resolveTurn(context, lobbyId, turn);
+}
+
+async function maybePlayBotCard(context: any, lobbyId: number) {
+  const lobby = await getLobby(context, lobbyId);
+  if (!lobby || lobby.status !== "in_progress") return;
+  const botId = getBotUserIdFromLobby(lobby);
+  if (!botId) return;
+
+  const turn = await context.env.DB.prepare("SELECT * FROM core_clash_turns WHERE lobby_id = ? AND status = 'active' ORDER BY turn_number DESC LIMIT 1").bind(lobbyId).first();
+  if (!turn) return;
+  const botSide = Number(lobby.creator_user_id) === Number(botId) ? "creator" : "opponent";
+  const column = botSide === "creator" ? "creator_card_id" : "opponent_card_id";
+  if (turn[column]) return;
+
+  const deadline = parseDateMs(turn.deadline_at);
+  const turnStart = Number.isFinite(deadline) ? deadline - 15000 : Date.now();
+  const delay = 1100 + (hashNumber(`${lobbyId}:${turn.turn_number}:bot-delay`) % 4500);
+  if (Date.now() < turnStart + delay && (!Number.isFinite(deadline) || Date.now() < deadline - 2200)) return;
+
+  const players = await getPlayers(context, lobbyId);
+  const botPlayer = players.find((p: any) => Number(p.user_id) === Number(botId));
+  if (!botPlayer) return;
+  const cardId = chooseBotCard(botPlayer, lobby.map_key, String(lobby.opponent_name || lobby.creator_name || ""));
+  if (!cardId) return;
+  await playBotCard(context, botPlayer, turn, cardId, column);
+}
+
+function chooseBotCard(player: any, mapKey: string, name: string) {
+  const hand = safeJson(player.hand_json);
+  const energy = Number(player.energy || 0);
+  const playable = hand.map((id: string) => CARDS[id]).filter((card: Card | undefined) => card && card.cost <= energy) as Card[];
+  if (!playable.length) return null;
+  const skill = name.toLowerCase().includes("glitch") ? "hard" : name.toLowerCase().includes("echo") ? "easy" : "normal";
+  const boostedType = mapType(mapKey);
+  const hp = Number(player.hp || 0);
+  const heat = Number(player.heat || 0);
+  const scored = playable.map((card) => {
+    let score = 10 - card.cost;
+    if (card.type === boostedType) score += skill === "easy" ? 1 : 4;
+    if (hp <= 24 && card.type === "defense") score += 7;
+    if (card.type === "attack") score += skill === "hard" ? 5 : 3;
+    if (card.type === "overload" && heat >= 2) score -= 6;
+    if (card.type === "utility" && skill !== "easy") score += 2;
+    score += hashUnit(`${player.id}:${card.id}:${skill}`) * (skill === "hard" ? 2 : 7);
+    return { id: card.id, score };
+  }).sort((a, b) => b.score - a.score);
+  return scored[0]?.id || playable[0].id;
+}
+
+async function playBotCard(context: any, player: any, turn: any, cardId: string, column: string) {
+  const card = CARDS[cardId];
+  if (!card) return;
+  const hand = safeJson(player.hand_json);
+  const handIndex = hand.indexOf(cardId);
+  if (handIndex === -1 || Number(player.energy || 0) < card.cost) return;
+  hand.splice(handIndex, 1);
+  const discard = safeJson(player.discard_json);
+  discard.push(cardId);
+  await context.env.DB.prepare("UPDATE core_clash_players SET energy = energy - ?, hand_json = ?, discard_json = ?, updated_at = datetime('now') WHERE id = ?").bind(card.cost, JSON.stringify(hand.slice(0, MAX_HAND)), JSON.stringify(discard), player.id).run();
+  await context.env.DB.prepare(`UPDATE core_clash_turns SET ${column} = ? WHERE id = ? AND ${column} IS NULL`).bind(cardId, turn.id).run();
 }
 
 async function resolveTurn(context: any, lobbyId: number, turn: any) {
@@ -201,6 +267,14 @@ function mutable(p: PlayerState) {
 async function updatePlayer(context: any, id: number, p: any) {
   await context.env.DB.prepare("UPDATE core_clash_players SET hp = ?, energy = ?, heat = ?, energy_delta_next = ?, draw_block_next = ?, updated_at = datetime('now') WHERE id = ?").bind(Math.max(0, p.hp), Math.max(0, Math.min(MAX_ENERGY, p.energy)), Math.max(0, p.heat), p.energy_delta_next, p.draw_block_next, id).run();
 }
+function isBotIdentity(name?: string | null, email?: string | null) {
+  return String(email || "").toLowerCase().includes(BOT_EMAIL_MARKER) || String(name || "").toUpperCase().includes("BOT");
+}
+function getBotUserIdFromLobby(lobby: any) {
+  if (isBotIdentity(lobby.creator_name, lobby.creator_email)) return Number(lobby.creator_user_id || 0);
+  if (isBotIdentity(lobby.opponent_name, lobby.opponent_email)) return Number(lobby.opponent_user_id || 0);
+  return 0;
+}
 function parseDateMs(value?: string | null) {
   if (!value) return 0;
   const text = String(value);
@@ -208,3 +282,5 @@ function parseDateMs(value?: string | null) {
 }
 function mapType(key: string): CardType { if (key === "glitch_ruins") return "trap"; if (key === "overclock_core") return "attack"; if (key === "data_archive") return "utility"; return "defense"; }
 function safeJson(text: string) { try { const v = JSON.parse(text || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } }
+function hashUnit(value: string) { return (Math.abs(hashNumber(value)) % 10000) / 10000; }
+function hashNumber(input: string) { let h = 2166136261; for (let i = 0; i < input.length; i += 1) { h ^= input.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
