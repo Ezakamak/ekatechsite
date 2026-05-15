@@ -17,12 +17,40 @@ type SwitchAccount = User & {
   active?: boolean;
 };
 
+const USER_CACHE_KEY = "ekatech-current-user";
+
+function readCachedUser(): User | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(USER_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.id || !parsed?.email) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function cacheUser(user: User | null) {
+  if (typeof window === "undefined") return;
+
+  try {
+    if (user) window.sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+    else window.sessionStorage.removeItem(USER_CACHE_KEY);
+  } catch {
+    // Cache sadece yenileme anındaki görsel flicker'ı azaltmak için kullanılıyor.
+  }
+}
+
 export function Navbar() {
   const { language, setLanguage } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [switchingAccountId, setSwitchingAccountId] = useState<number | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => readCachedUser());
+  const [authChecked, setAuthChecked] = useState(false);
   const [accounts, setAccounts] = useState<SwitchAccount[]>([]);
 
   const nav =
@@ -98,13 +126,23 @@ export function Navbar() {
     fetch("/api/me", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => (response.ok ? response.json() : null))
       .then((data) => {
-        setUser(data?.loggedIn ? data.user : null);
-        if (data?.loggedIn && data?.user) refreshAccounts();
-        else setAccounts([]);
+        setAuthChecked(true);
+
+        if (data?.loggedIn && data?.user) {
+          setUser(data.user);
+          cacheUser(data.user);
+          refreshAccounts();
+          return;
+        }
+
+        setUser(null);
+        cacheUser(null);
+        setAccounts([]);
       })
       .catch(() => {
-        setUser(null);
-        setAccounts([]);
+        setAuthChecked(true);
+        // Geçici API/network hatasında kullanıcıyı hemen null yapma.
+        // Aksi halde sayfa yenilenirken hesap çıkmış gibi görünüp sonra geri gelir.
       });
   };
 
@@ -198,6 +236,7 @@ export function Navbar() {
       const data = await response.json().catch(() => null);
       if (data?.user) {
         setUser(data.user);
+        cacheUser(data.user);
         setAccounts((current) => current.map((item) => ({ ...item, active: item.id === data.user.id })));
         window.history.pushState({}, "", "/account");
         window.dispatchEvent(new Event("ekatech-account-switched"));
@@ -349,7 +388,7 @@ export function Navbar() {
                 )}
               </AnimatePresence>
             </div>
-          ) : (
+          ) : authChecked ? (
             <>
               <a
                 href="/signin"
@@ -367,6 +406,8 @@ export function Navbar() {
                 {nav.signup}
               </a>
             </>
+          ) : (
+            <div className="hidden h-10 w-32 animate-pulse rounded-full border border-white/10 bg-white/[0.06] sm:block" aria-label="Checking account" />
           )}
 
           <button
@@ -414,7 +455,7 @@ export function Navbar() {
                     + {nav.addAccount}
                   </a>
                 </>
-              ) : (
+              ) : authChecked ? (
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <a href="/signin" onClick={(event) => navigate(event, "/signin")} className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center font-medium text-white">
                     {nav.signin}
@@ -423,6 +464,8 @@ export function Navbar() {
                     {nav.signup}
                   </a>
                 </div>
+              ) : (
+                <div className="h-12 animate-pulse rounded-2xl border border-white/10 bg-white/[0.05]" />
               )}
             </div>
           </motion.div>
