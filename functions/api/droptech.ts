@@ -221,16 +221,19 @@ async function openBox(context: any, userId: number, boxType: string) {
   const openCost = boxOpenCost(box.id);
   const wallet: any = await getTechCoinWallet(context, userId);
   const owned: any = await context.env.DB.prepare(`SELECT quantity FROM droptech_user_boxes WHERE user_id = ? AND box_type = ?`).bind(userId, box.id).first();
-  if (Number(owned?.quantity || 0) <= 0) throw new DropTechUserError(`Açacak ${box.name_tr} kutun yok.`);
-  if (Number(wallet?.balance || 0) < openCost) throw new DropTechUserError(`${box.name_tr} açmak için ${openCost} Tech Coin gerekiyor. Bakiyen: ${Number(wallet?.balance || 0)}.`, 402);
+  const ownedQuantity = Number(owned?.quantity || 0);
+  const useOwnedBox = ownedQuantity > 0;
 
-  const spentWallet = await spendTechCoinForDropTech(context, userId, openCost, `DropTech ${box.name_tr} açma bedeli`);
-  if (!spentWallet) throw new DropTechUserError(`${box.name_tr} açmak için ${openCost} Tech Coin gerekiyor. Bakiyen güncel olmayabilir; sayfayı yenile.`, 402);
+  if (!useOwnedBox && Number(wallet?.balance || 0) < openCost) {
+    throw new DropTechUserError(`${box.name_tr} almak için ${openCost} Tech Coin gerekiyor. Bakiyen: ${Number(wallet?.balance || 0)}.`, 402);
+  }
 
-  const boxUpdate = await context.env.DB.prepare(`UPDATE droptech_user_boxes SET quantity = quantity - 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND box_type = ? AND quantity > 0`).bind(userId, box.id).run();
-  if (Number(boxUpdate?.meta?.changes || 0) === 0) {
-    await refundTechCoinForFailedOpen(context, userId, openCost, `DropTech ${box.name_tr} kutu bulunamadı iadesi`);
-    throw new DropTechUserError(`Açacak ${box.name_tr} kutun yok.`);
+  if (useOwnedBox) {
+    const boxUpdate = await context.env.DB.prepare(`UPDATE droptech_user_boxes SET quantity = quantity - 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND box_type = ? AND quantity > 0`).bind(userId, box.id).run();
+    if (Number(boxUpdate?.meta?.changes || 0) === 0) throw new DropTechUserError(`Açacak ${box.name_tr} kutun yok.`);
+  } else {
+    const spentWallet = await spendTechCoinForDropTech(context, userId, openCost, `DropTech ${box.name_tr} satın alma ve açma bedeli`);
+    if (!spentWallet) throw new DropTechUserError(`${box.name_tr} almak için ${openCost} Tech Coin gerekiyor. Bakiyen güncel olmayabilir; sayfayı yenile.`, 402);
   }
 
   const item = pickDropItem(box.id);
@@ -241,17 +244,7 @@ async function openBox(context: any, userId: number, boxType: string) {
     ON CONFLICT(user_id, item_id) DO UPDATE SET quantity = quantity + 1, rarity = excluded.rarity, emoji = excluded.emoji, name_tr = excluded.name_tr, name_en = excluded.name_en, description_tr = excluded.description_tr, description_en = excluded.description_en, last_found_at = CURRENT_TIMESTAMP
   `).bind(userId, item.id, item.rarity, item.emoji, item.name_tr, item.name_en, item.description_tr, item.description_en).run();
   await context.env.DB.prepare(`INSERT INTO droptech_openings (user_id, item_id, rarity, box_type) VALUES (?, ?, ?, ?)`).bind(userId, item.id, item.rarity, box.id).run();
-  return { ...await buildState(context, userId), won: item, opened_box: withBoxValue(box), spent: openCost };
-}
-
-async function refundTechCoinForFailedOpen(context: any, userId: number, amount: number, details: string) {
-  const wallet: any = await getTechCoinWallet(context, userId);
-  const nextBalance = Number(wallet?.balance || 0) + amount;
-  await context.env.DB.prepare(`UPDATE tech_coin_wallets SET balance = ?, updated_at = datetime('now') WHERE user_id = ?`).bind(nextBalance, userId).run();
-  await context.env.DB.prepare(`
-    INSERT INTO tech_coin_events (user_id, event_type, amount, balance_after, round_gain, details)
-    VALUES (?, 'droptech_refund', ?, ?, 0, ?)
-  `).bind(userId, amount, nextBalance, details.slice(0, 240)).run();
+  return { ...await buildState(context, userId), won: item, opened_box: withBoxValue(box), spent: useOwnedBox ? 0 : openCost, used_owned_box: useOwnedBox };
 }
 
 async function buildState(context: any, userId: number) {
@@ -291,6 +284,8 @@ async function buildState(context: any, userId: number) {
       mode: "collection_value_only",
       box_value_mode: "expected_value_from_drop_odds",
       box_open_spend_enabled: true,
+      owned_box_opens_free: true,
+      buy_and_open_with_tech_coin: true,
       open_cost_mode: "ceil_expected_value",
       formula: "sum(item_probability * item_tech_coin_value)",
       payout_on_open: false,
