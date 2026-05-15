@@ -33,6 +33,7 @@ export async function onRequestGet(context: any) {
 async function ensureTables(context: any) {
   const db = context.env.DB;
   await db.prepare(`CREATE TABLE IF NOT EXISTS coin_wallets (user_id INTEGER PRIMARY KEY, balance INTEGER NOT NULL DEFAULT 0, lifetime_earned INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS coin_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, amount INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS market_stocks (symbol TEXT PRIMARY KEY, name TEXT NOT NULL, sector TEXT NOT NULL, description_tr TEXT NOT NULL, description_en TEXT NOT NULL, price REAL NOT NULL, previous_price REAL NOT NULL, volatility REAL NOT NULL, risk TEXT NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS market_holdings (user_id INTEGER NOT NULL, symbol TEXT NOT NULL, shares INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, symbol))`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS market_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, symbol TEXT NOT NULL, side TEXT NOT NULL, quantity INTEGER NOT NULL, price REAL NOT NULL, total REAL NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
@@ -55,6 +56,7 @@ async function buildLeaderboard(context: any): Promise<LeaderboardRow[]> {
     const wallet: any = await db.prepare(`SELECT balance FROM coin_wallets WHERE user_id = ?`).bind(user.id).first();
     const holdings = (await db.prepare(`SELECT symbol, shares FROM market_holdings WHERE user_id = ? AND shares > 0`).bind(user.id).all())?.results || [];
     const trades = (await db.prepare(`SELECT side, total FROM market_transactions WHERE user_id = ?`).bind(user.id).all())?.results || [];
+    const liquidation: any = await db.prepare(`SELECT COALESCE(SUM(amount), 0) AS total FROM coin_transactions WHERE user_id = ? AND amount > 0 AND reason = 'EkaTrade portfolio liquidation'`).bind(user.id).first();
 
     const currentPositionValue = (holdings as any[]).reduce((sum, holding) => {
       return sum + Number(holding.shares || 0) * Number(prices[holding.symbol] || 0);
@@ -64,9 +66,12 @@ async function buildLeaderboard(context: any): Promise<LeaderboardRow[]> {
       .filter((trade) => String(trade.side).toLowerCase() === "buy")
       .reduce((sum, trade) => sum + Number(trade.total || 0), 0);
 
-    const sellVolume = (trades as any[])
+    const regularSellVolume = (trades as any[])
       .filter((trade) => String(trade.side).toLowerCase() === "sell")
       .reduce((sum, trade) => sum + Number(trade.total || 0), 0);
+
+    const liquidationSellVolume = Number(liquidation?.total || 0);
+    const sellVolume = regularSellVolume + liquidationSellVolume;
 
     const rawProfit = buyVolume > 0 ? currentPositionValue + sellVolume - buyVolume : 0;
     const marketProfit = Math.round(rawProfit);
