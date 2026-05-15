@@ -1,5 +1,6 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const BOT_EMAIL_MARKER = ".bot@ekatech.local";
+const MAX_AVATAR_DATA_URL_LENGTH = 700_000;
 
 type BotProfile = {
   id: number;
@@ -45,7 +46,9 @@ export async function onRequestPost(context: any) {
     const displayName = String(body?.name || "").trim();
 
     if (!botId) return Response.json({ error: "Bot seçilmedi." }, { status: 400 });
-    if (avatarUrl && !isSafeAvatarUrl(avatarUrl)) return Response.json({ error: "Geçerli bir görsel URL'si gir. / ile başlayan site içi yol veya http(s) link olmalı." }, { status: 400 });
+    if (avatarUrl && !isSafeAvatarUrl(avatarUrl)) {
+      return Response.json({ error: "Geçerli bir görsel seç. Cihazdan yüklenen sıkıştırılmış fotoğraf, / ile başlayan site içi yol veya http(s) link kabul edilir." }, { status: 400 });
+    }
 
     const bot = await context.env.DB.prepare("SELECT id, name, email FROM users WHERE id = ?").bind(botId).first();
     if (!bot) return Response.json({ error: "Bot bulunamadı." }, { status: 404 });
@@ -151,13 +154,21 @@ async function createBotUser(context: any, columns: Set<string>, profile: { name
 }
 
 function isSafeAvatarUrl(value: string) {
+  if (!value) return true;
   if (value.startsWith("/")) return true;
+  if (isSafeImageDataUrl(value)) return true;
+
   try {
     const url = new URL(value);
     return url.protocol === "https:" || url.protocol === "http:";
   } catch {
     return false;
   }
+}
+
+function isSafeImageDataUrl(value: string) {
+  if (value.length > MAX_AVATAR_DATA_URL_LENGTH) return false;
+  return /^data:image\/(png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(value);
 }
 
 function isBotIdentity(name?: string | null, email?: string | null) {
