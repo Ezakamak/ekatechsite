@@ -1,0 +1,4 @@
+This file marks a revert operation.
+Revert of commit: f96501587a8152a461a36bb28f94a258461407bf
+Message: Make DropTech reveal animation deterministic
+Date: 2026-05-15T20:35:43Z
