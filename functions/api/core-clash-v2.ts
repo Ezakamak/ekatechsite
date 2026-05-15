@@ -19,23 +19,55 @@ export const CARDS: Record<string, Card> = {
   pierce_injection: { id: "pierce_injection", name: "Pierce Injection", type: "attack", cost: 4, tags: ["pierce"] },
   double_ping: { id: "double_ping", name: "Double Ping", type: "attack", cost: 3, tags: ["multi"] },
   core_spike: { id: "core_spike", name: "Core Spike", type: "attack", cost: 5, tags: ["heavy", "heat"] },
+  ping_snipe: { id: "ping_snipe", name: "Ping Snipe", type: "attack", cost: 1, tags: ["cheap"] },
+  buffer_barrage: { id: "buffer_barrage", name: "Buffer Barrage", type: "attack", cost: 3, tags: ["multi"] },
+  cache_bomb: { id: "cache_bomb", name: "Cache Bomb", type: "attack", cost: 4, tags: ["delayed"] },
+  kernel_lance: { id: "kernel_lance", name: "Kernel Lance", type: "attack", cost: 5, tags: ["pierce", "heavy"] },
+  exploit_chain: { id: "exploit_chain", name: "Exploit Chain", type: "attack", cost: 4, tags: ["combo"] },
+
   firewall: { id: "firewall", name: "Firewall", type: "defense", cost: 3 },
   core_shield: { id: "core_shield", name: "Core Shield", type: "defense", cost: 4, tags: ["block"] },
   emergency_patch: { id: "emergency_patch", name: "Emergency Patch", type: "defense", cost: 2, tags: ["heal"] },
   static_field: { id: "static_field", name: "Static Field", type: "defense", cost: 3, tags: ["multi-counter"] },
+  nano_barrier: { id: "nano_barrier", name: "Nano Barrier", type: "defense", cost: 2, tags: ["reduce"] },
+  repair_drone: { id: "repair_drone", name: "Repair Drone", type: "defense", cost: 3, tags: ["heal"] },
+  shield_bash: { id: "shield_bash", name: "Shield Bash", type: "defense", cost: 3, tags: ["counter"] },
+  quarantine_wall: { id: "quarantine_wall", name: "Quarantine Wall", type: "defense", cost: 4, tags: ["control"] },
+  reboot_protocol: { id: "reboot_protocol", name: "Reboot Protocol", type: "defense", cost: 5, tags: ["heal", "heat"] },
+
   system_scan: { id: "system_scan", name: "System Scan", type: "utility", cost: 1 },
   data_drain: { id: "data_drain", name: "Data Drain", type: "utility", cost: 3 },
   battery_backup: { id: "battery_backup", name: "Battery Backup", type: "utility", cost: 2 },
   hand_jam: { id: "hand_jam", name: "Hand Jam", type: "utility", cost: 3 },
+  decoy_packet: { id: "decoy_packet", name: "Decoy Packet", type: "utility", cost: 1, tags: ["anti-trap"] },
+  quick_compile: { id: "quick_compile", name: "Quick Compile", type: "utility", cost: 1, tags: ["draw"] },
+  energy_surge: { id: "energy_surge", name: "Energy Surge", type: "utility", cost: 2, tags: ["energy"] },
+  packet_duplication: { id: "packet_duplication", name: "Packet Duplication", type: "utility", cost: 3, tags: ["draw", "energy"] },
+  cooldown_flush: { id: "cooldown_flush", name: "Cooldown Flush", type: "utility", cost: 2, tags: ["heat"] },
+  signal_boost: { id: "signal_boost", name: "Signal Boost", type: "utility", cost: 2, tags: ["tempo"] },
+
   mirror_bug: { id: "mirror_bug", name: "Mirror Bug", type: "trap", cost: 3 },
   packet_trap: { id: "packet_trap", name: "Packet Trap", type: "trap", cost: 2 },
   false_firewall: { id: "false_firewall", name: "False Firewall", type: "trap", cost: 2 },
-  decoy_packet: { id: "decoy_packet", name: "Decoy Packet", type: "utility", cost: 1, tags: ["anti-trap"] },
+  logic_bomb: { id: "logic_bomb", name: "Logic Bomb", type: "trap", cost: 3, tags: ["heavy-counter"] },
+  redirect_loop: { id: "redirect_loop", name: "Redirect Loop", type: "trap", cost: 3, tags: ["reflect"] },
+  honeypot: { id: "honeypot", name: "Honeypot", type: "trap", cost: 2, tags: ["anti-utility"] },
+  checksum_snare: { id: "checksum_snare", name: "Checksum Snare", type: "trap", cost: 2, tags: ["anti-cheap"] },
+
   core_overload: { id: "core_overload", name: "Core Overload", type: "overload", cost: 7, tags: ["heavy", "heat"] },
   blackout: { id: "blackout", name: "Blackout", type: "overload", cost: 6, tags: ["control", "heat"] },
   full_restore: { id: "full_restore", name: "Full Restore", type: "overload", cost: 7, tags: ["heal", "heat"] },
+  meltdown: { id: "meltdown", name: "Meltdown", type: "overload", cost: 8, tags: ["heavy", "heat"] },
+  singularity_push: { id: "singularity_push", name: "Singularity Push", type: "overload", cost: 7, tags: ["control", "heat"] },
+  admin_override: { id: "admin_override", name: "Admin Override", type: "overload", cost: 8, tags: ["block", "heat"] },
 };
-const BASE_DECK = ["glitch_strike", "glitch_strike", "packet_burst", "packet_burst", "pierce_injection", "double_ping", "core_spike", "firewall", "firewall", "core_shield", "emergency_patch", "static_field", "system_scan", "system_scan", "data_drain", "battery_backup", "hand_jam", "mirror_bug", "packet_trap", "false_firewall", "decoy_packet", "core_overload", "blackout", "full_restore"];
+const BASE_DECK = [
+  "ping_snipe", "glitch_strike", "glitch_strike", "packet_burst", "packet_burst", "double_ping", "buffer_barrage", "pierce_injection", "cache_bomb", "exploit_chain", "core_spike", "kernel_lance",
+  "nano_barrier", "firewall", "firewall", "core_shield", "emergency_patch", "repair_drone", "static_field", "shield_bash", "quarantine_wall", "reboot_protocol",
+  "system_scan", "system_scan", "quick_compile", "battery_backup", "energy_surge", "data_drain", "hand_jam", "decoy_packet", "packet_duplication", "cooldown_flush", "signal_boost",
+  "packet_trap", "false_firewall", "mirror_bug", "logic_bomb", "redirect_loop", "honeypot", "checksum_snare",
+  "core_overload", "blackout", "full_restore", "meltdown", "singularity_push", "admin_override"
+];
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
@@ -145,12 +177,17 @@ export async function refreshPlayerForTurn(context: any, player: PlayerState, tu
   let deck = safeJson(player.deck_json);
   let hand = safeJson(player.hand_json);
   let discard = safeJson(player.discard_json);
-  if (turnNumber > 1 && Number(player.draw_block_next || 0) <= 0 && hand.length < MAX_HAND) {
-    if (deck.length === 0) { deck = shuffle(discard, `${player.user_id}:${turnNumber}:reshuffle`); discard = []; }
-    const drawn = deck.shift();
-    if (drawn) hand.push(drawn);
+  const drawFlag = Number(player.draw_block_next || 0);
+  const drawCount = turnNumber > 1 && drawFlag < 0 ? 2 : 1;
+  if (turnNumber > 1 && drawFlag <= 0 && hand.length < MAX_HAND) {
+    for (let draw = 0; draw < drawCount && hand.length < MAX_HAND; draw += 1) {
+      if (deck.length === 0 && discard.length > 0) { deck = shuffle(discard, `${player.user_id}:${turnNumber}:reshuffle:${draw}`); discard = []; }
+      const drawn = deck.shift();
+      if (drawn) hand.push(drawn);
+    }
   }
-  const nextEnergy = Math.max(0, Math.min(MAX_ENERGY, Math.min(MAX_ENERGY, Number(player.energy || STARTING_ENERGY) + 1) + Number(player.energy_delta_next || 0)));
+  const baseEnergy = Number(player.energy || STARTING_ENERGY) + 1;
+  const nextEnergy = Math.max(0, Math.min(MAX_ENERGY, baseEnergy + Number(player.energy_delta_next || 0)));
   const nextHeat = Number(player.heat || 0) >= 3 ? Math.max(0, Number(player.heat || 0) - 2) : Number(player.heat || 0);
   await context.env.DB.prepare("UPDATE core_clash_players SET energy = ?, heat = ?, deck_json = ?, hand_json = ?, discard_json = ?, energy_delta_next = 0, draw_block_next = 0, updated_at = datetime('now') WHERE id = ?").bind(nextEnergy, nextHeat, JSON.stringify(deck), JSON.stringify(hand.slice(0, MAX_HAND)), JSON.stringify(discard), player.id).run();
 }
@@ -264,10 +301,10 @@ async function cleanup(context: any) {
 }
 
 function mapData(key: string) {
-  if (key === "glitch_ruins") return { key, name: "Glitch Ruins", boostType: "trap", boostText: "Trap tetiklenirse küçük ekstra yansıma hasarı eklenir." };
-  if (key === "overclock_core") return { key, name: "Overclock Core", boostType: "attack", boostText: "Attack kartları +1 hasar verir; ağır saldırılar daha fazla Heat riski taşır." };
-  if (key === "data_archive") return { key, name: "Data Archive", boostType: "utility", boostText: "Utility kartları tempo avantajı verir ama direkt hasar üretmez." };
-  return { key: "firewall_city", name: "Firewall City", boostType: "defense", boostText: "Defense kartları küçük ekstra koruma kazanır." };
+  if (key === "glitch_ruins") return { key, name: "Glitch Ruins", boostType: "trap", boostText: "Trap kartları yansıma/kontrol etkilerinde +1 güç kazanır." };
+  if (key === "overclock_core") return { key, name: "Overclock Core", boostType: "attack", boostText: "Attack kartları +1 hasar verir; ağır saldırılar ekstra Heat riski taşır." };
+  if (key === "data_archive") return { key, name: "Data Archive", boostType: "utility", boostText: "Utility kartları tempo avantajı verir ve ekstra çekim etkileri güçlenir." };
+  return { key: "firewall_city", name: "Firewall City", boostType: "defense", boostText: "Defense kartları +1 iyileştirme/koruma kazanır." };
 }
 function randomMapKey(userId: number) {
   const index = hashNumber(`${userId}:${Date.now()}:${Math.random()}`) % MAP_OPTIONS.length;
