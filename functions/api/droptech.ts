@@ -122,6 +122,7 @@ async function ensureTables(context: any) {
   await db.prepare(`CREATE TABLE IF NOT EXISTS tech_coin_events (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, event_type TEXT NOT NULL, amount INTEGER NOT NULL, balance_after INTEGER NOT NULL, round_gain INTEGER DEFAULT 0, details TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await addColumnIfMissing(context, "droptech_openings", "box_type", "TEXT DEFAULT 'standard_cache'");
   await ensureTechCoinWalletColumns(context);
+  await ensureTechCoinEventColumns(context);
 }
 
 async function ensureTechCoinWalletColumns(context: any) {
@@ -132,6 +133,15 @@ async function ensureTechCoinWalletColumns(context: any) {
   await addColumnIfMissing(context, "tech_coin_wallets", "perfect_clears", "INTEGER DEFAULT 0");
   await addColumnIfMissing(context, "tech_coin_wallets", "total_rounds", "INTEGER DEFAULT 0");
   await addColumnIfMissing(context, "tech_coin_wallets", "updated_at", "TEXT");
+}
+
+async function ensureTechCoinEventColumns(context: any) {
+  await addColumnIfMissing(context, "tech_coin_events", "event_type", "TEXT DEFAULT ''");
+  await addColumnIfMissing(context, "tech_coin_events", "amount", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "tech_coin_events", "balance_after", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "tech_coin_events", "round_gain", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "tech_coin_events", "details", "TEXT");
+  await addColumnIfMissing(context, "tech_coin_events", "created_at", "TEXT");
 }
 
 async function ensureUserBoxRow(context: any, userId: number) {
@@ -180,6 +190,7 @@ async function getTechCoinWallet(context: any, userId: number) {
 
 async function spendTechCoinForDropTech(context: any, userId: number, amount: number, details: string) {
   await ensureTechCoinWallet(context, userId);
+  await ensureTechCoinEventColumns(context);
 
   const result = await context.env.DB.prepare(`
     UPDATE tech_coin_wallets
@@ -190,12 +201,21 @@ async function spendTechCoinForDropTech(context: any, userId: number, amount: nu
   if (Number(result?.meta?.changes || 0) === 0) return null;
 
   const wallet: any = await getTechCoinWallet(context, userId);
-  await context.env.DB.prepare(`
-    INSERT INTO tech_coin_events (user_id, event_type, amount, balance_after, round_gain, details)
-    VALUES (?, 'droptech_open', ?, ?, 0, ?)
-  `).bind(userId, -amount, Number(wallet?.balance || 0), details.slice(0, 240)).run();
+  await logTechCoinEvent(context, userId, "droptech_open", -amount, Number(wallet?.balance || 0), details);
 
   return wallet;
+}
+
+async function logTechCoinEvent(context: any, userId: number, eventType: string, amount: number, balanceAfter: number, details: string) {
+  try {
+    await ensureTechCoinEventColumns(context);
+    await context.env.DB.prepare(`
+      INSERT INTO tech_coin_events (user_id, event_type, amount, balance_after, round_gain, details)
+      VALUES (?, ?, ?, ?, 0, ?)
+    `).bind(userId, eventType, amount, balanceAfter, details.slice(0, 240)).run();
+  } catch {
+    // Logging should never break the actual DropTech box opening flow.
+  }
 }
 
 async function claimDailyBox(context: any, userId: number) {
