@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
+import { BarChart3, Gamepad2, Lock, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSyncFixed";
 import { CipherBreak } from "./CipherBreak";
 import { CoreRaid } from "./CoreRaid";
+import { MarketAcademy } from "./MarketAcademy";
 
 type User = {
   id: number;
@@ -23,7 +24,7 @@ type Wallet = {
   updated_at?: string | null;
 };
 
-type GameKey = "hub" | "duel" | "cipher" | "raid";
+type GameKey = "hub" | "duel" | "cipher" | "raid" | "market";
 
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
@@ -61,6 +62,8 @@ export function OffPage() {
         clashDesc: "2 kişilik stratejik kart düellosu. 3 kartla başla, harita boostlarını kullan, 15 saniyede en iyi counter hamleyi seç.",
         raidTitle: "Core Raid",
         raidDesc: "Community boss event. Glitch Titan sayfayı bozuyor; görev yap, hasar ver, core'u birlikte restore et.",
+        marketTitle: "EkaTrade Academy",
+        marketDesc: "Gerçek para ve gerçek hisse kullanmadan portföy, risk, haber etkisi ve sanal al-sat mantığını öğreten borsa simülasyonu.",
         minesRemoved: "EkaMines kaldırıldı. Tech Coin sistemi puan biriktirmek için duruyor.",
         walletTitle: "Tech Coin cüzdanı",
         lifetime: "Toplam kazanılan",
@@ -88,6 +91,8 @@ export function OffPage() {
         clashDesc: "A 2-player strategic card duel. Start with 3 cards, use map boosts, and pick the best counter move in 15 seconds.",
         raidTitle: "Core Raid",
         raidDesc: "A community boss event. Glitch Titan corrupts the page; complete tasks, deal damage, and restore the core together.",
+        marketTitle: "EkaTrade Academy",
+        marketDesc: "A stock market simulator that teaches portfolio, risk, news impact and virtual buy/sell logic without real money or real stocks.",
         minesRemoved: "EkaMines was removed. Tech Coin remains for score progression.",
         walletTitle: "Tech Coin wallet",
         lifetime: "Lifetime earned",
@@ -189,7 +194,7 @@ export function OffPage() {
             ← {copy.backHub}
           </button>
         </div>
-        {activeGame === "duel" ? <TechDuelSync /> : activeGame === "cipher" ? <CipherBreak /> : <CoreRaid />}
+        {activeGame === "duel" ? <TechDuelSync /> : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : <MarketAcademy />}
       </>
     );
   }
@@ -228,11 +233,12 @@ export function OffPage() {
           </div>
         </section>
 
-        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
           <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("duel")} />
           <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("cipher")} />
           <GameCard icon={<Gamepad2 className="h-6 w-6" />} status={copy.available} title={copy.clashTitle} description={copy.clashDesc} accent="cyan" buttonLabel={copy.open} onClick={() => navigateTo("/core-clash")} />
           <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.available} title={copy.raidTitle} description={copy.raidDesc} accent="amber" buttonLabel={copy.open} onClick={() => setActiveGame("raid")} />
+          <GameCard icon={<BarChart3 className="h-6 w-6" />} status={copy.available} title={copy.marketTitle} description={copy.marketDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("market")} />
         </section>
       </div>
     </main>
