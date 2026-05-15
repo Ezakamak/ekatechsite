@@ -46,6 +46,7 @@ export function MarketStockCommentsDock() {
             error: "Yorum işlemi başarısız.",
             close: "Kapat",
             open: "Yorumlar",
+            user: "Kullanıcı",
           }
         : {
             title: "Stock comments",
@@ -58,6 +59,7 @@ export function MarketStockCommentsDock() {
             error: "Comment action failed.",
             close: "Close",
             open: "Comments",
+            user: "User",
           },
     [tr]
   );
@@ -162,7 +164,7 @@ export function MarketStockCommentsDock() {
             <div key={item.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
               <div className="flex items-center gap-2">
                 {item.user_avatar_url ? <img src={item.user_avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-semibold text-black">{(item.user_name || "U").slice(0, 1).toUpperCase()}</span>}
-                <p className="text-sm font-medium text-white">{item.user_name || "Kullanıcı"}</p>
+                <p className="text-sm font-medium text-white">{item.user_name || copy.user}</p>
               </div>
               <p className="mt-3 text-sm leading-6 text-white/65">{item.comment}</p>
             </div>
