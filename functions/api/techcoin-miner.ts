@@ -1,6 +1,7 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const SESSION_MINUTES = 60;
 const COINS_PER_MINUTE = 1;
+const COOLDOWN_DIVISOR = 5;
 
 const MINER_SERVERS = [
   { id: "server-1", nameTr: "Miner Server Alpha", nameEn: "Miner Server Alpha", accent: "cyan" },
@@ -42,6 +43,9 @@ export async function onRequestPost(context: any) {
       const serverActive = await getActiveSessionForServer(context, serverId);
       if (serverActive) return json({ error: "Bu server şu an başka kullanıcı tarafından kullanılıyor." }, 409);
 
+      const serverCooldown = await getActiveCooldownForServer(context, serverId);
+      if (serverCooldown) return json({ error: "Bu server soğuma modunda. Geri sayım bitince tekrar kullanılabilir." }, 409);
+
       await context.env.DB
         .prepare(`
           INSERT INTO techcoin_miner_sessions (server_id, user_id, status, started_at, last_claimed_at, expires_at, total_claimed)
@@ -73,9 +77,11 @@ export async function onRequestPost(context: any) {
       const session = await getActiveSessionForUser(context, auth.user.id);
       if (!session) return json({ error: "Aktif miner oturumun yok." }, 404);
       const awarded = await claimSession(context, session);
+      const cooldown = calculateCooldown(session, Date.now());
+
       await context.env.DB
-        .prepare(`UPDATE techcoin_miner_sessions SET status = 'completed', ended_at = CURRENT_TIMESTAMP WHERE id = ?`)
-        .bind(session.id)
+        .prepare(`UPDATE techcoin_miner_sessions SET status = 'completed', ended_at = CURRENT_TIMESTAMP, cooldown_seconds = ?, cooldown_until = ? WHERE id = ?`)
+        .bind(cooldown.cooldownSeconds, toSqlDate(new Date(cooldown.cooldownUntilMs).toISOString()), session.id)
         .run();
 
       await writeAuditLog(context, {
@@ -84,10 +90,10 @@ export async function onRequestPost(context: any) {
         targetType: "techcoin_miner_server",
         targetId: session.id,
         targetLabel: session.server_id,
-        details: `${auth.user.name} miner serverdan ayrıldı. Aktarılan coin: ${awarded}.`,
+        details: `${auth.user.name} miner serverdan ayrıldı. Aktarılan coin: ${awarded}. Soğuma: ${cooldown.cooldownSeconds} saniye.`,
       });
 
-      return json(await buildMinerState(context, auth.user.id, awarded > 0 ? `Server boşaltıldı. ${awarded} Tech Coin cüzdana aktarıldı.` : "Server boşaltıldı."));
+      return json(await buildMinerState(context, auth.user.id, awarded > 0 ? `Server boşaltıldı. ${awarded} Tech Coin cüzdana aktarıldı. Server soğuma moduna geçti.` : "Server boşaltıldı ve soğuma moduna geçti."));
     }
 
     return json({ error: "Bilinmeyen miner işlemi." }, 400);
@@ -99,9 +105,12 @@ export async function onRequestPost(context: any) {
 async function ensureMinerTables(context: any) {
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS coin_wallets (user_id INTEGER PRIMARY KEY, balance INTEGER NOT NULL DEFAULT 0, lifetime_earned INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS coin_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, amount INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
-  await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS techcoin_miner_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL, user_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'active', started_at TEXT DEFAULT CURRENT_TIMESTAMP, last_claimed_at TEXT DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL, ended_at TEXT, total_claimed INTEGER NOT NULL DEFAULT 0)`).run();
+  await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS techcoin_miner_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL, user_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'active', started_at TEXT DEFAULT CURRENT_TIMESTAMP, last_claimed_at TEXT DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL, ended_at TEXT, cooldown_until TEXT, cooldown_seconds INTEGER NOT NULL DEFAULT 0, total_claimed INTEGER NOT NULL DEFAULT 0)`).run();
+  await addColumnIfMissing(context, "techcoin_miner_sessions", "cooldown_until", "TEXT");
+  await addColumnIfMissing(context, "techcoin_miner_sessions", "cooldown_seconds", "INTEGER NOT NULL DEFAULT 0");
   await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_techcoin_miner_sessions_active_server ON techcoin_miner_sessions(server_id, status)`).run();
   await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_techcoin_miner_sessions_active_user ON techcoin_miner_sessions(user_id, status)`).run();
+  await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_techcoin_miner_sessions_cooldown ON techcoin_miner_sessions(server_id, cooldown_until)`).run();
 }
 
 async function settleExpiredSessions(context: any) {
@@ -115,9 +124,11 @@ async function settleExpiredSessions(context: any) {
 
   for (const session of expired as any[]) {
     const awarded = await claimSession(context, session, true);
+    const cooldown = calculateCooldown(session, toMs(session.expires_at));
+
     await context.env.DB
-      .prepare(`UPDATE techcoin_miner_sessions SET status = 'expired', ended_at = expires_at WHERE id = ?`)
-      .bind(session.id)
+      .prepare(`UPDATE techcoin_miner_sessions SET status = 'expired', ended_at = expires_at, cooldown_seconds = ?, cooldown_until = ? WHERE id = ?`)
+      .bind(cooldown.cooldownSeconds, toSqlDate(new Date(cooldown.cooldownUntilMs).toISOString()), session.id)
       .run();
 
     await writeAuditLog(context, {
@@ -126,7 +137,7 @@ async function settleExpiredSessions(context: any) {
       targetType: "techcoin_miner_session",
       targetId: session.id,
       targetLabel: session.server_id,
-      details: `TechCoin Miner oturumu 60 dakika sonunda otomatik kapandı. Aktarılan coin: ${awarded}.`,
+      details: `TechCoin Miner oturumu 60 dakika sonunda otomatik kapandı. Aktarılan coin: ${awarded}. Soğuma: ${cooldown.cooldownSeconds} saniye.`,
     });
   }
 }
@@ -169,8 +180,16 @@ async function buildMinerState(context: any, userId: number, message = "") {
         CASE WHEN COALESCE(users.avatar_approved, 0) = 1 THEN users.avatar_url ELSE '' END AS user_avatar_url
       FROM techcoin_miner_sessions
       JOIN users ON users.id = techcoin_miner_sessions.user_id
-      WHERE techcoin_miner_sessions.status = 'active'
+      WHERE techcoin_miner_sessions.status = 'active' AND datetime(techcoin_miner_sessions.expires_at) > datetime('now')
       ORDER BY techcoin_miner_sessions.started_at ASC
+    `)
+    .all())?.results || [];
+
+  const cooldowns = (await context.env.DB
+    .prepare(`
+      SELECT * FROM techcoin_miner_sessions
+      WHERE status IN ('completed', 'expired') AND cooldown_until IS NOT NULL AND datetime(cooldown_until) > datetime('now')
+      ORDER BY cooldown_until DESC
     `)
     .all())?.results || [];
 
@@ -178,10 +197,13 @@ async function buildMinerState(context: any, userId: number, message = "") {
   const currentSession = (sessions as any[]).find((session) => Number(session.user_id) === Number(userId)) || null;
   const servers = MINER_SERVERS.map((server) => {
     const active = (sessions as any[]).find((session) => session.server_id === server.id) || null;
+    const cooldown = !active ? (cooldowns as any[]).find((item) => item.server_id === server.id) || null : null;
     return {
       ...server,
       occupied: Boolean(active),
+      cooling: Boolean(cooldown),
       session: active ? serializeSession(active, userId) : null,
+      cooldown: cooldown ? serializeCooldown(cooldown) : null,
     };
   });
 
@@ -192,6 +214,7 @@ async function buildMinerState(context: any, userId: number, message = "") {
       sessionMinutes: SESSION_MINUTES,
       coinsPerMinute: COINS_PER_MINUTE,
       maxCoinsPerSession: SESSION_MINUTES * COINS_PER_MINUTE,
+      cooldownDivisor: COOLDOWN_DIVISOR,
     },
     wallet: {
       balance: Number(wallet?.balance || 0),
@@ -227,6 +250,36 @@ function serializeSession(session: any, currentUserId: number) {
   };
 }
 
+function serializeCooldown(session: any) {
+  const nowMs = Date.now();
+  const cooldownUntilMs = toMs(session.cooldown_until);
+  const startedMs = toMs(session.started_at);
+  const endedMs = toMs(session.ended_at || session.expires_at);
+  const usedSeconds = Math.max(0, Math.floor((endedMs - startedMs) / 1000));
+  const cooldownSeconds = Number(session.cooldown_seconds || Math.ceil(usedSeconds / COOLDOWN_DIVISOR));
+  const remainingSeconds = Math.max(0, Math.floor((cooldownUntilMs - nowMs) / 1000));
+
+  return {
+    sessionId: Number(session.id),
+    until: session.cooldown_until,
+    usedSeconds,
+    cooldownSeconds,
+    remainingSeconds,
+  };
+}
+
+function calculateCooldown(session: any, endMs: number) {
+  const startedMs = toMs(session.started_at);
+  const safeEndMs = Math.max(startedMs, endMs);
+  const usedSeconds = Math.max(0, Math.floor((safeEndMs - startedMs) / 1000));
+  const cooldownSeconds = Math.ceil(usedSeconds / COOLDOWN_DIVISOR);
+  return {
+    usedSeconds,
+    cooldownSeconds,
+    cooldownUntilMs: safeEndMs + cooldownSeconds * 1000,
+  };
+}
+
 async function getActiveSessionForUser(context: any, userId: number) {
   return await context.env.DB
     .prepare(`SELECT * FROM techcoin_miner_sessions WHERE user_id = ? AND status = 'active' AND datetime(expires_at) > datetime('now') ORDER BY id DESC LIMIT 1`)
@@ -237,6 +290,13 @@ async function getActiveSessionForUser(context: any, userId: number) {
 async function getActiveSessionForServer(context: any, serverId: string) {
   return await context.env.DB
     .prepare(`SELECT * FROM techcoin_miner_sessions WHERE server_id = ? AND status = 'active' AND datetime(expires_at) > datetime('now') ORDER BY id DESC LIMIT 1`)
+    .bind(serverId)
+    .first();
+}
+
+async function getActiveCooldownForServer(context: any, serverId: string) {
+  return await context.env.DB
+    .prepare(`SELECT * FROM techcoin_miner_sessions WHERE server_id = ? AND status IN ('completed', 'expired') AND cooldown_until IS NOT NULL AND datetime(cooldown_until) > datetime('now') ORDER BY cooldown_until DESC LIMIT 1`)
     .bind(serverId)
     .first();
 }
@@ -267,6 +327,14 @@ async function requireOffUser(context: any) {
   if (user.role === "blocked") return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   if (!["off", "admin", "owner"].includes(String(user.role))) return { ok: false, status: 403, error: "Bu alan sadece OFF, admin ve owner hesapları içindir." };
   return { ok: true, user };
+}
+
+async function addColumnIfMissing(context: any, table: string, column: string, definition: string) {
+  try {
+    const columns = (await context.env.DB.prepare(`PRAGMA table_info(${table})`).all())?.results || [];
+    const exists = (columns as any[]).some((item) => item.name === column);
+    if (!exists) await context.env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  } catch {}
 }
 
 async function writeAuditLog(context: any, entry: any) {
