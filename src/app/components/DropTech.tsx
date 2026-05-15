@@ -188,6 +188,9 @@ export function DropTech() {
     empty: "Henüz eşya yok. Günlük kutunu alıp aç veya Tech Coin ile kutu aç.",
     add: "Envantere eklendi",
     sell: "Tech Coin'e çevir",
+    sellAll: "Tümünü Tech Coin'e çevir",
+    sellAllConfirm: "Envanterdeki tüm eşyalar Tech Coin'e çevrilsin mi?",
+    sellAllEmpty: "Bozdurulacak eşya yok.",
     trade: "Online takas",
     online: "Online kullanıcılar",
     noOnline: "Şu an başka online kullanıcı yok.",
@@ -245,6 +248,9 @@ export function DropTech() {
     empty: "No items yet. Claim your daily box or open a box with Tech Coin.",
     add: "Added to inventory",
     sell: "Convert to Tech Coin",
+    sellAll: "Convert all to Tech Coin",
+    sellAllConfirm: "Convert every inventory item to Tech Coin?",
+    sellAllEmpty: "No items to convert.",
     trade: "Online trade",
     online: "Online users",
     noOnline: "No other online users right now.",
@@ -336,8 +342,26 @@ export function DropTech() {
       const data = await postAction({ action: "sell_item", item_id: item.item_id || item.id, quantity: 1 }, "Eşya bozdurulamadı.");
       setMessage({ type: "success", text: `${nameOf(item, tr)} +${formatNumber(Number(data?.sold?.payout || item.tech_coin_value || 0), locale)} TC` });
       window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+      window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Eşya bozdurulamadı." });
+    }
+  }
+
+  async function sellAllItems() {
+    if (!inventoryItems.length) {
+      setMessage({ type: "error", text: copy.sellAllEmpty });
+      return;
+    }
+    if (!window.confirm(copy.sellAllConfirm)) return;
+    setMessage(null);
+    try {
+      const data = await postAction({ action: "sell_all_items" }, "Envanter bozdurulamadı.");
+      setMessage({ type: "success", text: `${copy.sellAll}: +${formatNumber(Number(data?.sold_all?.payout || 0), locale)} TC` });
+      window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+      window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
+    } catch (caught) {
+      setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Envanter bozdurulamadı." });
     }
   }
 
@@ -389,6 +413,7 @@ export function DropTech() {
       const found = data.won as DropItem;
       window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: found?.rarity === "legendary" || found?.rarity === "glitch" ? "win" : "coin" } }));
       setWon(found);
+      window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
       window.setTimeout(() => { setState(data); setOpening(false); }, 2700);
     } catch (caught) {
       setOpening(false);
@@ -500,7 +525,7 @@ export function DropTech() {
         </section>
 
         <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-3xl font-medium">{copy.inventory}</h2><p className="mt-2 text-sm text-white/45">{copy.owned}: {formatNumber(Number(state?.total_quantity || 0), locale)} · {copy.collectionValue}: {formatNumber(collectionValue, locale)} TC</p></div><div className="flex flex-wrap gap-2"><FilterButton active={filter === "all"} onClick={() => setFilter("all")}>{copy.all}</FilterButton>{rarityOrder.map((rarity) => <FilterButton key={rarity} active={filter === rarity} onClick={() => setFilter(rarity)}>{rarityText[rarity]}</FilterButton>)}</div></div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-3xl font-medium">{copy.inventory}</h2><p className="mt-2 text-sm text-white/45">{copy.owned}: {formatNumber(Number(state?.total_quantity || 0), locale)} · {copy.collectionValue}: {formatNumber(collectionValue, locale)} TC</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={sellAllItems} disabled={!inventoryItems.length} className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-300/15 disabled:opacity-40"><Coins className="h-4 w-4" /> {copy.sellAll}</button><FilterButton active={filter === "all"} onClick={() => setFilter("all")}>{copy.all}</FilterButton>{rarityOrder.map((rarity) => <FilterButton key={rarity} active={filter === rarity} onClick={() => setFilter(rarity)}>{rarityText[rarity]}</FilterButton>)}</div></div>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">{visibleInventory.map((item) => <div key={item.item_id || item.id} className={`rounded-[1.5rem] border p-4 ${rarityClass[item.rarity]}`}><div className="flex items-start justify-between gap-3"><span className="text-4xl">{item.emoji}</span><span className="rounded-full bg-black/25 px-3 py-1 text-xs">x{formatNumber(Number(item.quantity || 0), locale)}</span></div><h3 className="mt-4 font-semibold">{nameOf(item, tr)}</h3><p className="mt-1 text-xs uppercase tracking-[0.16em] opacity-60">{rarityText[item.rarity]}</p><p className="mt-3 text-sm leading-6 opacity-70">{descOf(item, tr)}</p><div className="mt-4 grid gap-2 text-xs"><ValueRow label={copy.itemValue} value={Number(item.tech_coin_value || 0)} locale={locale} /><ValueRow label={copy.totalValue} value={Number(item.total_tech_coin_value || 0)} locale={locale} /></div><button onClick={() => sellItem(item)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-300/15"><Coins className="h-4 w-4" /> {copy.sell}</button></div>)}{!visibleInventory.length && <div className="col-span-full rounded-[1.5rem] border border-white/10 bg-black/25 p-6 text-white/45">{copy.empty}</div>}</div>
         </section>
       </div>
