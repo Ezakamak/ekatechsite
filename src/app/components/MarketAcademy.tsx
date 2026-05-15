@@ -57,6 +57,7 @@ type MarketState = {
   mode?: string;
   day: number;
   cash: number;
+  startingValue: number;
   holdings: Record<string, number>;
   stocks: Stock[];
   history: Record<string, number[]>;
@@ -68,12 +69,11 @@ type MarketState = {
   };
 };
 
-const STARTING_TECH_COIN = 100000;
-
 const FALLBACK_STATE: MarketState = {
   mode: "offline-preview",
   day: 1,
-  cash: STARTING_TECH_COIN,
+  cash: 0,
+  startingValue: 0,
   holdings: {},
   history: {
     EKA: [124],
@@ -120,7 +120,7 @@ async function readJson(response: Response) {
   }
 
   if (!response.ok) {
-    throw new Error(data?.error || raw?.slice(0, 160) || `HTTP ${response.status}`);
+    throw new Error(data?.error || data?.detail || raw?.slice(0, 160) || `HTTP ${response.status}`);
   }
 
   return data;
@@ -132,20 +132,20 @@ export function MarketAcademy() {
   const locale = tr ? "tr-TR" : "en-US";
   const copy = tr
     ? {
-        eyebrow: "Tech Coin tabanlı eğitim borsası",
+        eyebrow: "Tech Coin cüzdanına bağlı eğitim borsası",
         title: "EkaTrade Academy",
-        subtitle: "Sanal TL kaldırıldı. Bu eğitim piyasasında bakiye, fiyatlar ve portföy değeri artık Tech Coin üzerinden gösterilir.",
-        disclaimer: "Bu simülasyon yalnızca eğitim amaçlıdır. Gerçek yatırım tavsiyesi değildir; gerçek para veya gerçek hisse kullanılmaz.",
+        subtitle: "EkaTrade artık OFF Tech Coin cüzdanındaki bakiye ile çalışır. Alımda cüzdan bakiyesi azalır, satışta cüzdana geri eklenir.",
+        disclaimer: "Bu alan eğitim simülasyonudur. Tech Coin puandır; gerçek para, gerçek hisse veya yatırım tavsiyesi yoktur.",
         loading: "Online market verisi yükleniyor...",
-        offline: "Online market API şu an cevap vermedi. Önizleme verisi gösteriliyor; al/sat işlemleri devre dışı.",
-        online: "Online D1 modu aktif",
+        offline: "Online market API şu an cevap vermedi. Al/sat işlemleri devre dışı.",
+        online: "Tech Coin cüzdanı aktif",
         day: "Piyasa turu",
-        cash: "Tech Coin bakiyesi",
-        total: "Portföy değeri",
-        pnl: "Toplam sonuç",
+        cash: "Cüzdan bakiyesi",
+        total: "Toplam varlık",
+        pnl: "Başlangıca göre sonuç",
         wallet: "Cüzdan Tech Coin",
         refresh: "Canlı veriyi yenile",
-        reset: "Portföyü sıfırla",
+        reset: "Portföyü Tech Coin'e çevir",
         market: "Global kurgu piyasa",
         orderPanel: "Tech Coin işlem paneli",
         symbol: "Hisse",
@@ -163,12 +163,12 @@ export function MarketAcademy() {
         value: "İşlem değeri",
         sector: "Sektör",
         shares: "adet",
-        emptyPortfolio: "Bu hesapta henüz hisse yok. Küçük bir Tech Coin işlemiyle başla.",
-        buyOk: "Tech Coin alım işlemi kaydedildi.",
-        sellOk: "Tech Coin satış işlemi kaydedildi.",
-        resetOk: "Tech Coin portföyü sıfırlandı.",
+        emptyPortfolio: "Bu hesapta henüz hisse yok. İşlem yapmak için cüzdanında Tech Coin olmalı.",
+        buyOk: "Alım yapıldı; Tech Coin cüzdanından düşüldü.",
+        sellOk: "Satış yapıldı; Tech Coin cüzdanına eklendi.",
+        resetOk: "Portföy mevcut fiyatlardan Tech Coin'e çevrildi.",
         invalidQty: "Adet 1 veya daha büyük olmalı.",
-        resetConfirm: "Bu hesabın EkaTrade Tech Coin portföyü sıfırlansın mı?",
+        resetConfirm: "Tüm EkaTrade hisselerin mevcut fiyattan Tech Coin'e çevrilsin mi?",
         completed: "tamamlandı",
         low: "Düşük",
         medium: "Orta",
@@ -190,20 +190,20 @@ export function MarketAcademy() {
         rewardPrefix: "Tech Coin ödülü",
       }
     : {
-        eyebrow: "Tech Coin-based market academy",
+        eyebrow: "Tech Coin wallet market academy",
         title: "EkaTrade Academy",
-        subtitle: "Virtual TL has been removed. Balance, prices and portfolio value now use Tech Coin inside this learning market.",
-        disclaimer: "This simulation is for education only. It is not investment advice; no real money or real stocks are used.",
+        subtitle: "EkaTrade now uses the OFF Tech Coin wallet balance. Buying subtracts from the wallet; selling adds back to it.",
+        disclaimer: "This is an education simulation. Tech Coin is a score; no real money, real stocks, or investment advice are used.",
         loading: "Loading online market data...",
-        offline: "The online market API did not respond. Preview data is shown; trading is disabled.",
-        online: "Online D1 mode active",
+        offline: "The online market API did not respond. Trading is disabled.",
+        online: "Tech Coin wallet active",
         day: "Market round",
-        cash: "Tech Coin balance",
-        total: "Portfolio value",
-        pnl: "Total result",
+        cash: "Wallet balance",
+        total: "Total assets",
+        pnl: "Result vs baseline",
         wallet: "Wallet Tech Coin",
         refresh: "Refresh live data",
-        reset: "Reset portfolio",
+        reset: "Convert portfolio to Tech Coin",
         market: "Global fictional market",
         orderPanel: "Tech Coin order panel",
         symbol: "Stock",
@@ -221,12 +221,12 @@ export function MarketAcademy() {
         value: "Order value",
         sector: "Sector",
         shares: "shares",
-        emptyPortfolio: "This account has no stocks yet. Start with a small Tech Coin order.",
-        buyOk: "Tech Coin buy order saved.",
-        sellOk: "Tech Coin sell order saved.",
-        resetOk: "Tech Coin portfolio reset.",
+        emptyPortfolio: "This account has no stocks yet. You need Tech Coin in your wallet to trade.",
+        buyOk: "Buy saved; Tech Coin was removed from your wallet.",
+        sellOk: "Sell saved; Tech Coin was added to your wallet.",
+        resetOk: "Portfolio converted to Tech Coin at current prices.",
         invalidQty: "Quantity must be 1 or higher.",
-        resetConfirm: "Reset this account's EkaTrade Tech Coin portfolio?",
+        resetConfirm: "Convert all EkaTrade holdings to Tech Coin at current prices?",
         completed: "completed",
         low: "Low",
         medium: "Medium",
@@ -272,8 +272,9 @@ export function MarketAcademy() {
 
     const invested = rows.reduce((sum, row) => sum + row.value, 0);
     const total = state.cash + invested;
-    const pnl = total - STARTING_TECH_COIN;
-    const pnlPercent = STARTING_TECH_COIN > 0 ? (pnl / STARTING_TECH_COIN) * 100 : 0;
+    const baseline = Math.max(0, safeNumber(state.startingValue));
+    const pnl = baseline > 0 ? total - baseline : 0;
+    const pnlPercent = baseline > 0 ? (pnl / baseline) * 100 : 0;
     const maxWeight = total > 0 ? Math.max(0, ...rows.map((row) => row.value / total)) : 0;
     const sectorMap = rows.reduce<Record<string, number>>((acc, row) => {
       acc[row.sector] = (acc[row.sector] || 0) + row.value;
@@ -281,7 +282,7 @@ export function MarketAcademy() {
     }, {});
     const maxSectorWeight = total > 0 ? Math.max(0, ...Object.values(sectorMap).map((value) => value / total)) : 0;
 
-    return { rows, invested, total, pnl, pnlPercent, maxWeight, maxSectorWeight, sectorMap };
+    return { rows, invested, total, baseline, pnl, pnlPercent, maxWeight, maxSectorWeight, sectorMap };
   }, [state]);
 
   const risk = useMemo(() => {
@@ -289,7 +290,7 @@ export function MarketAcademy() {
       return {
         label: tr ? "Başlangıç" : "Starter",
         tone: "cyan",
-        text: tr ? "Henüz risk oluşmadı. İlk amaç küçük bir pozisyon açıp ekranı tanımak." : "No portfolio risk yet. First goal: open a small position and learn the screen.",
+        text: portfolio.total <= 0 ? (tr ? "Cüzdanında Tech Coin yoksa alım yapamazsın. Önce OFF görevlerinden coin kazan." : "You need Tech Coin in your wallet before buying. Earn coins from OFF missions first.") : (tr ? "Henüz risk oluşmadı. İlk amaç küçük bir pozisyon açıp ekranı tanımak." : "No portfolio risk yet. First goal: open a small position and learn the screen."),
       };
     }
 
@@ -324,9 +325,9 @@ export function MarketAcademy() {
     const concentrationOk = hasAnyStock && portfolio.maxWeight <= 0.5;
 
     return [
-      { done: hasAnyStock, title: tr ? "İlk Tech Coin alımını yap" : "Make your first Tech Coin buy", desc: tr ? "İşlem D1 veritabanına Tech Coin değeriyle kaydolur." : "The trade is saved to D1 with Tech Coin value." },
+      { done: hasAnyStock, title: tr ? "İlk Tech Coin alımını yap" : "Make your first Tech Coin buy", desc: tr ? "İşlem OFF Tech Coin cüzdanına yansır." : "The trade affects your OFF Tech Coin wallet." },
       { done: diversified, title: tr ? "3 farklı hisseye böl" : "Hold 3 different stocks", desc: tr ? "Tek hisse riskini azalt." : "Reduce single-stock risk." },
-      { done: cashRatio >= 0.1, title: tr ? "En az %10 Tech Coin bırak" : "Keep at least 10% Tech Coin", desc: tr ? "Fırsat ve hata payı için bakiye tut." : "Keep balance for flexibility and mistakes." },
+      { done: cashRatio >= 0.1, title: tr ? "En az %10 Tech Coin bırak" : "Keep at least 10% Tech Coin", desc: tr ? "Fırsat ve hata payı için cüzdan bakiyesi tut." : "Keep wallet balance for flexibility and mistakes." },
       { done: concentrationOk, title: tr ? "Tek hisse ağırlığını %50 altına indir" : "Keep one stock below 50%", desc: tr ? "Yoğunlaşma riskini kontrol et." : "Control concentration risk." },
       { done: hasNews, title: tr ? "3 global haber etkisi gözlemle" : "Observe 3 global news events", desc: tr ? "Fiyatın habere nasıl tepki verdiğini izle." : "Watch how prices react to news." },
     ];
@@ -555,8 +556,8 @@ export function MarketAcademy() {
 
         <section className="grid gap-4 md:grid-cols-3">
           <LessonCard icon={<Brain />} title={tr ? "Fiyat = beklenti" : "Price = expectation"} text={tr ? "Hisse fiyatı sadece bugünkü durumu değil, geleceğe dair beklentiyi de taşır." : "A stock price reflects not only today, but also expectations about the future."} />
-          <LessonCard icon={<ShieldCheck />} title={tr ? "Risk dağıtılır" : "Risk is diversified"} text={tr ? "Bütün Tech Coin'ini tek şirkete koyarsan tek haber portföyü sert etkiler." : "If all Tech Coin is in one company, one headline can heavily affect the portfolio."} />
-          <LessonCard icon={<Building2 />} title={tr ? "SQL mantığı" : "SQL logic"} text={tr ? "Tech Coin bakiyesi, portföy, fiyat geçmişi ve haberler ayrı tablolarda tutulur." : "Tech Coin balance, holdings, price history and news live in separate tables."} />
+          <LessonCard icon={<ShieldCheck />} title={tr ? "Risk bakiyeyi etkiler" : "Risk affects balance"} text={tr ? "Bu sürümde al/sat OFF Tech Coin cüzdanını etkiler; amaç gereksiz işlem değil kontrollü öğrenmedir." : "In this version, trading affects the OFF Tech Coin wallet; the goal is controlled learning, not overtrading."} />
+          <LessonCard icon={<Building2 />} title={tr ? "SQL mantığı" : "SQL logic"} text={tr ? "Cüzdan, portföy, fiyat geçmişi ve haberler ayrı tablolarda tutulur." : "Wallet, holdings, price history and news live in separate tables."} />
         </section>
       </div>
     </main>
@@ -681,9 +682,10 @@ function normalizeMarketState(data: any): MarketState {
   const techCoin = data?.techCoin && typeof data.techCoin === "object" ? data.techCoin : FALLBACK_STATE.techCoin;
 
   return {
-    mode: data?.mode || "online-d1",
+    mode: data?.mode || "real-tech-coin-wallet",
     day: safeNumber(data?.day) || 1,
-    cash: safeNumber(data?.cash) || STARTING_TECH_COIN,
+    cash: data?.cash === 0 ? 0 : safeNumber(data?.cash),
+    startingValue: data?.startingValue === 0 ? 0 : safeNumber(data?.startingValue),
     holdings,
     stocks: stocks.map((stock: any) => ({
       symbol: String(stock.symbol || ""),
