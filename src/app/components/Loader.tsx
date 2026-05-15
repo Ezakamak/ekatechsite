@@ -25,17 +25,22 @@ const burstPieces = [
 ] as const;
 
 const splashPieces = [
-  { x: -22, y: -20, size: 3, delay: 0 },
-  { x: -10, y: -27, size: 2, delay: 0.018 },
-  { x: 4, y: -22, size: 3, delay: 0.03 },
-  { x: 16, y: -18, size: 2, delay: 0.048 },
+  { x: -42, y: -48, size: 4, delay: 0 },
+  { x: -30, y: -62, size: 3, delay: 0.012 },
+  { x: -17, y: -52, size: 3, delay: 0.024 },
+  { x: -6, y: -38, size: 5, delay: 0.036 },
+  { x: 8, y: -58, size: 3, delay: 0.018 },
+  { x: 22, y: -50, size: 4, delay: 0.032 },
+  { x: 35, y: -41, size: 3, delay: 0.046 },
+  { x: 47, y: -30, size: 2, delay: 0.06 },
 ];
 
 const bubbles = [
-  { left: 28, size: 3, delay: 0.1, duration: 2.4 },
-  { left: 46, size: 2, delay: 0.55, duration: 2.1 },
-  { left: 63, size: 3, delay: 0.9, duration: 2.6 },
-  { left: 74, size: 2, delay: 1.25, duration: 2.2 },
+  { left: 22, size: 3, delay: 0.1, duration: 2.4 },
+  { left: 36, size: 2, delay: 0.45, duration: 2.1 },
+  { left: 51, size: 3, delay: 0.72, duration: 2.6 },
+  { left: 66, size: 2, delay: 1.05, duration: 2.2 },
+  { left: 78, size: 3, delay: 1.34, duration: 2.35 },
 ] as const;
 
 function Shape({ type, small = false }: { type: string; small?: boolean }) {
@@ -80,15 +85,24 @@ function liquidPath(fillPercent: number, impact: number, layer = 0) {
   const fill = Math.max(0, Math.min(100, fillPercent));
   const y = 160 - fill * 1.6;
   const hit = impact === 0 ? 0 : 1;
-  const amp = hit ? Math.max(2.2, 8.5 - impact * 0.75) : 1.2;
-  const offset = layer ? 4 : 0;
-  const phase = layer ? -amp * 0.45 : amp * 0.35;
+  const direction = impact % 2 === 0 ? -1 : 1;
+  const amp = hit ? Math.max(6, 20 - impact * 1.7) : 2.2;
+  const tilt = hit ? Math.max(4, 16 - impact * 1.25) * direction : 0;
+  const offset = layer ? 5 : 0;
+  const phase = layer ? -amp * 0.62 : amp * 0.52;
+
+  const left = y - tilt + offset;
+  const right = y + tilt * 0.72 + offset;
+  const c1 = y + amp * 0.95 + offset;
+  const c2 = y - amp * 0.9 + offset;
+  const c3 = y + phase + offset;
+  const c4 = y - phase * 0.75 + offset;
 
   return [
-    `M 0 ${y + offset}`,
-    `C 18 ${y + amp + offset} 30 ${y - amp * 0.55 + offset} 48 ${y + phase + offset}`,
-    `C 66 ${y + amp * 0.55 + offset} 82 ${y - amp * 0.75 + offset} 100 ${y + amp * 0.15 + offset}`,
-    `C 122 ${y + amp * 0.85 + offset} 138 ${y - amp * 0.35 + offset} 160 ${y + offset}`,
+    `M 0 ${left}`,
+    `C 18 ${c1} 34 ${c2} 52 ${c3}`,
+    `C 70 ${y + amp * 0.85 + offset} 88 ${y - amp * 1.05 + offset} 108 ${c4}`,
+    `C 128 ${y + amp * 0.62 + offset} 144 ${y - amp * 0.55 + offset} 160 ${right}`,
     "L 160 160 L 0 160 Z",
   ].join(" ");
 }
@@ -98,19 +112,29 @@ function FluidFill({ fillPercent, impact, burst }: { fillPercent: number; impact
   const surfaceY = 100 - safeFill;
   const fluidPath = liquidPath(safeFill, impact, 0);
   const backPath = liquidPath(safeFill, impact, 1);
+  const sloshDirection = impact % 2 === 0 ? -1 : 1;
+  const sloshRotate = impact ? sloshDirection * Math.max(3, 8 - impact * 0.7) : 0;
 
   return (
     <div className="absolute inset-0 z-10 overflow-hidden">
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 160 160" preserveAspectRatio="none">
+      <motion.svg
+        key={`liquid-svg-${impact}`}
+        className="absolute inset-0 h-full w-full"
+        viewBox="0 0 160 160"
+        preserveAspectRatio="none"
+        initial={{ rotate: impact ? -sloshRotate * 0.7 : 0, x: impact ? -sloshDirection * 4 : 0 }}
+        animate={{ rotate: impact ? [-sloshRotate * 0.7, sloshRotate * 0.45, -sloshRotate * 0.22, 0] : 0, x: impact ? [-sloshDirection * 4, sloshDirection * 6, -sloshDirection * 2, 0] : 0 }}
+        transition={{ duration: 0.95, ease: [0.18, 0.74, 0.24, 1] }}
+      >
         <defs>
           <linearGradient id="loaderLiquid" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
-            <stop offset="34%" stopColor="rgba(0,212,255,0.34)" />
-            <stop offset="100%" stopColor="rgba(139,92,246,0.28)" />
+            <stop offset="0%" stopColor="rgba(255,255,255,0.22)" />
+            <stop offset="28%" stopColor="rgba(0,212,255,0.45)" />
+            <stop offset="100%" stopColor="rgba(139,92,246,0.34)" />
           </linearGradient>
           <linearGradient id="loaderLiquidBack" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="rgba(139,92,246,0.20)" />
-            <stop offset="100%" stopColor="rgba(0,212,255,0.20)" />
+            <stop offset="0%" stopColor="rgba(139,92,246,0.27)" />
+            <stop offset="100%" stopColor="rgba(0,212,255,0.26)" />
           </linearGradient>
         </defs>
 
@@ -118,47 +142,47 @@ function FluidFill({ fillPercent, impact, burst }: { fillPercent: number; impact
           key={`back-${impact}`}
           d={backPath}
           fill="url(#loaderLiquidBack)"
-          initial={{ opacity: 0.46, x: 3 }}
-          animate={{ opacity: burst ? [0.46, 0.76, 0] : 0.46, x: [3, -2, 0] }}
-          transition={{ duration: 0.88, ease: "easeOut" }}
+          initial={{ opacity: 0.56, x: sloshDirection * 4 }}
+          animate={{ opacity: burst ? [0.56, 0.82, 0] : 0.56, x: [sloshDirection * 4, -sloshDirection * 5, sloshDirection * 2, 0] }}
+          transition={{ duration: 1.02, ease: "easeOut" }}
         />
         <motion.path
           key={`front-${impact}`}
           d={fluidPath}
           fill="url(#loaderLiquid)"
-          initial={{ opacity: 0.82, y: impact ? 5 : 0 }}
-          animate={{ opacity: burst ? [0.82, 1, 0] : 0.82, y: impact ? [5, -2, 1, 0] : 0 }}
-          transition={{ duration: 0.72, ease: [0.18, 0.8, 0.24, 1] }}
+          initial={{ opacity: 0.88, y: impact ? 8 : 0 }}
+          animate={{ opacity: burst ? [0.88, 1, 0] : 0.88, y: impact ? [8, -5, 2, 0] : 0 }}
+          transition={{ duration: 0.86, ease: [0.18, 0.8, 0.24, 1] }}
         />
-      </svg>
+      </motion.svg>
 
       <motion.div
         key={`surface-${impact}`}
-        className="absolute left-[9%] h-px w-[82%] rounded-full bg-cyan-100/45 shadow-[0_0_16px_rgba(0,212,255,0.5)]"
+        className="absolute left-[5%] h-[2px] w-[90%] rounded-full bg-cyan-100/60 shadow-[0_0_20px_rgba(0,212,255,0.7)]"
         style={{ top: `${surfaceY}%` }}
-        initial={{ scaleX: 0.74, opacity: 0.28 }}
-        animate={{ scaleX: impact ? [0.74, 1.12, 0.94, 1] : 0.92, opacity: impact ? [0.28, 0.72, 0.35] : 0.28 }}
-        transition={{ duration: 0.7, ease: "easeOut" }}
+        initial={{ scaleX: 0.64, opacity: 0.3, rotate: impact ? -sloshRotate : 0 }}
+        animate={{ scaleX: impact ? [0.64, 1.22, 0.88, 1.04] : 0.94, opacity: impact ? [0.3, 0.88, 0.38] : 0.3, rotate: impact ? [-sloshRotate, sloshRotate * 0.55, -sloshRotate * 0.22, 0] : 0 }}
+        transition={{ duration: 0.85, ease: "easeOut" }}
       />
 
       {bubbles.map((bubble, index) => (
         <motion.span
           key={index}
-          className="absolute rounded-full border border-cyan-100/35 bg-white/10"
+          className="absolute rounded-full border border-cyan-100/40 bg-white/10"
           style={{ left: `${bubble.left}%`, width: bubble.size, height: bubble.size, bottom: "8%" }}
           initial={{ y: 18, opacity: 0 }}
-          animate={{ y: [18, -42, -72], opacity: [0, 0.45, 0] }}
+          animate={{ y: [18, -46, -78], opacity: [0, 0.52, 0], x: [0, index % 2 === 0 ? 7 : -7, 0] }}
           transition={{ duration: bubble.duration, delay: bubble.delay, repeat: Infinity, ease: "easeOut" }}
         />
       ))}
 
       <motion.div
         key={`meniscus-${impact}`}
-        className="absolute left-0 right-0 h-7 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.14),transparent_68%)]"
-        style={{ top: `calc(${surfaceY}% - 14px)` }}
-        initial={{ opacity: 0.12 }}
-        animate={{ opacity: impact ? [0.12, 0.42, 0.16] : 0.12 }}
-        transition={{ duration: 0.64 }}
+        className="absolute left-0 right-0 h-10 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.20),transparent_70%)]"
+        style={{ top: `calc(${surfaceY}% - 20px)` }}
+        initial={{ opacity: 0.16, x: -sloshDirection * 8 }}
+        animate={{ opacity: impact ? [0.16, 0.55, 0.2] : 0.16, x: impact ? [-sloshDirection * 8, sloshDirection * 7, 0] : 0 }}
+        transition={{ duration: 0.78 }}
       />
     </div>
   );
@@ -166,18 +190,19 @@ function FluidFill({ fillPercent, impact, burst }: { fillPercent: number; impact
 
 function Splash({ impact, fillPercent, burst }: { impact: number; fillPercent: number; burst: boolean }) {
   if (impact === 0 || burst) return null;
-  const top = Math.max(9, Math.min(86, 100 - fillPercent - 3));
+  const top = Math.max(8, Math.min(84, 100 - fillPercent - 4));
+  const direction = impact % 2 === 0 ? -1 : 1;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
       {splashPieces.map((piece, index) => (
         <motion.span
           key={`${impact}-${index}`}
-          className="absolute left-1/2 rounded-full bg-cyan-100/70 shadow-[0_0_10px_rgba(0,212,255,0.55)]"
+          className="absolute left-1/2 rounded-full bg-cyan-100/80 shadow-[0_0_14px_rgba(0,212,255,0.7)]"
           style={{ width: piece.size, height: piece.size, top: `${top}%` }}
-          initial={{ x: 0, y: 0, opacity: 0.85, scale: 0.75 }}
-          animate={{ x: [0, piece.x * 0.6, piece.x], y: [0, piece.y, piece.y + 16], opacity: [0.85, 0.58, 0], scale: [0.75, 1, 0.35] }}
-          transition={{ duration: 0.46, delay: piece.delay, ease: [0.2, 0.72, 0.28, 1] }}
+          initial={{ x: direction * 8, y: 0, opacity: 0.92, scale: 0.75 }}
+          animate={{ x: [direction * 8, piece.x * 0.72, piece.x], y: [0, piece.y, piece.y + 28], opacity: [0.92, 0.78, 0], scale: [0.75, 1.2, 0.3] }}
+          transition={{ duration: 0.62, delay: piece.delay, ease: [0.18, 0.76, 0.28, 1] }}
         />
       ))}
     </div>
@@ -208,11 +233,11 @@ export function Loader({ show }: LoaderProps) {
 
         const force = drop.mass;
         boxControls.start({
-          y: [0, 5.5 * force, -2.8 * force, 1.4, 0],
-          scale: [1, 1 + 0.045 * force, 0.982, 1.01, 1],
-          rotate: [0, -0.75 * force, 0.85 * force, -0.25, 0],
+          y: [0, 7.5 * force, -4.2 * force, 1.8, 0],
+          scale: [1, 1 + 0.06 * force, 0.972, 1.014, 1],
+          rotate: [0, -1.25 * force, 1.45 * force, -0.38, 0],
           transition: {
-            duration: 0.34,
+            duration: 0.38,
             ease: [0.16, 0.78, 0.25, 1],
           },
         });
@@ -335,7 +360,7 @@ export function Loader({ show }: LoaderProps) {
                     ? [0.28, 0.8, 0]
                     : impact === 0
                       ? 0.2
-                      : [0.2, 0.48, 0.22],
+                      : [0.2, 0.56, 0.24],
                 }}
                 transition={{
                   duration: burst ? 0.45 : 0.34,
