@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { BarChart3, CheckCircle2, RefreshCcw, Send } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { BarChart3, RefreshCcw, Send } from "lucide-react";
 import { useLanguage } from "../i18n";
 
 type Submission = {
@@ -290,7 +290,7 @@ export function MarketStockSubmissionPanel() {
   );
 }
 
-function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
+function Field({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
   return (
     <label className="grid gap-2 text-sm text-white/50">
       <span>{label} <span className="text-red-300">*</span></span>
