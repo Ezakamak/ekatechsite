@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { CoreClash as CoreClashBase } from "./CoreClashSequential";
+import { CoreClashBotAssist } from "./CoreClashBotAssist";
 
 const DEFENSE_TERMS = [
   "firewall",
@@ -132,5 +133,10 @@ export function CoreClash() {
     };
   }, []);
 
-  return <CoreClashBase />;
+  return (
+    <>
+      <CoreClashBase />
+      <CoreClashBotAssist />
+    </>
+  );
 }
