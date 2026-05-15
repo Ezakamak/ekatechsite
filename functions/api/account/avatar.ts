@@ -24,7 +24,8 @@ export async function onRequestPost(context: any) {
     }
 
     const isOwner = String(user.user.email).toLowerCase() === OWNER_EMAIL;
-    const shouldApproveImmediately = isOwner || user.user.role === "client";
+    const shouldApproveImmediately = isOwner;
+    const isAdmin = user.user.role === "admin";
 
     await context.env.DB
       .prepare("UPDATE users SET avatar_url = ?, avatar_approved = ? WHERE id = ?")
@@ -33,20 +34,24 @@ export async function onRequestPost(context: any) {
 
     await writeAuditLog(context, {
       actorUserId: user.user.id,
-      action: user.user.role === "admin" ? "admin_avatar_uploaded_pending" : "profile_photo_updated",
+      action: isAdmin ? "admin_avatar_uploaded_pending" : shouldApproveImmediately ? "profile_photo_updated" : "user_avatar_uploaded_pending",
       targetType: "user",
       targetId: user.user.id,
       targetLabel: `${user.user.name} <${user.user.email}>`,
       details: shouldApproveImmediately
         ? "Profil fotoğrafı güncellendi."
-        : "Admin profil fotoğrafı yükledi; owner onayı bekliyor.",
+        : isAdmin
+          ? "Admin profil fotoğrafı yükledi; owner onayı bekliyor."
+          : "Kullanıcı profil fotoğrafı yükledi; owner onayı bekliyor.",
     });
 
     return Response.json({
       success: true,
       message: shouldApproveImmediately
         ? "Profil fotoğrafı güncellendi."
-        : "Profil fotoğrafı yüklendi. Sipariş yönetimi için owner onayı bekleniyor.",
+        : isAdmin
+          ? "Profil fotoğrafı yüklendi. Sipariş yönetimi için owner onayı bekleniyor."
+          : "Profil fotoğrafı yüklendi. Yayımlanması için owner onayı bekleniyor.",
       avatar_url: avatarUrl,
       avatar_approved: shouldApproveImmediately ? 1 : 0,
     });
