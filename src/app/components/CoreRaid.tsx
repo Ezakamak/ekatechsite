@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ShieldAlert, Sparkles, Target } from "lucide-react";
 import { useLanguage } from "../i18n";
+import { playOffSound } from "./OffSoundEngine";
 
 type RaidTask = {
   key: string;
@@ -136,8 +137,10 @@ export function CoreRaid() {
       if (!response.ok || data?.error) throw new Error(data?.error || "Görev hasarı verilemedi.");
       setState(data);
       setNotice({ type: "success", text: `+${data.damage || 0} ${c.damage} ${tr ? "verildi" : "dealt"}` });
+      playOffSound(Number(data.damage || 0) > 0 ? "raid" : "success");
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "Görev hasarı verilemedi." });
+      playOffSound("error");
     } finally {
       setBusy(null);
     }

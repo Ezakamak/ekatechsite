@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
+import { playOffSound } from "./OffSoundEngine";
 
 type Stock = {
   symbol: string;
@@ -420,10 +421,12 @@ export function MarketAcademy() {
       loadLeaderboard();
       flash(okMessage);
       if (burst) {
+        playOffSound(burst.side);
         setTradeBurst(burst);
         window.setTimeout(() => setTradeBurst(null), 1300);
       }
     } catch (error) {
+      playOffSound("error");
       flash(error instanceof Error ? error.message : copy.offline);
     } finally {
       setBusy(false);
@@ -432,7 +435,7 @@ export function MarketAcademy() {
 
   function handleTrade(side: "buy" | "sell") {
     const qty = Math.floor(safeNumber(quantity));
-    if (qty < 1) return flash(copy.invalidQty);
+    if (qty < 1) { playOffSound("error"); return flash(copy.invalidQty); }
     postAction(
       { action: side, symbol: selectedStock.symbol, quantity: qty },
       side === "buy" ? copy.buyOk : copy.sellOk,
@@ -442,6 +445,7 @@ export function MarketAcademy() {
 
   function resetPortfolio() {
     if (!window.confirm(copy.resetConfirm)) return;
+    playOffSound("market");
     postAction({ action: "reset" }, copy.resetOk);
   }
 

@@ -12,6 +12,7 @@ import { TechCoinMiner } from "./TechCoinMiner";
 import { DropTech } from "./DropTech";
 import { TechCoinMines } from "./TechCoinMines";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
+import { playOffSound } from "./OffSoundEngine";
 
 type User = {
   id: number;
@@ -213,6 +214,7 @@ export function OffPage() {
           <button
             type="button"
             onClick={() => {
+              playOffSound("click");
               setActiveGame("hub");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
@@ -267,14 +269,14 @@ export function OffPage() {
         </section>
 
         <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("duel")} />
-          <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("cipher")} />
-          <GameCard icon={<Gamepad2 className="h-6 w-6" />} status={copy.available} title={copy.clashTitle} description={copy.clashDesc} accent="cyan" buttonLabel={copy.open} onClick={() => navigateTo("/core-clash")} />
-          <GameCard icon={<Gift className="h-6 w-6" />} status={copy.available} title={copy.droptechTitle} description={copy.droptechDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("droptech")} />
-          <GameCard icon={<Shield className="h-6 w-6" />} status={copy.available} title={copy.minesTitle} description={copy.minesDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("mines")} />
-          <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.available} title={copy.raidTitle} description={copy.raidDesc} accent="amber" buttonLabel={copy.open} onClick={() => setActiveGame("raid")} />
-          <GameCard icon={<BarChart3 className="h-6 w-6" />} status={copy.available} title={copy.marketTitle} description={copy.marketDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("market")} />
-          <GameCard icon={<Pickaxe className="h-6 w-6" />} status={copy.available} title={copy.minerTitle} description={copy.minerDesc} accent="amber" buttonLabel={copy.open} onClick={() => setActiveGame("miner")} />
+          <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("join"); setActiveGame("duel"); }} />
+          <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("code"); setActiveGame("cipher"); }} />
+          <GameCard icon={<Gamepad2 className="h-6 w-6" />} status={copy.available} title={copy.clashTitle} description={copy.clashDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("card"); navigateTo("/core-clash"); }} />
+          <GameCard icon={<Gift className="h-6 w-6" />} status={copy.available} title={copy.droptechTitle} description={copy.droptechDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("reel"); setActiveGame("droptech"); }} />
+          <GameCard icon={<Shield className="h-6 w-6" />} status={copy.available} title={copy.minesTitle} description={copy.minesDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("bet"); setActiveGame("mines"); }} />
+          <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.available} title={copy.raidTitle} description={copy.raidDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("raid"); setActiveGame("raid"); }} />
+          <GameCard icon={<BarChart3 className="h-6 w-6" />} status={copy.available} title={copy.marketTitle} description={copy.marketDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("market"); setActiveGame("market"); }} />
+          <GameCard icon={<Pickaxe className="h-6 w-6" />} status={copy.available} title={copy.minerTitle} description={copy.minerDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("server"); setActiveGame("miner"); }} />
         </section>
       </div>
     </main>

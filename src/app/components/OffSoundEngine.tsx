@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 import { useLanguage } from "../i18n";
 
-type SoundKey =
+export type SoundKey =
   | "click"
   | "hover"
   | "success"
@@ -24,12 +24,29 @@ type SoundKey =
   | "shield"
   | "code"
   | "market"
-  | "notify";
+  | "notify"
+  | "bet"
+  | "cashout"
+  | "diamond"
+  | "mine"
+  | "reel"
+  | "trade"
+  | "claim"
+  | "server"
+  | "raid";
 
 type SoundConfig = {
   name: string;
   volume: number;
   paths: string[];
+};
+
+type SynthPreset = {
+  frequencies: number[];
+  duration: number;
+  type?: OscillatorType;
+  volume?: number;
+  gap?: number;
 };
 
 const STORAGE_KEY = "ekatech_off_sound_enabled";
@@ -58,6 +75,49 @@ const SOUND_LIBRARY: Record<SoundKey, SoundConfig> = {
   code: { name: "Code", volume: 0.36, paths: ["code.mp3", "lock.mp3", "cipher.mp3"] },
   market: { name: "Market", volume: 0.3, paths: ["market.mp3", "chart.mp3", "tick.mp3"] },
   notify: { name: "Notify", volume: 0.34, paths: ["notify.mp3", "notification.mp3", "ping.mp3"] },
+  bet: { name: "Bet", volume: 0.38, paths: ["bet.mp3", "chip.mp3", "coin.mp3"] },
+  cashout: { name: "Cashout", volume: 0.48, paths: ["cashout.mp3", "payout.mp3", "coin.mp3", "success.mp3"] },
+  diamond: { name: "Diamond", volume: 0.44, paths: ["diamond.mp3", "gem.mp3", "success.mp3"] },
+  mine: { name: "Mine", volume: 0.52, paths: ["mine.mp3", "explosion.mp3", "error.mp3"] },
+  reel: { name: "Reel", volume: 0.34, paths: ["reel.mp3", "spin.mp3", "tick.mp3"] },
+  trade: { name: "Trade", volume: 0.4, paths: ["trade.mp3", "swap.mp3", "market.mp3"] },
+  claim: { name: "Claim", volume: 0.48, paths: ["claim.mp3", "collect.mp3", "coin.mp3"] },
+  server: { name: "Server", volume: 0.4, paths: ["server.mp3", "connect.mp3", "join.mp3"] },
+  raid: { name: "Raid", volume: 0.5, paths: ["raid.mp3", "impact.mp3", "damage.mp3"] },
+};
+
+const SYNTH_LIBRARY: Record<SoundKey, SynthPreset> = {
+  click: { frequencies: [640], duration: 0.045, type: "square", volume: 0.045 },
+  hover: { frequencies: [520], duration: 0.035, type: "sine", volume: 0.025 },
+  success: { frequencies: [523, 659, 784], duration: 0.085, type: "triangle", volume: 0.055, gap: 0.045 },
+  error: { frequencies: [220, 146], duration: 0.12, type: "sawtooth", volume: 0.045, gap: 0.055 },
+  coin: { frequencies: [988, 1319], duration: 0.07, type: "triangle", volume: 0.05, gap: 0.035 },
+  buy: { frequencies: [392, 523, 659], duration: 0.065, type: "triangle", volume: 0.045, gap: 0.035 },
+  sell: { frequencies: [659, 523, 392], duration: 0.065, type: "triangle", volume: 0.045, gap: 0.035 },
+  join: { frequencies: [330, 494, 660], duration: 0.07, type: "sine", volume: 0.05, gap: 0.035 },
+  bot: { frequencies: [180, 260, 180], duration: 0.06, type: "square", volume: 0.035, gap: 0.035 },
+  ready: { frequencies: [440, 880], duration: 0.055, type: "triangle", volume: 0.045, gap: 0.03 },
+  countdown: { frequencies: [760], duration: 0.055, type: "square", volume: 0.045 },
+  round: { frequencies: [196, 392, 784], duration: 0.08, type: "sawtooth", volume: 0.035, gap: 0.04 },
+  win: { frequencies: [523, 659, 784, 1047], duration: 0.09, type: "triangle", volume: 0.06, gap: 0.04 },
+  lose: { frequencies: [392, 277, 196], duration: 0.095, type: "sawtooth", volume: 0.04, gap: 0.05 },
+  draw: { frequencies: [440, 440], duration: 0.08, type: "sine", volume: 0.035, gap: 0.06 },
+  card: { frequencies: [320, 760], duration: 0.045, type: "triangle", volume: 0.035, gap: 0.025 },
+  damage: { frequencies: [140, 95], duration: 0.08, type: "sawtooth", volume: 0.055, gap: 0.025 },
+  heal: { frequencies: [523, 698, 880], duration: 0.075, type: "sine", volume: 0.045, gap: 0.035 },
+  shield: { frequencies: [220, 440], duration: 0.11, type: "triangle", volume: 0.04, gap: 0.025 },
+  code: { frequencies: [880, 740, 988], duration: 0.045, type: "square", volume: 0.035, gap: 0.03 },
+  market: { frequencies: [440, 466, 494], duration: 0.04, type: "square", volume: 0.025, gap: 0.025 },
+  notify: { frequencies: [880, 1175], duration: 0.055, type: "sine", volume: 0.04, gap: 0.035 },
+  bet: { frequencies: [349, 440], duration: 0.055, type: "triangle", volume: 0.04, gap: 0.03 },
+  cashout: { frequencies: [659, 880, 1175], duration: 0.075, type: "triangle", volume: 0.06, gap: 0.035 },
+  diamond: { frequencies: [1047, 1568], duration: 0.065, type: "sine", volume: 0.05, gap: 0.035 },
+  mine: { frequencies: [110, 73, 55], duration: 0.08, type: "sawtooth", volume: 0.06, gap: 0.025 },
+  reel: { frequencies: [620, 700, 780], duration: 0.035, type: "square", volume: 0.025, gap: 0.02 },
+  trade: { frequencies: [494, 622, 494], duration: 0.055, type: "triangle", volume: 0.04, gap: 0.03 },
+  claim: { frequencies: [784, 988, 1319], duration: 0.07, type: "triangle", volume: 0.055, gap: 0.035 },
+  server: { frequencies: [247, 330, 494], duration: 0.065, type: "square", volume: 0.035, gap: 0.035 },
+  raid: { frequencies: [130, 196, 262], duration: 0.08, type: "sawtooth", volume: 0.055, gap: 0.035 },
 };
 
 const KEYWORDS: Array<{ test: RegExp; sound: SoundKey }> = [
@@ -73,6 +133,12 @@ const KEYWORDS: Array<{ test: RegExp; sound: SoundKey }> = [
   { test: /hasar|damage|hit/i, sound: "damage" },
   { test: /heal|restore|yenile|iyileş|hp yeniledi/i, sound: "heal" },
   { test: /shield|firewall|kalkan|blok|block|defense/i, sound: "shield" },
+  { test: /cashout|payout|çek|tahsil|aktar/i, sound: "cashout" },
+  { test: /diamond|gem|elmas/i, sound: "diamond" },
+  { test: /mine|mayın|explosion|patla/i, sound: "mine" },
+  { test: /claim|collect|aktar|topla/i, sound: "claim" },
+  { test: /server|miner|bağlan|connect/i, sound: "server" },
+  { test: /raid|boss|titan|hasar ver/i, sound: "raid" },
   { test: /coin|ödül|reward|bonus/i, sound: "coin" },
   { test: /hata|error|başarısız|failed/i, sound: "error" },
   { test: /başarılı|success|tamamlandı/i, sound: "success" },
@@ -120,6 +186,7 @@ export function OffSoundEngine() {
   const [enabled, setEnabled] = useState(readEnabled);
   const [active, setActive] = useState(currentPathIsOff);
   const audioCache = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const audioContext = useRef<AudioContext | null>(null);
   const lastPlayed = useRef<Record<string, number>>({});
   const lastTextSignature = useRef<string>("");
 
@@ -132,6 +199,41 @@ export function OffSoundEngine() {
     off: "OFF sounds off",
     hint: "Sound files are read from /sounds/off.",
   }, [tr]);
+
+
+  function playSynth(key: SoundKey) {
+    if (typeof window === "undefined") return;
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return;
+    const context = audioContext.current || new AudioContextCtor();
+    audioContext.current = context;
+    if (context.state === "suspended") void context.resume().catch(() => undefined);
+
+    const preset = SYNTH_LIBRARY[key] || SYNTH_LIBRARY.click;
+    const master = context.createGain();
+    master.gain.value = 0.0001;
+    master.connect(context.destination);
+
+    const now = context.currentTime;
+    const gap = preset.gap ?? 0.035;
+    preset.frequencies.forEach((frequency, index) => {
+      const start = now + index * (preset.duration + gap);
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = preset.type || "sine";
+      oscillator.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(preset.volume ?? 0.04, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + preset.duration);
+      oscillator.connect(gain);
+      gain.connect(master);
+      oscillator.start(start);
+      oscillator.stop(start + preset.duration + 0.02);
+    });
+
+    master.gain.setValueAtTime(1, now);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + preset.frequencies.length * (preset.duration + gap) + 0.08);
+  }
 
   function getAudio(key: SoundKey) {
     const config = SOUND_LIBRARY[key] || SOUND_LIBRARY.click;
@@ -147,6 +249,7 @@ export function OffSoundEngine() {
       const currentIndex = config.paths.findIndex((file) => audio.src.endsWith(file));
       const nextFile = config.paths[currentIndex + 1];
       if (nextFile) audio.src = pathOf(nextFile);
+      else audio.dataset.missing = "1";
     });
     audioCache.current.set(cacheKey, audio);
     return audio;
@@ -160,10 +263,26 @@ export function OffSoundEngine() {
 
     try {
       const base = getAudio(key);
+      if (base.dataset.missing === "1") {
+        playSynth(key);
+        return;
+      }
       const audio = base.cloneNode(true) as HTMLAudioElement;
       audio.volume = SOUND_LIBRARY[key]?.volume ?? 0.35;
+      let fallbackTimer = window.setTimeout(() => playSynth(key), 180);
+      audio.addEventListener("playing", () => {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = 0;
+      }, { once: true });
+      audio.addEventListener("error", () => {
+        if (fallbackTimer) window.clearTimeout(fallbackTimer);
+        playSynth(key);
+      }, { once: true });
       const result = audio.play();
-      if (result && typeof result.catch === "function") result.catch(() => undefined);
+      if (result && typeof result.catch === "function") result.catch(() => {
+        if (fallbackTimer) window.clearTimeout(fallbackTimer);
+        playSynth(key);
+      });
     } catch {}
   }
 

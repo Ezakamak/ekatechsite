@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "../i18n";
+import { playOffSound } from "./OffSoundEngine";
 
 type User = { id: number; name: string; email: string; avatar_url?: string | null };
 type Mode = "classic" | "best_focus" | "what_the_hold";
@@ -86,7 +87,7 @@ export function TechDuelSync() {
     try {
       const r = await fetch("/api/duels", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, round_count: roundCount }) });
       const d = await r.json().catch(() => null); if (!r.ok) throw new Error(d?.error || "Lobby oluşturulamadı.");
-      setNotice({ type: "success", text: d?.message || "Lobby oluşturuldu." }); await loadDuels(true);
+      setNotice({ type: "success", text: d?.message || "Lobby oluşturuldu." }); playOffSound("join"); await loadDuels(true);
     } catch (e) { setNotice({ type: "error", text: e instanceof Error ? e.message : "Lobby oluşturulamadı." }); }
     finally { setBusy(false); }
   };
@@ -96,12 +97,12 @@ export function TechDuelSync() {
     try {
       const r = await fetch("/api/duels/join", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lobby_id: id }) });
       const d = await r.json().catch(() => null); if (!r.ok) throw new Error(d?.error || "Düelloya katılınamadı.");
-      await loadDuels(true); const lobby = [...openLobbies, ...myLobbies].find((item) => item.id === id); if (lobby) setActiveLobby({ ...lobby, status: "in_progress" });
+      playOffSound("join"); await loadDuels(true); const lobby = [...openLobbies, ...myLobbies].find((item) => item.id === id); if (lobby) setActiveLobby({ ...lobby, status: "in_progress" });
     } catch (e) { setNotice({ type: "error", text: e instanceof Error ? e.message : "Düelloya katılınamadı." }); }
     finally { setBusy(false); }
   };
 
-  const enterMatch = async (lobby: Lobby) => { setActiveLobby(lobby); setHolding(false); setPayload(null); await loadRound(lobby.id, false); };
+  const enterMatch = async (lobby: Lobby) => { playOffSound("ready"); setActiveLobby(lobby); setHolding(false); setPayload(null); await loadRound(lobby.id, false); };
 
   const submit = async (tooEarly: boolean, ms: number | null) => {
     if (!payload?.lobby || !payload.current_round || payload.my_submission || submitting) return;
@@ -109,12 +110,12 @@ export function TechDuelSync() {
     setSubmitting(true);
     try {
       const r = await fetch("/api/duels/submit", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lobby_id: payload.lobby.id, round_number: payload.current_round.round_number, ms, tooEarly }) });
-      const d = await r.json().catch(() => null); if (!r.ok) throw new Error(d?.error || "Sonuç gönderilemedi."); await loadRound(payload.lobby.id, true);
+      const d = await r.json().catch(() => null); if (!r.ok) throw new Error(d?.error || "Sonuç gönderilemedi."); playOffSound(tooEarly ? "error" : "countdown"); await loadRound(payload.lobby.id, true);
     } catch (e) { setNotice({ type: "error", text: e instanceof Error ? e.message : "Sonuç gönderilemedi." }); }
     finally { setSubmitting(false); }
   };
 
-  const readyForNextRound = async () => { if (!payload?.lobby) return; setBusy(true); setHolding(false); const d = await postRoundAction("next_round", false); if (d) await loadDuels(true); setBusy(false); };
+  const readyForNextRound = async () => { if (!payload?.lobby) return; setBusy(true); setHolding(false); const d = await postRoundAction("next_round", false); if (d) { playOffSound("round"); await loadDuels(true); } setBusy(false); };
 
   const lobby = payload?.lobby || activeLobby;
   const current = payload?.current_round || null;
