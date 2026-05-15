@@ -237,7 +237,7 @@ export function MarketStockSubmissionPanel() {
             <Field label={copy.descriptionTr}>
               <textarea value={form.descriptionTr} onChange={(event) => updateField("descriptionTr", event.target.value.slice(0, 420))} placeholder="Şirketin ne yaptığını, neden farklı olduğunu ve simülasyondaki temasını yaz..." className="field-input min-h-28 resize-none" />
             </Field>
-            <Field label={copy.descriptionEn}>
+            <Field label={copy.descriptionEn} required={false}>
               <textarea value={form.descriptionEn} onChange={(event) => updateField("descriptionEn", event.target.value.slice(0, 420))} placeholder="Optional English description..." className="field-input min-h-24 resize-none" />
             </Field>
 
@@ -294,10 +294,10 @@ export function MarketStockSubmissionPanel() {
   );
 }
 
-function Field({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
+function Field({ label, help, children, required = true }: { label: string; help?: string; children: ReactNode; required?: boolean }) {
   return (
     <label className="grid gap-2 text-sm text-white/50">
-      <span>{label} <span className="text-red-300">*</span></span>
+      <span>{label} {required ? <span className="text-red-300">*</span> : null}</span>
       {children}
       {help ? <span className="text-xs text-white/30">{help}</span> : null}
     </label>
