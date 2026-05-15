@@ -116,8 +116,10 @@ async function getLoginHistory(context: any, userId: number) {
   const columns = await columnsOf(context, "sessions");
   const dateColumn = pickColumn(columns, ["created_at", "updated_at", "last_seen_at", "expires_at"]);
   if (!dateColumn || !columns.has("user_id")) return [];
+
+  const selectExpires = columns.has("expires_at") ? "expires_at" : "NULL AS expires_at";
   const rows = await context.env.DB.prepare(`
-    SELECT ${quoteIdent(dateColumn)} AS created_at, expires_at
+    SELECT ${quoteIdent(dateColumn)} AS created_at, ${selectExpires}
     FROM sessions
     WHERE user_id = ?
     ORDER BY ${quoteIdent(dateColumn)} DESC
@@ -203,13 +205,24 @@ async function getGameSummary(context: any, userId: number) {
       continue;
     }
 
+    const columns = await columnsOf(context, game.table);
+    if (!columns.has("creator_user_id") || !columns.has("opponent_user_id")) {
+      result[game.key] = { label: game.label, played: 0, wins: 0, losses: 0, draws: 0, last_played_at: null };
+      continue;
+    }
+
+    const winnerColumn = columns.has("winner_user_id") ? "winner_user_id" : "NULL";
+    const statusColumn = columns.has("status") ? "status" : "''";
+    const updatedColumn = pickColumn(columns, ["updated_at", "completed_at", "created_at"]);
+    const maxUpdated = updatedColumn ? `MAX(${quoteIdent(updatedColumn)}) AS last_played_at` : "NULL AS last_played_at";
+
     const row = await context.env.DB.prepare(`
       SELECT
         COUNT(*) AS played,
-        SUM(CASE WHEN winner_user_id = ? THEN 1 ELSE 0 END) AS wins,
-        SUM(CASE WHEN winner_user_id IS NOT NULL AND winner_user_id != ? THEN 1 ELSE 0 END) AS losses,
-        SUM(CASE WHEN status = 'completed' AND winner_user_id IS NULL THEN 1 ELSE 0 END) AS draws,
-        MAX(updated_at) AS last_played_at
+        SUM(CASE WHEN ${winnerColumn} = ? THEN 1 ELSE 0 END) AS wins,
+        SUM(CASE WHEN ${winnerColumn} IS NOT NULL AND ${winnerColumn} != ? THEN 1 ELSE 0 END) AS losses,
+        SUM(CASE WHEN ${statusColumn} = 'completed' AND ${winnerColumn} IS NULL THEN 1 ELSE 0 END) AS draws,
+        ${maxUpdated}
       FROM ${quoteIdent(game.table)}
       WHERE creator_user_id = ? OR opponent_user_id = ?
     `).bind(userId, userId, userId, userId).first();
@@ -301,11 +314,28 @@ async function getTimeline(context: any, userId: number) {
 async function pushGameTimeline(context: any, items: ActivityItem[], userId: number, table: string, label: string) {
   if (!(await tableExists(context, table))) return;
 
+  const columns = await columnsOf(context, table);
+  if (!columns.has("creator_user_id") || !columns.has("opponent_user_id")) return;
+
+  const selectParts = [
+    columns.has("id") ? "id" : "NULL AS id",
+    columns.has("status") ? "status" : "'' AS status",
+    columns.has("winner_user_id") ? "winner_user_id" : "NULL AS winner_user_id",
+    columns.has("reward_amount") ? "reward_amount" : "NULL AS reward_amount",
+    columns.has("created_at") ? "created_at" : "NULL AS created_at",
+    columns.has("updated_at") ? "updated_at" : columns.has("completed_at") ? "completed_at AS updated_at" : "NULL AS updated_at",
+    "creator_user_id",
+    "opponent_user_id",
+  ];
+
+  const orderColumn = pickColumn(columns, ["updated_at", "completed_at", "created_at", "id"]);
+  const orderSql = orderColumn ? `ORDER BY ${quoteIdent(orderColumn)} DESC` : "";
+
   const rows = await context.env.DB.prepare(`
-    SELECT id, status, winner_user_id, reward_amount, created_at, updated_at, creator_user_id, opponent_user_id
+    SELECT ${selectParts.join(", ")}
     FROM ${quoteIdent(table)}
     WHERE creator_user_id = ? OR opponent_user_id = ?
-    ORDER BY updated_at DESC
+    ${orderSql}
     LIMIT 20
   `).bind(userId, userId).all();
 
@@ -314,11 +344,12 @@ async function pushGameTimeline(context: any, items: ActivityItem[], userId: num
     const won = completed && Number(row.winner_user_id || 0) === Number(userId);
     const lost = completed && row.winner_user_id && Number(row.winner_user_id) !== Number(userId);
     const draw = completed && !row.winner_user_id;
+    const rewardText = row.reward_amount ? ` · ödül ${row.reward_amount}` : "";
 
     items.push({
       type: "game",
       title: `${label} ${won ? "kazandı" : lost ? "kaybetti" : draw ? "berabere" : "oynadı"}`,
-      detail: `Lobby #${row.id} · ${row.status}${row.reward_amount ? ` · ödül ${row.reward_amount}` : ""}`,
+      detail: `Lobby #${row.id || "?"} · ${row.status || "unknown"}${rewardText}`,
       status: row.status || null,
       created_at: row.updated_at || row.created_at || null,
     });
