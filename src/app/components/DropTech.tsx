@@ -34,6 +34,10 @@ type DropBox = {
   odds: Record<Rarity, number>;
   tech_coin_value?: number;
   open_cost?: number;
+  value_ratio?: number;
+  series_count?: number;
+  base_fee?: number;
+  edge?: number;
 };
 
 type TechCoinWallet = {
@@ -164,6 +168,9 @@ export function DropTech() {
     openCost: "Açma bedeli",
     balance: "Cüzdan bakiyesi",
     expectedValue: "Beklenen değer",
+    valueRatio: "Beklenen değer / açma bedeli",
+    itemCount: "Toplam item",
+    seriesName: "Seri adı",
     itemValue: "Eşya değeri",
     totalValue: "Toplam değer",
     claim: "Günlük kutuyu al",
@@ -218,6 +225,9 @@ export function DropTech() {
     openCost: "Open cost",
     balance: "Wallet balance",
     expectedValue: "Expected value",
+    valueRatio: "Expected value / open cost",
+    itemCount: "Total items",
+    seriesName: "Series name",
     itemValue: "Item value",
     totalValue: "Total value",
     claim: "Claim daily box",
@@ -267,6 +277,8 @@ export function DropTech() {
   const selectedQuantity = Number(selectedBox?.quantity || 0);
   const selectedBoxValue = Number(selectedBox?.tech_coin_value || 0);
   const selectedOpenCost = Number(selectedBox?.open_cost || Math.max(1, Math.ceil(selectedBoxValue)));
+  const selectedValueRatio = Number(selectedBox?.value_ratio ?? (selectedOpenCost ? selectedBoxValue / selectedOpenCost : 0));
+  const selectedSeriesCount = Number(selectedBox?.series_count || 0);
   const walletBalance = Number(state?.tech_coin_wallet?.balance || 0);
   const hasOwnedSelectedBox = selectedQuantity > 0;
   const canAffordSelectedBox = walletBalance >= selectedOpenCost;
@@ -439,7 +451,9 @@ export function DropTech() {
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
             {boxes.map((box) => {
               const openCost = Number(box.open_cost || Math.max(1, Math.ceil(Number(box.tech_coin_value || 0))));
-              return <button key={box.id} type="button" onClick={() => setSelectedBoxId(box.id)} className={`rounded-[1.35rem] border p-4 text-left transition ${boxClass[box.accent] || boxClass.white} ${box.id === selectedBoxId ? "ring-2 ring-white/60" : "opacity-80 hover:opacity-100"}`}><div className="flex items-start justify-between"><span className="text-3xl">{box.emoji}</span><span className="rounded-full bg-black/25 px-3 py-1 text-xs font-semibold">x{formatNumber(Number(box.quantity || 0), locale)}</span></div><h3 className="mt-3 font-semibold">{nameOf(box, tr)}</h3><p className="mt-2 line-clamp-2 text-xs leading-5 opacity-65">{descOf(box, tr)}</p><div className="mt-3 inline-flex items-center gap-1 rounded-full bg-black/25 px-3 py-1 text-xs font-semibold"><CoinIcon small /> {formatNumber(openCost, locale)} TC</div></button>;
+              const expectedValue = Number(box.tech_coin_value || 0);
+              const valueRatio = Number(box.value_ratio ?? (openCost ? expectedValue / openCost : 0));
+              return <button key={box.id} type="button" onClick={() => setSelectedBoxId(box.id)} className={`rounded-[1.35rem] border p-4 text-left transition ${boxClass[box.accent] || boxClass.white} ${box.id === selectedBoxId ? "ring-2 ring-white/60" : "opacity-80 hover:opacity-100"}`}><div className="flex items-start justify-between"><span className="text-3xl">{box.emoji}</span><span className="rounded-full bg-black/25 px-3 py-1 text-xs font-semibold">x{formatNumber(Number(box.quantity || 0), locale)}</span></div><h3 className="mt-3 font-semibold">{nameOf(box, tr)}</h3><p className="mt-2 line-clamp-2 text-xs leading-5 opacity-65">{descOf(box, tr)}</p><div className="mt-3 flex flex-wrap gap-2"><span className="inline-flex items-center gap-1 rounded-full bg-black/25 px-3 py-1 text-xs font-semibold"><CoinIcon small /> {formatNumber(openCost, locale)} TC</span><span className="rounded-full bg-black/25 px-3 py-1 text-xs font-semibold">EV {formatNumber(expectedValue, locale)} TC</span><span className="rounded-full bg-black/25 px-3 py-1 text-xs font-semibold">{formatNumber(valueRatio * 100, locale)}%</span></div></button>;
             })}
           </div>
         </section>
@@ -447,6 +461,7 @@ export function DropTech() {
         <section className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
             <div className="grid gap-3 sm:grid-cols-4"><Stat label={copy.boxes} value={formatNumber(boxCount, locale)} /><Stat label={copy.balance} value={`${formatNumber(walletBalance, locale)} TC`} /><Stat label={copy.collection} value={`${formatNumber(Number(state?.owned_count || 0), locale)}/${formatNumber(Number(state?.collection_total || 0), locale)}`} /><Stat label={copy.openCost} value={`${formatNumber(selectedOpenCost, locale)} TC`} featured /></div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Stat label={copy.expectedValue} value={`${formatNumber(selectedBoxValue, locale)} TC`} /><Stat label={copy.valueRatio} value={`${formatNumber(selectedValueRatio * 100, locale)}%`} featured={selectedValueRatio >= 0.9} /><Stat label={copy.itemCount} value={formatNumber(selectedSeriesCount, locale)} /><Stat label={copy.seriesName} value={nameOf(selectedBox, tr) || "—"} /></div>
             <p className="mt-4 rounded-2xl border border-amber-300/15 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-100/80">{copy.valueNote}</p>
             <button onClick={openBox} disabled={openButtonDisabled} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-40"><Sparkles className="h-4 w-4" /> {openButtonText}</button>
             <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-black/35 p-4"><p className="text-sm font-medium text-white/75">{copy.odds}</p><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{rarityOrder.map((rarity) => <div key={rarity} className={`rounded-2xl border px-3 py-2 text-xs ${rarityClass[rarity]}`}><p className="font-semibold">{rarityText[rarity]}</p><p className="mt-1 opacity-70">%{selectedOdds?.[rarity] ?? 0}</p></div>)}</div></div>

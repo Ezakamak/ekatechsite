@@ -51,21 +51,21 @@ const RARITY_VALUES: Record<Rarity, number> = { common: 3, rare: 8, epic: 18, le
 const RARITY_BASE_WEIGHTS: Record<Rarity, number> = { common: 100, rare: 42, epic: 14, legendary: 4.2, glitch: 0.82 };
 
 const BOX_TYPES: BoxType[] = [
-  { id: "standard_cache", emoji: "📦", name_tr: "Standard Cache", name_en: "Standard Cache", description_tr: "Klasik başlangıç serisi. Ucuz, dengeli ve güvenli.", description_en: "Classic starter series. Cheap, balanced and safe.", accent: "white", base_fee: 5, edge: 1.05, multipliers: { common: 1.2, rare: 0.95, epic: 0.68, legendary: 0.42, glitch: 0.2 } },
-  { id: "signal_crate", emoji: "📡", name_tr: "Signal Crate", name_en: "Signal Crate", description_tr: "Sinyal temalı Rare ağırlıklı seri.", description_en: "Signal-themed Rare-focused series.", accent: "cyan", base_fee: 7, edge: 1.07, multipliers: { common: 0.9, rare: 1.35, epic: 0.95, legendary: 0.55, glitch: 0.28 } },
-  { id: "circuit_box", emoji: "🔌", name_tr: "Circuit Box", name_en: "Circuit Box", description_tr: "Donanım temalı Rare/Epic dengesi güçlü seri.", description_en: "Hardware series with strong Rare/Epic balance.", accent: "emerald", base_fee: 8, edge: 1.08, multipliers: { common: 0.82, rare: 1.18, epic: 1.22, legendary: 0.62, glitch: 0.34 } },
-  { id: "neon_vault", emoji: "🟣", name_tr: "Neon Vault", name_en: "Neon Vault", description_tr: "Neon temalı Epic ağırlıklı seri.", description_en: "Neon-themed Epic-focused series.", accent: "purple", base_fee: 10, edge: 1.09, multipliers: { common: 0.68, rare: 1.05, epic: 1.55, legendary: 0.78, glitch: 0.42 } },
-  { id: "data_relic", emoji: "💿", name_tr: "Data Relic", name_en: "Data Relic", description_tr: "Arşiv/veri temalı Epic ve Legendary karışımı seri.", description_en: "Archive/data series with Epic and Legendary pressure.", accent: "cyan", base_fee: 12, edge: 1.1, multipliers: { common: 0.58, rare: 0.92, epic: 1.52, legendary: 1.1, glitch: 0.5 } },
-  { id: "core_capsule", emoji: "💠", name_tr: "Core Capsule", name_en: "Core Capsule", description_tr: "Çekirdek temalı Legendary şansı daha görünür seri.", description_en: "Core-themed series with more visible Legendary odds.", accent: "amber", base_fee: 14, edge: 1.11, multipliers: { common: 0.48, rare: 0.82, epic: 1.28, legendary: 1.62, glitch: 0.62 } },
-  { id: "firewall_chest", emoji: "🛡️", name_tr: "Firewall Chest", name_en: "Firewall Chest", description_tr: "Savunma temalı, güvenli ama pahalılaşan seri.", description_en: "Defense-themed series, safe but pricier.", accent: "rose", base_fee: 15, edge: 1.11, multipliers: { common: 0.5, rare: 0.85, epic: 1.42, legendary: 1.42, glitch: 0.58 } },
-  { id: "quantum_case", emoji: "⚙️", name_tr: "Quantum Case", name_en: "Quantum Case", description_tr: "Yüksek varyanslı, Legendary/Glitch kıpırtısı olan seri.", description_en: "High-variance series with Legendary/Glitch pressure.", accent: "amber", base_fee: 18, edge: 1.13, multipliers: { common: 0.36, rare: 0.7, epic: 1.25, legendary: 2.05, glitch: 0.9 } },
-  { id: "legend_vault", emoji: "🏛️", name_tr: "Legend Vault", name_en: "Legend Vault", description_tr: "Legendary odaklı pahalı koleksiyon serisi.", description_en: "Expensive Legendary-focused collection series.", accent: "amber", base_fee: 22, edge: 1.15, multipliers: { common: 0.28, rare: 0.52, epic: 1.05, legendary: 3.0, glitch: 1.0 } },
-  { id: "glitch_rift", emoji: "🕳️", name_tr: "Glitch Rift", name_en: "Glitch Rift", description_tr: "Glitch şansı en yüksek ama pahalı ve riskli seri.", description_en: "Highest Glitch chance, expensive and risky.", accent: "fuchsia", base_fee: 28, edge: 1.18, multipliers: { common: 0.2, rare: 0.42, epic: 0.95, legendary: 1.8, glitch: 4.4 } },
-  { id: "founder_box", emoji: "👑", name_tr: "Founder Box", name_en: "Founder Box", description_tr: "Etkinlik/admin ödülü premium Founder serisi.", description_en: "Premium Founder event/admin reward series.", accent: "purple", base_fee: 30, edge: 1.2, multipliers: { common: 0.2, rare: 0.52, epic: 1.28, legendary: 2.45, glitch: 2.4 } },
-  { id: "bioforge_pod", emoji: "🧪", name_tr: "Bioforge Pod", name_en: "Bioforge Pod", description_tr: "Biyo-teknoloji temalı dengeli Rare/Epic kutusu.", description_en: "Bio-tech themed balanced Rare/Epic box.", accent: "lime", base_fee: 11, edge: 1.08, multipliers: { common: 0.64, rare: 1.22, epic: 1.34, legendary: 0.9, glitch: 0.42 } },
-  { id: "skyline_drone", emoji: "🚁", name_tr: "Skyline Drone", name_en: "Skyline Drone", description_tr: "Drone ve hava ağı temalı orta seviye seri.", description_en: "Drone and aerial network themed mid-tier series.", accent: "blue", base_fee: 13, edge: 1.09, multipliers: { common: 0.55, rare: 1.08, epic: 1.42, legendary: 1.08, glitch: 0.48 } },
-  { id: "nova_terminal", emoji: "🌠", name_tr: "Nova Terminal", name_en: "Nova Terminal", description_tr: "Geç oyun için Epic/Legendary dengesi olan yeni seri.", description_en: "Late-game series with balanced Epic/Legendary odds.", accent: "rose", base_fee: 19, edge: 1.12, multipliers: { common: 0.34, rare: 0.72, epic: 1.42, legendary: 1.95, glitch: 0.82 } },
-  { id: "aether_locker", emoji: "🧰", name_tr: "Aether Locker", name_en: "Aether Locker", description_tr: "Koleksiyon avcıları için yüksek değerli ama kontrollü riskli seri.", description_en: "High-value but controlled-risk series for collectors.", accent: "fuchsia", base_fee: 24, edge: 1.14, multipliers: { common: 0.26, rare: 0.58, epic: 1.12, legendary: 2.35, glitch: 1.55 } },
+  { id: "standard_cache", emoji: "📦", name_tr: "Standard Cache", name_en: "Standard Cache", description_tr: "Klasik başlangıç serisi. Ucuz, dengeli ve güvenli.", description_en: "Classic starter series. Cheap, balanced and safe.", accent: "white", base_fee: 0, edge: 1.0, multipliers: { common: 1.2, rare: 0.95, epic: 0.68, legendary: 0.42, glitch: 0.2 } },
+  { id: "signal_crate", emoji: "📡", name_tr: "Signal Crate", name_en: "Signal Crate", description_tr: "Sinyal temalı Rare ağırlıklı seri.", description_en: "Signal-themed Rare-focused series.", accent: "cyan", base_fee: 1, edge: 1.02, multipliers: { common: 0.9, rare: 1.35, epic: 0.95, legendary: 0.55, glitch: 0.28 } },
+  { id: "circuit_box", emoji: "🔌", name_tr: "Circuit Box", name_en: "Circuit Box", description_tr: "Donanım temalı Rare/Epic dengesi güçlü seri.", description_en: "Hardware series with strong Rare/Epic balance.", accent: "emerald", base_fee: 1, edge: 1.03, multipliers: { common: 0.82, rare: 1.18, epic: 1.22, legendary: 0.62, glitch: 0.34 } },
+  { id: "neon_vault", emoji: "🟣", name_tr: "Neon Vault", name_en: "Neon Vault", description_tr: "Neon temalı Epic ağırlıklı seri.", description_en: "Neon-themed Epic-focused series.", accent: "purple", base_fee: 2, edge: 1.04, multipliers: { common: 0.68, rare: 1.05, epic: 1.55, legendary: 0.78, glitch: 0.42 } },
+  { id: "data_relic", emoji: "💿", name_tr: "Data Relic", name_en: "Data Relic", description_tr: "Arşiv/veri temalı Epic ve Legendary karışımı seri.", description_en: "Archive/data series with Epic and Legendary pressure.", accent: "cyan", base_fee: 2, edge: 1.05, multipliers: { common: 0.58, rare: 0.92, epic: 1.52, legendary: 1.1, glitch: 0.5 } },
+  { id: "core_capsule", emoji: "💠", name_tr: "Core Capsule", name_en: "Core Capsule", description_tr: "Çekirdek temalı Legendary şansı daha görünür seri.", description_en: "Core-themed series with more visible Legendary odds.", accent: "amber", base_fee: 3, edge: 1.05, multipliers: { common: 0.48, rare: 0.82, epic: 1.28, legendary: 1.62, glitch: 0.62 } },
+  { id: "firewall_chest", emoji: "🛡️", name_tr: "Firewall Chest", name_en: "Firewall Chest", description_tr: "Savunma temalı, güvenli ama pahalılaşan seri.", description_en: "Defense-themed series, safe but pricier.", accent: "rose", base_fee: 3, edge: 1.05, multipliers: { common: 0.5, rare: 0.85, epic: 1.42, legendary: 1.42, glitch: 0.58 } },
+  { id: "quantum_case", emoji: "⚙️", name_tr: "Quantum Case", name_en: "Quantum Case", description_tr: "Yüksek varyanslı, Legendary/Glitch kıpırtısı olan seri.", description_en: "High-variance series with Legendary/Glitch pressure.", accent: "amber", base_fee: 4, edge: 1.06, multipliers: { common: 0.36, rare: 0.7, epic: 1.25, legendary: 2.05, glitch: 0.9 } },
+  { id: "legend_vault", emoji: "🏛️", name_tr: "Legend Vault", name_en: "Legend Vault", description_tr: "Legendary odaklı pahalı koleksiyon serisi.", description_en: "Expensive Legendary-focused collection series.", accent: "amber", base_fee: 4, edge: 1.06, multipliers: { common: 0.28, rare: 0.52, epic: 1.05, legendary: 3.0, glitch: 1.0 } },
+  { id: "glitch_rift", emoji: "🕳️", name_tr: "Glitch Rift", name_en: "Glitch Rift", description_tr: "Glitch şansı en yüksek ama pahalı ve riskli seri.", description_en: "Highest Glitch chance, expensive and risky.", accent: "fuchsia", base_fee: 5, edge: 1.07, multipliers: { common: 0.2, rare: 0.42, epic: 0.95, legendary: 1.8, glitch: 4.4 } },
+  { id: "founder_box", emoji: "👑", name_tr: "Founder Box", name_en: "Founder Box", description_tr: "Etkinlik/admin ödülü premium Founder serisi.", description_en: "Premium Founder event/admin reward series.", accent: "purple", base_fee: 5, edge: 1.07, multipliers: { common: 0.2, rare: 0.52, epic: 1.28, legendary: 2.45, glitch: 2.4 } },
+  { id: "bioforge_pod", emoji: "🧪", name_tr: "Bioforge Pod", name_en: "Bioforge Pod", description_tr: "Biyo-teknoloji temalı dengeli Rare/Epic kutusu.", description_en: "Bio-tech themed balanced Rare/Epic box.", accent: "lime", base_fee: 2, edge: 1.04, multipliers: { common: 0.64, rare: 1.22, epic: 1.34, legendary: 0.9, glitch: 0.42 } },
+  { id: "skyline_drone", emoji: "🚁", name_tr: "Skyline Drone", name_en: "Skyline Drone", description_tr: "Drone ve hava ağı temalı orta seviye seri.", description_en: "Drone and aerial network themed mid-tier series.", accent: "blue", base_fee: 3, edge: 1.05, multipliers: { common: 0.55, rare: 1.08, epic: 1.42, legendary: 1.08, glitch: 0.48 } },
+  { id: "nova_terminal", emoji: "🌠", name_tr: "Nova Terminal", name_en: "Nova Terminal", description_tr: "Geç oyun için Epic/Legendary dengesi olan yeni seri.", description_en: "Late-game series with balanced Epic/Legendary odds.", accent: "rose", base_fee: 4, edge: 1.06, multipliers: { common: 0.34, rare: 0.72, epic: 1.42, legendary: 1.95, glitch: 0.82 } },
+  { id: "aether_locker", emoji: "🧰", name_tr: "Aether Locker", name_en: "Aether Locker", description_tr: "Koleksiyon avcıları için yüksek değerli ama kontrollü riskli seri.", description_en: "High-value but controlled-risk series for collectors.", accent: "fuchsia", base_fee: 5, edge: 1.07, multipliers: { common: 0.26, rare: 0.58, epic: 1.12, legendary: 2.35, glitch: 1.55 } },
 ];
 
 const SERIES_KITS: Record<string, SeriesKit> = {
@@ -515,7 +515,7 @@ async function buildState(context: any, userId: number) {
       box_open_spend_enabled: true,
       owned_box_opens_free: true,
       buy_and_open_with_tech_coin: true,
-      pricing: "ceil(expected_value * box_edge + base_fee)",
+      pricing: "ceil(expected_value * fair_edge + reduced_base_fee)",
       item_exclusivity: "one_item_one_box_series",
       payout_on_open: false,
       trade_enabled: true,
@@ -533,7 +533,15 @@ function enrichInventoryItem(row: any) {
 }
 function withBoxValue(box: BoxType) {
   const expectedValue = boxExpectedValue(box.id);
-  return { ...box, tech_coin_value: expectedValue, open_cost: boxOpenCost(box.id), value_formula: "exclusive_series_expected_value", series_count: itemsForBox(box.id).length };
+  const openCost = boxOpenCost(box.id);
+  return {
+    ...box,
+    tech_coin_value: expectedValue,
+    open_cost: openCost,
+    value_ratio: openCost ? Number((expectedValue / openCost).toFixed(4)) : 0,
+    value_formula: "exclusive_series_expected_value",
+    series_count: itemsForBox(box.id).length,
+  };
 }
 function boxOpenCost(boxType = "standard_cache") {
   const box = BOX_TYPES.find((entry) => entry.id === boxType) || BOX_TYPES[0];
