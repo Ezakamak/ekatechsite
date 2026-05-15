@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Bot, Coins, Gift, PackageOpen, RefreshCw, Repeat2, Send, Sparkles, Swords } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
+import { playOffSound } from "./OffSoundEngine";
 
 type Rarity = "common" | "rare" | "epic" | "legendary" | "glitch";
 
@@ -347,7 +348,7 @@ export function DropTech() {
     try {
       const data = await postAction({ action: "sell_item", item_id: item.item_id || item.id, quantity: 1 }, "Eşya bozdurulamadı.");
       setMessage({ type: "success", text: `${nameOf(item, tr)} +${formatNumber(Number(data?.sold?.payout || item.tech_coin_value || 0), locale)} TC` });
-      window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+      playOffSound("coin");
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Eşya bozdurulamadı." });
@@ -364,7 +365,7 @@ export function DropTech() {
     try {
       const data = await postAction({ action: "sell_all_items" }, "Envanter bozdurulamadı.");
       setMessage({ type: "success", text: `${copy.sellAll}: +${formatNumber(Number(data?.sold_all?.payout || 0), locale)} TC` });
-      window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+      playOffSound("coin");
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Envanter bozdurulamadı." });
@@ -377,7 +378,7 @@ export function DropTech() {
       const data = await postAction({ action: "create_battle", box_sequence: battleSequence }, "Battle lobisi oluşturulamadı.");
       setMessage({ type: "success", text: tr ? "Kasa savaşı lobisi oluşturuldu." : "Case battle lobby created." });
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
-      if (data?.battles?.[0]?.id) window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+      if (data?.battles?.[0]?.id) playOffSound("coin");
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Battle lobisi oluşturulamadı." });
     }
@@ -392,7 +393,7 @@ export function DropTech() {
     try {
       await postAction({ action: bot ? "battle_bot" : "join_battle", battle_id: battleId }, "Battle başlatılamadı.");
       setMessage({ type: "success", text: bot ? (tr ? "Bot oyuna kilitlendi; savaş başladı." : "Bot locked in; battle started.") : (tr ? "Battle başladı; oyuncular kilitlendi." : "Battle started; players locked.") });
-      window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "win" } }));
+      playOffSound("win");
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Battle başlatılamadı." });
@@ -402,7 +403,7 @@ export function DropTech() {
   async function sendBattleEmoji(battleId: number, emoji: string) {
     try {
       await postAction({ action: "battle_emoji", battle_id: battleId, emoji }, "Emoji gönderilemedi.");
-      window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+      playOffSound("coin");
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Emoji gönderilemedi." });
     }
@@ -413,6 +414,7 @@ export function DropTech() {
     try {
       await postAction({ action: "create_trade", recipient_id: Number(tradeUserId) }, "Takas isteği gönderilemedi.");
       setMessage({ type: "success", text: tr ? "Takas isteği gönderildi." : "Trade request sent." });
+      playOffSound("trade");
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Takas teklifi gönderilemedi." });
     }
@@ -423,6 +425,7 @@ export function DropTech() {
     try {
       await postAction({ action, trade_id: tradeId, ...extra }, "Takas güncellenemedi.");
       setMessage({ type: "success", text: tr ? "Takas güncellendi." : "Trade updated." });
+      playOffSound(action === "confirm_trade" ? "success" : action === "decline_trade" || action === "cancel_trade" ? "click" : "trade");
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Takas güncellenemedi." });
     }
@@ -434,6 +437,7 @@ export function DropTech() {
     try {
       await postAction({ action: "update_trade_items", trade_id: tradeId, item_id: itemId, quantity }, "Takas eşyası güncellenemedi.");
       setMessage({ type: "success", text: tr ? "Takas eşyası koyuldu." : "Trade item added." });
+      playOffSound("trade");
     } catch (caught) {
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Takas eşyası güncellenemedi." });
     }
@@ -443,6 +447,7 @@ export function DropTech() {
     if (!selectedBox || opening) return;
     if (!canOpenSelectedBox) {
       setMessage({ type: "error", text: `${copy.notEnough} ${copy.openCost}: ${formatNumber(selectedOpenCost, locale)} TC · ${copy.balance}: ${formatNumber(walletBalance, locale)} TC` });
+      playOffSound("error");
       return;
     }
     setOpening(true);
@@ -454,7 +459,7 @@ export function DropTech() {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Kutu açılamadı.");
       const found = data.won as DropItem;
-      window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: found?.rarity === "legendary" || found?.rarity === "glitch" ? "win" : "coin" } }));
+      playOffSound(found?.rarity === "legendary" || found?.rarity === "glitch" ? "win" : "reel");
       setWon(found);
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
       window.setTimeout(() => { setState(data); setOpening(false); }, 2700);
@@ -707,13 +712,13 @@ function LiveBattleCard({ battle, allItems, tr, locale, onEmoji, onNextRound }: 
       window.setTimeout(() => {
         setPhase("revealing_result");
         setRevealed(true);
-        window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+        playOffSound("coin");
         window.setTimeout(() => {
           setPhase("score_update");
           window.setTimeout(() => {
             if (targetRound >= totalRounds) {
               setPhase("finished");
-              void onNextRound(battle.id).then(() => window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "win" } }))).catch(() => undefined);
+              void onNextRound(battle.id).then(() => playOffSound("round")).catch(() => undefined);
             } else {
               setPhase("next_round_transition");
               window.setTimeout(() => {

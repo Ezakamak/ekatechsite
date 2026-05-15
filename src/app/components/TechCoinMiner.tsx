@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { Cpu, IceCreamBowl, LogOut, Pickaxe, RefreshCcw, Server, Snowflake, Timer, Wallet, Zap } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
+import { playOffSound } from "./OffSoundEngine";
 
 type MinerSession = {
   id: number;
@@ -187,8 +188,10 @@ export function TechCoinMiner() {
       if (!response.ok) throw new Error(data?.error || copy.error);
       setState(data);
       if (data?.message) setStatus({ type: "success", message: data.message });
+      playOffSound(action === "claim" ? "claim" : action === "start" ? "server" : "success");
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : copy.error });
+      playOffSound("error");
     } finally {
       setLoading(false);
     }

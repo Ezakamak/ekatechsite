@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Coins, Gem, Info, ShieldCheck, Sparkles } from "lucide-react";
 import { useLanguage } from "../i18n";
+import { playOffSound } from "./OffSoundEngine";
 
 type Tile = { id: number; isMine: boolean; isRevealed: boolean };
 type Notice = { type: "success" | "error" | "info"; text: string } | null;
@@ -246,15 +247,18 @@ export function TechCoinMines() {
     const betAmount = roundTc(gameState.betAmount);
     if (betAmount < 1) {
       setNotice({ type: "error", text: copy.minBet });
+      playOffSound("error");
       return;
     }
     if (gameState.balance < betAmount) {
       setNotice({ type: "error", text: copy.insufficient });
+      playOffSound("error");
       return;
     }
     const data = await runMinesAction({ action: "start", betAmount, mineCount: gameState.mineCount });
     if (!data) return;
     setNotice({ type: "info", text: copy.off });
+    playOffSound("bet");
   }
 
   async function cashout() {
@@ -262,6 +266,7 @@ export function TechCoinMines() {
     const data = await runMinesAction({ action: "cashout" });
     if (!data) return;
     setNotice({ type: "success", text: copy.cashed });
+    playOffSound("cashout");
     flashBoard("success");
   }
 
@@ -275,17 +280,20 @@ export function TechCoinMines() {
 
     if (data.message === "mine_hit") {
       setNotice({ type: "error", text: copy.mine });
+      playOffSound("mine");
       flashBoard("shake");
       return;
     }
 
     if (data.message === "perfect") {
       setNotice({ type: "success", text: copy.perfect });
+      playOffSound("win");
       flashBoard("success");
       return;
     }
 
     setNotice({ type: "success", text: copy.diamond });
+    playOffSound("diamond");
   }
 
   return (

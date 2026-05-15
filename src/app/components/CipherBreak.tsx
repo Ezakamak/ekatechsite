@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLanguage } from "../i18n";
+import { playOffSound } from "./OffSoundEngine";
 
 type User = { id: number; name: string; email: string; avatar_url?: string | null };
 type Lobby = {
@@ -221,23 +222,25 @@ export function CipherBreak() {
   }, [activeLobby?.id, language]);
 
   const createLobby = async () => {
-    await post({ action: "create" });
+    const d = await post({ action: "create" });
+    if (d?.lobby) playOffSound("join");
   };
 
   const joinLobby = async (id: number) => {
     const d = await post({ action: "join", lobby_id: id });
-    if (d?.lobby) setActiveLobby(d.lobby);
+    if (d?.lobby) { playOffSound("join"); setActiveLobby(d.lobby); }
   };
 
   const playWithBot = async (id: number) => {
     const d = await post({ action: "bot", lobby_id: id });
-    if (d?.lobby) setActiveLobby(d.lobby);
+    if (d?.lobby) { playOffSound("bot"); setActiveLobby(d.lobby); }
   };
 
   const enter = async (lobby: Lobby) => {
     setActiveLobby(lobby);
     setState(null);
     const d = await post({ action: "ready", lobby_id: lobby.id }, true);
+    if (d?.lobby) playOffSound("ready");
     if (!d?.lobby) await loadState(lobby.id, false);
   };
 
@@ -274,17 +277,20 @@ export function CipherBreak() {
 
   const submitCode = async () => {
     if (!lobby || !round || countdownActive || eliminated || myProgress >= lockGoal || round.status !== "active") return;
-    await post({ action: "submit", lobby_id: lobby.id, selected_code: activeCode }, true);
+    const d = await post({ action: "submit", lobby_id: lobby.id, selected_code: activeCode }, true);
+    playOffSound(d?.my_submission?.correct < 0 ? "error" : "code");
   };
 
   const nextRound = async () => {
     if (!lobby) return;
-    await post({ action: "next_round", lobby_id: lobby.id });
+    const d = await post({ action: "next_round", lobby_id: lobby.id });
+    if (d) playOffSound("round");
   };
 
   const readyCurrentRound = async () => {
     if (!lobby) return;
-    await post({ action: "ready", lobby_id: lobby.id }, true);
+    const d = await post({ action: "ready", lobby_id: lobby.id }, true);
+    if (d) playOffSound("ready");
   };
 
   return <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 sm:px-6">
