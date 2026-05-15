@@ -1,4 +1,8 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+const MIN_INITIAL_PRICE = 25;
+const MAX_INITIAL_PRICE = 250;
+const MIN_SYMBOL_LENGTH = 2;
+const MAX_SYMBOL_LENGTH = 8;
 
 export async function onRequestGet(context: any) {
   const admin = await requireAdminOrOwner(context);
@@ -16,7 +20,7 @@ export async function onRequestGet(context: any) {
         market_stock_submissions.*,
         users.name AS user_name,
         users.email AS user_email,
-        users.avatar_url AS user_avatar_url,
+        CASE WHEN COALESCE(users.avatar_approved, 0) = 1 THEN users.avatar_url ELSE '' END AS user_avatar_url,
         reviewer.name AS reviewer_name
       FROM market_stock_submissions
       JOIN users ON users.id = market_stock_submissions.user_id
@@ -65,14 +69,27 @@ export async function onRequestPatch(context: any) {
     if (submission.status !== "pending") return json({ error: "Bu başvuru zaten incelenmiş." }, 409);
 
     if (action === "approve") {
+      const symbol = String(submission.symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, MAX_SYMBOL_LENGTH);
+      const price = Number(submission.initial_price);
+      const risk = normalizeRisk(submission.risk);
+
+      if (!symbol || symbol.length < MIN_SYMBOL_LENGTH || symbol.length > MAX_SYMBOL_LENGTH) {
+        return json({ error: `Sembol ${MIN_SYMBOL_LENGTH}-${MAX_SYMBOL_LENGTH} karakter olmalı. Başvuru reddedilmeli veya yeniden gönderilmeli.` }, 400);
+      }
+      if (!Number.isFinite(price) || price < MIN_INITIAL_PRICE || price > MAX_INITIAL_PRICE) {
+        return json({ error: `Başlangıç fiyatı ${MIN_INITIAL_PRICE}-${MAX_INITIAL_PRICE} Tech Coin aralığında değil. Başvuru yayımlanamaz.` }, 400);
+      }
+      if (!risk) return json({ error: "Risk seviyesi geçersiz. Başvuru yayımlanamaz." }, 400);
+
       const existingStock = await context.env.DB
         .prepare(`SELECT symbol FROM market_stocks WHERE symbol = ?`)
-        .bind(submission.symbol)
+        .bind(symbol)
         .first();
 
       if (existingStock) return json({ error: "Bu sembol artık yayında. Başvuru onaylanamaz." }, 409);
 
-      const volatility = submission.risk === "low" ? 0.035 : submission.risk === "high" ? 0.085 : 0.055;
+      const volatility = risk === "low" ? 0.035 : risk === "high" ? 0.085 : 0.055;
+      const day = Number((await getMarketDay(context)) || 1);
 
       await context.env.DB.batch([
         context.env.DB
@@ -81,16 +98,19 @@ export async function onRequestPatch(context: any) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
           .bind(
-            submission.symbol,
+            symbol,
             submission.name,
             submission.sector,
             submission.description_tr,
             submission.description_en,
-            Number(submission.initial_price),
-            Number(submission.initial_price),
+            price,
+            price,
             volatility,
-            submission.risk
+            risk
           ),
+        context.env.DB
+          .prepare(`INSERT INTO market_price_history (symbol, price, day) VALUES (?, ?, ?)`)
+          .bind(symbol, price, day),
         context.env.DB
           .prepare(`
             UPDATE market_stock_submissions
@@ -105,11 +125,11 @@ export async function onRequestPatch(context: any) {
         action: "market_stock_submission_approved",
         targetType: "market_stock_submission",
         targetId: submissionId,
-        targetLabel: `${submission.symbol} · ${submission.name}`,
-        details: `${admin.user.name} ${submission.symbol} hisse başvurusunu onayladı ve yayına aldı.`,
+        targetLabel: `${symbol} · ${submission.name}`,
+        details: `${admin.user.name} ${symbol} hisse başvurusunu onayladı ve yayına aldı.`,
       });
 
-      await notify(context, submission.user_id, "Hisse başvurun onaylandı", `${submission.symbol} artık Eka InvestSim piyasasında yayında.`, "/off");
+      await notify(context, submission.user_id, "Hisse başvurun onaylandı", `${symbol} artık Eka InvestSim piyasasında yayında.`, "/off");
       return json({ success: true, message: "Hisse başvurusu onaylandı ve piyasaya eklendi." });
     }
 
@@ -145,8 +165,24 @@ async function ensureStockSubmissions(context: any) {
 }
 
 async function ensureMarketTables(context: any) {
+  await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS market_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`).run();
+  await context.env.DB.prepare(`INSERT OR IGNORE INTO market_meta (key, value) VALUES ('day', '1')`).run();
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS market_stocks (symbol TEXT PRIMARY KEY, name TEXT NOT NULL, sector TEXT NOT NULL, description_tr TEXT NOT NULL, description_en TEXT NOT NULL, price REAL NOT NULL, previous_price REAL NOT NULL, volatility REAL NOT NULL, risk TEXT NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
-  await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS market_price_history (id INTEGER PRIMARY KEY AUTOINCREMENT, symbol TEXT NOT NULL, price REAL NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS market_price_history (id INTEGER PRIMARY KEY AUTOINCREMENT, symbol TEXT NOT NULL, price REAL NOT NULL, day INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await addColumnIfMissing(context, "market_price_history", "day", "INTEGER NOT NULL DEFAULT 1");
+}
+
+async function getMarketDay(context: any) {
+  const row: any = await context.env.DB.prepare(`SELECT value FROM market_meta WHERE key = 'day'`).first();
+  return Number(row?.value || 1);
+}
+
+async function addColumnIfMissing(context: any, table: string, column: string, definition: string) {
+  try {
+    const columns = (await context.env.DB.prepare(`PRAGMA table_info(${table})`).all())?.results || [];
+    const exists = (columns as any[]).some((item) => item.name === column);
+    if (!exists) await context.env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  } catch {}
 }
 
 function canMutateAdminData(user: any) {
@@ -197,6 +233,15 @@ async function writeAuditLog(context: any, entry: any) {
       .bind(entry.actorUserId, entry.action, entry.targetType, entry.targetId, entry.targetLabel, entry.details)
       .run();
   } catch {}
+}
+
+function normalizeRisk(value: unknown) {
+  const risk = String(value || "").toLowerCase();
+  if (["low", "medium", "high"].includes(risk)) return risk;
+  if (risk === "düşük" || risk === "dusuk") return "low";
+  if (risk === "orta") return "medium";
+  if (risk === "yüksek" || risk === "yuksek") return "high";
+  return "";
 }
 
 function cleanText(value: unknown, max: number) {
