@@ -13,10 +13,21 @@ type StockSeed = {
   risk: "low" | "medium" | "high";
 };
 
+type NewsTone = "positive" | "negative" | "neutral";
+
 type NewsSeed = {
   target: string;
   impact: number;
-  tone: "positive" | "negative";
+  tone: NewsTone;
+  titleTr: string;
+  titleEn: string;
+  lessonTr: string;
+  lessonEn: string;
+};
+
+type NewsConcept = {
+  tone: NewsTone;
+  impact: number;
   titleTr: string;
   titleEn: string;
   lessonTr: string;
@@ -32,15 +43,354 @@ const STOCKS: StockSeed[] = [
   { symbol: "LUNA", name: "Luna Lojistik", sector: "Lojistik", descriptionTr: "Depo, kargo ve tedarik zinciri ağı işleten kurgu şirket.", descriptionEn: "A fictional warehousing, cargo and supply chain company.", price: 67, volatility: 0.044, risk: "medium" },
 ];
 
-const NEWS_POOL: NewsSeed[] = [
-  { target: "EKA", impact: 0.09, tone: "positive", titleTr: "EKA Yazılım yeni kurumsal otomasyon anlaşması duyurdu.", titleEn: "EKA Software announced a new enterprise automation deal.", lessonTr: "Pozitif haber fiyatı yükseltebilir; yine de fiyat her zaman haber kadar yükselmek zorunda değildir.", lessonEn: "Positive news can lift price, but price does not have to rise exactly as much as the news sounds." },
-  { target: "PIXEL", impact: -0.1, tone: "negative", titleTr: "Pixel Teknoloji ürün gecikmesi açıkladı.", titleEn: "Pixel Technology announced a product delay.", lessonTr: "Gecikme haberleri beklentiyi bozar. Kısa vadede oynaklık artabilir.", lessonEn: "Delay news weakens expectations. Short-term volatility can increase." },
-  { target: "NOVA", impact: 0.11, tone: "positive", titleTr: "NOVA Enerji yeni güneş paneli sahası için izin aldı.", titleEn: "NOVA Energy received approval for a new solar panel site.", lessonTr: "Büyüme haberi güçlüdür ama yüksek oynak hisselerde risk de büyür.", lessonEn: "Growth news is powerful, but risk also rises in volatile stocks." },
-  { target: "MARM", impact: 0.035, tone: "positive", titleTr: "Marmara Gıda istikrarlı satış raporu yayımladı.", titleEn: "Marmara Food published a stable sales report.", lessonTr: "Savunmacı şirketlerde hareket daha yavaş olabilir; amaç bazen istikrarı korumaktır.", lessonEn: "Defensive companies may move slower; sometimes the goal is stability." },
-  { target: "TURK", impact: -0.065, tone: "negative", titleTr: "TURK Savunma maliyet baskısı bildirdi.", titleEn: "TURK Defense reported cost pressure.", lessonTr: "Maliyet artışı kâr beklentisini düşürebilir. Sadece ciroya değil marja da bakılır.", lessonEn: "Rising costs can reduce profit expectations. Investors watch margins, not just revenue." },
-  { target: "LUNA", impact: 0.07, tone: "positive", titleTr: "Luna Lojistik yeni dağıtım merkezi açtı.", titleEn: "Luna Logistics opened a new distribution center.", lessonTr: "Kapasite artışı büyüme sinyalidir; fakat yatırımın geri dönüş süresi önemlidir.", lessonEn: "Capacity growth is a growth signal, but payback time matters." },
-  { target: "EKA", impact: -0.055, tone: "negative", titleTr: "Teknoloji sektöründe kâr realizasyonu görüldü.", titleEn: "Profit-taking appeared in the technology sector.", lessonTr: "İyi şirket bile düşebilir. Fiyat, haber, beklenti ve duygu birlikte hareket eder.", lessonEn: "Even a good company can fall. Price, news, expectations and sentiment move together." },
+const NEWS_CONCEPTS: NewsConcept[] = [
+  {
+    tone: "positive",
+    impact: 0.045,
+    titleTr: "{name} yeni müşteri kazanımı açıkladı.",
+    titleEn: "{name} announced a new customer win.",
+    lessonTr: "Yeni müşteri haberi gelir beklentisini artırabilir; sürdürülebilir olup olmadığı ayrıca izlenir.",
+    lessonEn: "A new customer win can improve revenue expectations; sustainability still needs to be watched.",
+  },
+  {
+    tone: "positive",
+    impact: 0.052,
+    titleTr: "{name} operasyon verimliliğinde iyileşme bildirdi.",
+    titleEn: "{name} reported improved operational efficiency.",
+    lessonTr: "Verimlilik artışı aynı satıştan daha fazla kâr üretme ihtimalini güçlendirir.",
+    lessonEn: "Efficiency gains can increase the chance of producing more profit from the same sales.",
+  },
+  {
+    tone: "positive",
+    impact: 0.061,
+    titleTr: "{name} yeni ürün lansmanında güçlü talep gördü.",
+    titleEn: "{name} saw strong demand after a new product launch.",
+    lessonTr: "Talep haberi fiyatı destekleyebilir; önemli olan talebin satışa dönüşmesidir.",
+    lessonEn: "Demand news can support price; what matters is whether demand converts into sales.",
+  },
+  {
+    tone: "positive",
+    impact: 0.038,
+    titleTr: "{sector} sektöründe beklentiler toparlandı; {name} olumlu ayrıştı.",
+    titleEn: "Expectations improved in the {sector} sector; {name} outperformed.",
+    lessonTr: "Sektör havası iyi olduğunda aynı sektördeki şirketler birlikte etkilenebilir.",
+    lessonEn: "When sector sentiment improves, companies in that sector can move together.",
+  },
+  {
+    tone: "positive",
+    impact: 0.072,
+    titleTr: "{name} büyük ölçekli stratejik ortaklık duyurdu.",
+    titleEn: "{name} announced a large-scale strategic partnership.",
+    lessonTr: "Stratejik ortaklıklar büyüme hikâyesini güçlendirir ama beklenti fazla şişerse risk de artar.",
+    lessonEn: "Strategic partnerships strengthen growth stories, but overextended expectations increase risk.",
+  },
+  {
+    tone: "positive",
+    impact: 0.034,
+    titleTr: "{name} borçluluk oranını düşürdüğünü açıkladı.",
+    titleEn: "{name} said it reduced its debt ratio.",
+    lessonTr: "Borç azalması finansal riski düşürebilir ve şirketi daha dayanıklı gösterebilir.",
+    lessonEn: "Lower debt can reduce financial risk and make a company look more resilient.",
+  },
+  {
+    tone: "positive",
+    impact: 0.066,
+    titleTr: "{name} beklentilerin üzerinde dönemsel sonuç yayımladı.",
+    titleEn: "{name} published results above expectations.",
+    lessonTr: "Piyasa çoğu zaman mutlak sonuçtan çok beklentiye göre gelen sürprizi fiyatlar.",
+    lessonEn: "Markets often price the surprise versus expectations more than the absolute result.",
+  },
+  {
+    tone: "positive",
+    impact: 0.049,
+    titleTr: "{name} yeni pazara giriş planını hızlandırdı.",
+    titleEn: "{name} accelerated its new market entry plan.",
+    lessonTr: "Yeni pazar büyüme fırsatı demektir; fakat uygulama maliyeti de dikkate alınır.",
+    lessonEn: "A new market means growth opportunity, but execution cost also matters.",
+  },
+  {
+    tone: "positive",
+    impact: 0.041,
+    titleTr: "{name} maliyet kontrol programında ilk sonuçları aldı.",
+    titleEn: "{name} saw early results from its cost control program.",
+    lessonTr: "Maliyet kontrolü marjları destekleyebilir; gelir büyümesiyle birleşirse etkisi artar.",
+    lessonEn: "Cost control can support margins; its impact grows when combined with revenue growth.",
+  },
+  {
+    tone: "positive",
+    impact: 0.057,
+    titleTr: "{name} analist beklentilerinde yukarı revizyon aldı.",
+    titleEn: "{name} received upward analyst expectation revisions.",
+    lessonTr: "Beklenti revizyonları fiyatı etkileyebilir; yine de tek başına karar sebebi değildir.",
+    lessonEn: "Expectation revisions can affect price, but they are not a decision reason by themselves.",
+  },
+  {
+    tone: "positive",
+    impact: 0.029,
+    titleTr: "{name} tedarik zincirinde iyileşme sinyali verdi.",
+    titleEn: "{name} signaled improvement in its supply chain.",
+    lessonTr: "Tedarik rahatlaması stok, teslimat ve maliyet tarafında olumlu algılanabilir.",
+    lessonEn: "Supply-chain relief can be positive for inventory, delivery and cost expectations.",
+  },
+  {
+    tone: "positive",
+    impact: 0.063,
+    titleTr: "{name} yeni teknoloji yatırımıyla kapasite artırıyor.",
+    titleEn: "{name} is expanding capacity with a new technology investment.",
+    lessonTr: "Kapasite artışı büyüme sinyalidir; yatırımın geri dönüş süresi kritik kalır.",
+    lessonEn: "Capacity expansion is a growth signal; payback time remains critical.",
+  },
+  {
+    tone: "positive",
+    impact: 0.047,
+    titleTr: "{name} müşteri memnuniyeti skorunda yükseliş açıkladı.",
+    titleEn: "{name} reported an increase in customer satisfaction scores.",
+    lessonTr: "Müşteri memnuniyeti uzun vadede sadakat ve satış kalitesini etkileyebilir.",
+    lessonEn: "Customer satisfaction can affect loyalty and sales quality over the long term.",
+  },
+  {
+    tone: "positive",
+    impact: 0.055,
+    titleTr: "{name} ihracat benzeri dış gelir kanalını güçlendirdi.",
+    titleEn: "{name} strengthened an export-like external revenue channel.",
+    lessonTr: "Gelir çeşitliliği tek pazara bağımlılığı azaltabilir.",
+    lessonEn: "Revenue diversification can reduce dependence on a single market.",
+  },
+  {
+    tone: "positive",
+    impact: 0.036,
+    titleTr: "{name} kurumsal yönetim notunda iyileşme duyurdu.",
+    titleEn: "{name} announced an improvement in its governance score.",
+    lessonTr: "Kurumsal yönetim algısı güveni artırabilir fakat fiyat etkisi genelde sınırlıdır.",
+    lessonEn: "Governance perception can improve trust, though price impact is often limited.",
+  },
+  {
+    tone: "positive",
+    impact: 0.068,
+    titleTr: "{name} pazar payında artış yakaladı.",
+    titleEn: "{name} captured higher market share.",
+    lessonTr: "Pazar payı artışı rekabet gücü sinyalidir; marjlarla birlikte okunmalıdır.",
+    lessonEn: "Market share growth signals competitiveness; it should be read together with margins.",
+  },
+  {
+    tone: "negative",
+    impact: -0.042,
+    titleTr: "{name} beklenenden zayıf talep sinyali verdi.",
+    titleEn: "{name} signaled weaker-than-expected demand.",
+    lessonTr: "Talep zayıflığı gelir beklentisini bozar ve kısa vadeli baskı yaratabilir.",
+    lessonEn: "Weak demand hurts revenue expectations and can create short-term pressure.",
+  },
+  {
+    tone: "negative",
+    impact: -0.054,
+    titleTr: "{name} maliyet artışı nedeniyle marj baskısı bildirdi.",
+    titleEn: "{name} reported margin pressure from rising costs.",
+    lessonTr: "Maliyet artışı satış iyi olsa bile kârlılığı düşürebilir.",
+    lessonEn: "Rising costs can reduce profitability even when sales look healthy.",
+  },
+  {
+    tone: "negative",
+    impact: -0.067,
+    titleTr: "{name} ürün veya proje teslimatında gecikme açıkladı.",
+    titleEn: "{name} announced a product or project delivery delay.",
+    lessonTr: "Gecikmeler beklentiyi bozar; yüksek oynak hisselerde etki daha sert olabilir.",
+    lessonEn: "Delays weaken expectations; impact can be sharper in high-volatility stocks.",
+  },
+  {
+    tone: "negative",
+    impact: -0.049,
+    titleTr: "{sector} sektöründe regülasyon belirsizliği arttı; {name} baskı gördü.",
+    titleEn: "Regulatory uncertainty increased in the {sector} sector; {name} came under pressure.",
+    lessonTr: "Regülasyon belirsizliği şirketten bağımsız sektör riski yaratabilir.",
+    lessonEn: "Regulatory uncertainty can create sector risk independent of company quality.",
+  },
+  {
+    tone: "negative",
+    impact: -0.036,
+    titleTr: "{name} rekabet baskısının arttığını belirtti.",
+    titleEn: "{name} said competitive pressure increased.",
+    lessonTr: "Rekabet artışı fiyatlama gücünü ve kâr marjını zorlayabilir.",
+    lessonEn: "Rising competition can pressure pricing power and profit margins.",
+  },
+  {
+    tone: "negative",
+    impact: -0.074,
+    titleTr: "{name} beklenti altı finansal sonuç yayımladı.",
+    titleEn: "{name} published financial results below expectations.",
+    lessonTr: "Beklenti altı sonuç, kötü haber zaten fiyatlanmadıysa sert tepki doğurabilir.",
+    lessonEn: "Below-expectation results can cause a sharp reaction if bad news was not already priced in.",
+  },
+  {
+    tone: "negative",
+    impact: -0.031,
+    titleTr: "{name} kısa vadeli nakit akışı baskısı yaşayabileceğini açıkladı.",
+    titleEn: "{name} said it may face short-term cash flow pressure.",
+    lessonTr: "Nakit akışı şirketin günlük dayanıklılığını gösterir; kârdan ayrı takip edilir.",
+    lessonEn: "Cash flow shows day-to-day resilience and is tracked separately from profit.",
+  },
+  {
+    tone: "negative",
+    impact: -0.058,
+    titleTr: "{name} tedarik sorunu nedeniyle üretim planını aşağı çekti.",
+    titleEn: "{name} lowered its production plan due to supply issues.",
+    lessonTr: "Tedarik sorunu satış ve teslimat zincirini bozabilir.",
+    lessonEn: "Supply issues can disrupt sales and delivery chains.",
+  },
+  {
+    tone: "negative",
+    impact: -0.046,
+    titleTr: "{name} yönetim değişikliği sonrası belirsizlikle karşılaştı.",
+    titleEn: "{name} faced uncertainty after a management change.",
+    lessonTr: "Yönetim değişikliği her zaman kötü değildir; fakat geçiş döneminde belirsizlik artar.",
+    lessonEn: "Management change is not always bad, but uncertainty rises during transition.",
+  },
+  {
+    tone: "negative",
+    impact: -0.052,
+    titleTr: "{name} büyük müşterilerinden birinde sipariş yavaşlaması gördü.",
+    titleEn: "{name} saw order slowdown from a major customer.",
+    lessonTr: "Müşteri yoğunlaşması varsa tek müşterideki yavaşlama büyük etki yaratabilir.",
+    lessonEn: "If customer concentration is high, one customer's slowdown can matter a lot.",
+  },
+  {
+    tone: "negative",
+    impact: -0.039,
+    titleTr: "{name} stok seviyelerinde geçici artış bildirdi.",
+    titleEn: "{name} reported a temporary increase in inventory levels.",
+    lessonTr: "Stok artışı bazen talep zayıflığına, bazen de hazırlığa işaret eder; bağlam önemlidir.",
+    lessonEn: "Inventory growth can signal weak demand or preparation; context matters.",
+  },
+  {
+    tone: "negative",
+    impact: -0.061,
+    titleTr: "{name} yatırım harcamalarının beklenenden yüksek olacağını açıkladı.",
+    titleEn: "{name} said investment spending will be higher than expected.",
+    lessonTr: "Yatırım büyümeyi destekler ama kısa vadede nakit ve kâr üzerinde baskı kurabilir.",
+    lessonEn: "Investment supports growth but can pressure cash and profit in the short term.",
+  },
+  {
+    tone: "negative",
+    impact: -0.044,
+    titleTr: "{name} fiyatlama gücünde sınırlı zayıflama sinyali verdi.",
+    titleEn: "{name} signaled limited weakening in pricing power.",
+    lessonTr: "Fiyatlama gücü azaldığında şirket maliyeti müşteriye yansıtmakta zorlanabilir.",
+    lessonEn: "When pricing power weakens, a company may struggle to pass costs to customers.",
+  },
+  {
+    tone: "negative",
+    impact: -0.057,
+    titleTr: "{name} siber/operasyonel güvenlik testinde sorun yaşadı.",
+    titleEn: "{name} faced an issue in a cyber or operational security test.",
+    lessonTr: "Operasyonel riskler doğrudan gelir tablosuna girmese bile güven algısını etkileyebilir.",
+    lessonEn: "Operational risks may not immediately hit income statements but can affect trust.",
+  },
+  {
+    tone: "negative",
+    impact: -0.033,
+    titleTr: "{name} kısa vadeli görünümde temkinli ton kullandı.",
+    titleEn: "{name} used a cautious tone for the short-term outlook.",
+    lessonTr: "Şirket dili bazen sayılardan önce beklentiyi değiştirir.",
+    lessonEn: "Company tone can sometimes shift expectations before the numbers do.",
+  },
+  {
+    tone: "negative",
+    impact: -0.069,
+    titleTr: "{name} ana projesinde beklenmedik revizyon açıkladı.",
+    titleEn: "{name} announced an unexpected revision in a key project.",
+    lessonTr: "Ana projedeki revizyon hikâyeyi değiştirirse fiyat tepkisi güçlü olabilir.",
+    lessonEn: "If a key project revision changes the story, price reaction can be strong.",
+  },
+  {
+    tone: "neutral",
+    impact: 0.012,
+    titleTr: "{name} yatırımcı sunumunu güncelledi.",
+    titleEn: "{name} updated its investor presentation.",
+    lessonTr: "Her haber büyük fiyat hareketi yaratmaz; bazen bilgi akışı sadece izleme sinyalidir.",
+    lessonEn: "Not every headline causes a large move; some news is simply information to monitor.",
+  },
+  {
+    tone: "neutral",
+    impact: -0.009,
+    titleTr: "{name} olağan kurul toplantısı takvimini paylaştı.",
+    titleEn: "{name} shared its regular meeting calendar.",
+    lessonTr: "Takvim haberleri genelde sınırlı etki yapar; önemli olan toplantıdan çıkacak kararlardır.",
+    lessonEn: "Calendar news usually has limited impact; decisions from the meeting matter more.",
+  },
+  {
+    tone: "neutral",
+    impact: 0.006,
+    titleTr: "{name} sektör raporunda ortalama görünümle yer aldı.",
+    titleEn: "{name} appeared with an average outlook in a sector report.",
+    lessonTr: "Nötr haberler piyasayı sakin tutabilir; fiyat yine de genel duyguya bağlı oynar.",
+    lessonEn: "Neutral news can keep markets calm; price can still move with broader sentiment.",
+  },
+  {
+    tone: "neutral",
+    impact: 0.014,
+    titleTr: "{name} küçük ölçekli süreç iyileştirmesi duyurdu.",
+    titleEn: "{name} announced a small process improvement.",
+    lessonTr: "Küçük iyileştirmeler uzun vadede anlamlı olabilir ama kısa vadede etkisi sınırlıdır.",
+    lessonEn: "Small improvements can matter long-term, but short-term impact is limited.",
+  },
+  {
+    tone: "neutral",
+    impact: -0.012,
+    titleTr: "{name} geçici bakım çalışması planladığını bildirdi.",
+    titleEn: "{name} announced planned temporary maintenance work.",
+    lessonTr: "Planlı bakım olağan olabilir; sorun plansız kesinti veya uzun süreli aksaklıktır.",
+    lessonEn: "Planned maintenance can be normal; unplanned or prolonged disruption is the issue.",
+  },
+  {
+    tone: "neutral",
+    impact: 0.01,
+    titleTr: "{name} marka yenileme çalışmasını tamamladı.",
+    titleEn: "{name} completed a brand refresh.",
+    lessonTr: "Marka haberleri algıyı etkileyebilir; finansal etki için satış verisi gerekir.",
+    lessonEn: "Brand news can affect perception; sales data is needed for financial impact.",
+  },
+  {
+    tone: "neutral",
+    impact: -0.006,
+    titleTr: "{name} küçük çaplı organizasyon güncellemesi yaptı.",
+    titleEn: "{name} made a small organizational update.",
+    lessonTr: "Organizasyon haberleri tek başına güçlü sinyal değildir; sonuçları izlemek gerekir.",
+    lessonEn: "Organizational news is not a strong signal alone; outcomes need to be watched.",
+  },
+  {
+    tone: "neutral",
+    impact: 0.008,
+    titleTr: "{name} sürdürülebilirlik hedeflerini tekrar teyit etti.",
+    titleEn: "{name} reaffirmed its sustainability targets.",
+    lessonTr: "Hedef teyidi güven verir ama fiyat etkisi genellikle performans verisiyle oluşur.",
+    lessonEn: "Target reaffirmation can build trust, but price impact usually needs performance data.",
+  },
 ];
+
+const NEWS_POOL: NewsSeed[] = buildNewsPool();
+
+function buildNewsPool() {
+  return STOCKS.flatMap((stock) => {
+    const riskMultiplier = stock.risk === "high" ? 1.22 : stock.risk === "low" ? 0.72 : 1;
+    const sectorMultiplier = stock.sector === "Gıda" ? 0.82 : stock.sector === "Teknoloji" ? 1.08 : 1;
+
+    return NEWS_CONCEPTS.map((concept) => ({
+      target: stock.symbol,
+      impact: Number((concept.impact * riskMultiplier * sectorMultiplier).toFixed(4)),
+      tone: concept.tone,
+      titleTr: fillNewsTemplate(concept.titleTr, stock),
+      titleEn: fillNewsTemplate(concept.titleEn, stock),
+      lessonTr: concept.lessonTr,
+      lessonEn: concept.lessonEn,
+    }));
+  });
+}
+
+function fillNewsTemplate(template: string, stock: StockSeed) {
+  return template
+    .replaceAll("{name}", stock.name)
+    .replaceAll("{symbol}", stock.symbol)
+    .replaceAll("{sector}", stock.sector);
+}
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
