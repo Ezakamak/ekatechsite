@@ -4,6 +4,7 @@ import { BarChart3, Gamepad2, Lock, Pickaxe, Shield, Sparkles, Swords, Trophy, Z
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSyncFixed";
+import { TechDuelBotAssist } from "./TechDuelBotAssist";
 import { CipherBreak } from "./CipherBreak";
 import { CoreRaid } from "./CoreRaid";
 import { MarketAcademy } from "./MarketAcademy";
@@ -201,7 +202,12 @@ export function OffPage() {
             ← {copy.backHub}
           </button>
         </div>
-        {activeGame === "duel" ? <TechDuelSync /> : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : activeGame === "miner" ? <TechCoinMiner /> : <MarketAcademy />}
+        {activeGame === "duel" ? (
+          <>
+            <TechDuelSync />
+            <TechDuelBotAssist />
+          </>
+        ) : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : activeGame === "miner" ? <TechCoinMiner /> : <MarketAcademy />}
       </>
     );
   }
