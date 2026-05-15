@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Box, Gift, PackageOpen, RefreshCw, Sparkles } from "lucide-react";
 import { useLanguage } from "../i18n";
@@ -16,6 +16,7 @@ type DropItem = {
 };
 
 type InventoryItem = DropItem & {
+  item_id?: string;
   quantity: number;
   last_found_at?: string | null;
 };
@@ -107,7 +108,6 @@ export function DropTech() {
     all: "Tümü",
     owned: "Sahip olunan",
     empty: "Henüz eşya yok. Günlük kutunu alıp aç.",
-    close: "Kapat",
     add: "Envantere eklendi",
   } : {
     loading: "Loading DropTech...",
@@ -127,7 +127,6 @@ export function DropTech() {
     all: "All",
     owned: "Owned",
     empty: "No items yet. Claim and open your daily box.",
-    close: "Close",
     add: "Added to inventory",
   }, [tr]);
 
@@ -339,6 +338,6 @@ function Stat({ label, value }: { label: string; value: string }) {
   return <div className="rounded-2xl border border-white/10 bg-black/35 p-4"><p className="text-xs uppercase tracking-[0.16em] text-white/35">{label}</p><p className="mt-2 text-2xl font-semibold text-white">{value}</p></div>;
 }
 
-function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button onClick={onClick} className={`rounded-full border px-4 py-2 text-xs font-medium transition ${active ? "border-white/40 bg-white text-black" : "border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.08]"}`}>{children}</button>;
 }
