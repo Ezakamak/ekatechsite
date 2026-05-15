@@ -24,6 +24,7 @@ import { CookieConsent } from "./components/CookieConsent";
 import { AdminPanel } from "./components/AdminPanel";
 import { AdminOffCredits } from "./components/AdminOffCredits";
 import { AdminUserActivity } from "./components/AdminUserActivity";
+import { AdminBotProfiles } from "./components/AdminBotProfiles";
 import { AdminApprovalCenter } from "./components/AdminApprovalCenter";
 import { AdminStockSubmissions } from "./components/AdminStockSubmissions";
 import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
@@ -156,6 +157,7 @@ export default function App() {
               <div className="mx-auto max-w-7xl space-y-6">
                 <AdminOffCredits />
                 <AdminUserActivity />
+                <AdminBotProfiles />
                 <AdminApprovalCenter />
                 <AdminStockSubmissions />
                 <MaintenancePanel />
