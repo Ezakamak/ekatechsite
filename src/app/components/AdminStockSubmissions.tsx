@@ -40,6 +40,7 @@ export function AdminStockSubmissions() {
             error: "Hisse başvuruları alınamadı.",
             notePlaceholder: "Admin notu / red sebebi (isteğe bağlı)",
             submittedBy: "Gönderen",
+            reviewedBy: "İnceleyen",
             price: "Başlangıç fiyatı",
             risk: "Risk",
             low: "Düşük",
@@ -62,6 +63,7 @@ export function AdminStockSubmissions() {
             error: "Could not load stock submissions.",
             notePlaceholder: "Admin note / rejection reason (optional)",
             submittedBy: "Submitted by",
+            reviewedBy: "Reviewed by",
             price: "Initial price",
             risk: "Risk",
             low: "Low",
@@ -131,6 +133,12 @@ export function AdminStockSubmissions() {
     return copy.medium;
   }
 
+  function statusLabel(statusValue: string) {
+    if (statusValue === "approved") return copy.approved;
+    if (statusValue === "rejected") return copy.rejected;
+    return copy.pending;
+  }
+
   const filters = [
     { value: "pending", label: copy.pending },
     { value: "approved", label: copy.approved },
@@ -188,7 +196,7 @@ export function AdminStockSubmissions() {
                   <p className="mt-1 text-sm text-white/45">{item.name} · {item.sector}</p>
                 </div>
                 <span className={`rounded-full px-3 py-1 text-xs ${item.status === "approved" ? "bg-emerald-300/10 text-emerald-100" : item.status === "rejected" ? "bg-red-300/10 text-red-100" : "bg-amber-300/10 text-amber-100"}`}>
-                  {item.status}
+                  {statusLabel(item.status)}
                 </span>
               </div>
 
@@ -197,10 +205,10 @@ export function AdminStockSubmissions() {
                 <Info label={copy.risk} value={riskLabel(item.risk)} />
               </div>
 
-              <p className="mt-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-sm leading-6 text-white/70">{item.description_tr}</p>
+              <p className="mt-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-sm leading-6 text-white/70">{tr ? item.description_tr : item.description_en || item.description_tr}</p>
 
               <p className="mt-3 text-xs text-white/35">{copy.submittedBy}: {item.user_name || "-"} · {item.user_email || "-"}</p>
-              {item.reviewer_name ? <p className="mt-1 text-xs text-white/35">Reviewer: {item.reviewer_name}</p> : null}
+              {item.reviewer_name ? <p className="mt-1 text-xs text-white/35">{copy.reviewedBy}: {item.reviewer_name}</p> : null}
               {item.reviewer_note ? <p className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-3 text-xs text-white/45">{item.reviewer_note}</p> : null}
 
               {item.status === "pending" && (
