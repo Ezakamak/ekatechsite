@@ -73,18 +73,10 @@ export async function onRequestPost(context: any) {
 }
 
 async function createLobby(context: any, userId: number) {
-  const existing = await context.env.DB
-    .prepare("SELECT id FROM cipher_lobbies WHERE creator_user_id = ? AND status = 'open' LIMIT 1")
-    .bind(userId)
-    .first();
-
+  const existing = await context.env.DB.prepare("SELECT id FROM cipher_lobbies WHERE creator_user_id = ? AND status = 'open' LIMIT 1").bind(userId).first();
   if (existing) return Response.json({ error: "Zaten açık bir Cipher Break lobby'n var." }, { status: 409 });
 
-  const result = await context.env.DB
-    .prepare("INSERT INTO cipher_lobbies (creator_user_id, reward_amount, round_count, status) VALUES (?, ?, ?, 'open')")
-    .bind(userId, FIXED_REWARD_AMOUNT, ROUND_COUNT)
-    .run();
-
+  const result = await context.env.DB.prepare("INSERT INTO cipher_lobbies (creator_user_id, reward_amount, round_count, status) VALUES (?, ?, ?, 'open')").bind(userId, FIXED_REWARD_AMOUNT, ROUND_COUNT).run();
   return Response.json({ success: true, lobby_id: result?.meta?.last_row_id });
 }
 
@@ -92,11 +84,7 @@ async function joinLobby(context: any, lobby: any, userId: number) {
   if (lobby.status !== "open") return Response.json({ error: "Bu lobby artık açık değil." }, { status: 409 });
   if (Number(lobby.creator_user_id) === Number(userId)) return Response.json({ error: "Kendi lobby'ne katılamazsın." }, { status: 400 });
 
-  const update = await context.env.DB
-    .prepare("UPDATE cipher_lobbies SET opponent_user_id = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ? AND status = 'open' AND opponent_user_id IS NULL")
-    .bind(userId, lobby.id)
-    .run();
-
+  const update = await context.env.DB.prepare("UPDATE cipher_lobbies SET opponent_user_id = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ? AND status = 'open' AND opponent_user_id IS NULL").bind(userId, lobby.id).run();
   if (Number(update?.meta?.changes || 0) === 0) return Response.json({ error: "Bu lobby'ye başka biri katılmış." }, { status: 409 });
 
   return Response.json(await buildState(context, lobby.id, userId));
@@ -111,12 +99,9 @@ async function joinBotLobby(context: any, lobby: any, userId: number) {
   const bot = await ensureBotUser(context, profile);
   if (!bot?.id) return Response.json({ error: "Bot profili hazırlanamadı." }, { status: 500 });
 
-  const update = await context.env.DB
-    .prepare("UPDATE cipher_lobbies SET opponent_user_id = ?, reward_amount = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ? AND status = 'open' AND opponent_user_id IS NULL")
-    .bind(bot.id, BOT_REWARD_AMOUNT, lobby.id)
-    .run();
-
+  const update = await context.env.DB.prepare("UPDATE cipher_lobbies SET opponent_user_id = ?, reward_amount = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ? AND status = 'open' AND opponent_user_id IS NULL").bind(bot.id, BOT_REWARD_AMOUNT, lobby.id).run();
   if (Number(update?.meta?.changes || 0) === 0) return Response.json({ error: "Bu lobby'ye başka biri katılmış." }, { status: 409 });
+
   const updated = await getLobby(context, Number(lobby.id));
   await markReadyAndMaybeStartRaw(context, updated, userId);
   await markReadyAndMaybeStartRaw(context, updated, Number(bot.id));
@@ -137,29 +122,17 @@ async function markReadyAndMaybeStartRaw(context: any, lobby: any, userId: numbe
   const roundNumber = await getPendingRoundNumber(context, lobby.id);
   if (roundNumber > Number(lobby.round_count || ROUND_COUNT)) return;
 
-  const existingRound = await context.env.DB
-    .prepare("SELECT id FROM cipher_rounds WHERE lobby_id = ? AND round_number = ? LIMIT 1")
-    .bind(lobby.id, roundNumber)
-    .first();
-
+  const existingRound = await context.env.DB.prepare("SELECT id FROM cipher_rounds WHERE lobby_id = ? AND round_number = ? LIMIT 1").bind(lobby.id, roundNumber).first();
   if (existingRound) return;
 
-  await context.env.DB
-    .prepare("INSERT OR IGNORE INTO cipher_round_ready (lobby_id, round_number, user_id, ready_at) VALUES (?, ?, ?, datetime('now'))")
-    .bind(lobby.id, roundNumber, userId)
-    .run();
-
+  await context.env.DB.prepare("INSERT OR IGNORE INTO cipher_round_ready (lobby_id, round_number, user_id, ready_at) VALUES (?, ?, ?, datetime('now'))").bind(lobby.id, roundNumber, userId).run();
   await touchLobby(context, lobby.id);
 
   if (await bothPlayersReady(context, lobby, roundNumber)) await createRound(context, lobby, roundNumber);
 }
 
 async function bothPlayersReady(context: any, lobby: any, roundNumber: number) {
-  const row = await context.env.DB
-    .prepare("SELECT COUNT(DISTINCT user_id) AS ready_count FROM cipher_round_ready WHERE lobby_id = ? AND round_number = ? AND user_id IN (?, ?)")
-    .bind(lobby.id, roundNumber, lobby.creator_user_id, lobby.opponent_user_id)
-    .first();
-
+  const row = await context.env.DB.prepare("SELECT COUNT(DISTINCT user_id) AS ready_count FROM cipher_round_ready WHERE lobby_id = ? AND round_number = ? AND user_id IN (?, ?)").bind(lobby.id, roundNumber, lobby.creator_user_id, lobby.opponent_user_id).first();
   return Number(row?.ready_count || 0) >= 2;
 }
 
@@ -170,9 +143,7 @@ async function submitCode(context: any, lobbyId: number, userId: number, selecte
 
   const nowMs = Date.now();
   const startedMs = Date.parse(round.started_at);
-  if (!Number.isFinite(startedMs) || nowMs < startedMs) {
-    return Response.json({ error: "Geri sayım bitmeden kilitleme yapılamaz." }, { status: 409 });
-  }
+  if (!Number.isFinite(startedMs) || nowMs < startedMs) return Response.json({ error: "Geri sayım bitmeden kilitleme yapılamaz." }, { status: 409 });
 
   if (nowMs - startedMs > ROUND_TIMEOUT_MS) {
     await finalizeRoundByTimeout(context, round);
@@ -184,11 +155,7 @@ async function submitCode(context: any, lobbyId: number, userId: number, selecte
 }
 
 async function applyCipherSubmission(context: any, lobbyId: number, round: any, userId: number, selectedCode: string, nowMs: number) {
-  const existing = await context.env.DB
-    .prepare("SELECT * FROM cipher_submissions WHERE lobby_id = ? AND round_number = ? AND user_id = ? LIMIT 1")
-    .bind(lobbyId, round.round_number, userId)
-    .first();
-
+  const existing = await context.env.DB.prepare("SELECT * FROM cipher_submissions WHERE lobby_id = ? AND round_number = ? AND user_id = ? LIMIT 1").bind(lobbyId, round.round_number, userId).first();
   const previousProgress = Number(existing?.correct || 0);
   if (previousProgress < 0 || previousProgress >= LOCKS_PER_ROUND) return;
 
@@ -215,10 +182,7 @@ async function applyCipherSubmission(context: any, lobbyId: number, round: any, 
     await touchLobby(context, lobbyId);
 
     if (nextProgress >= LOCKS_PER_ROUND) {
-      await context.env.DB
-        .prepare("UPDATE cipher_rounds SET status = 'completed', winner_user_id = ?, completed_at = datetime('now') WHERE lobby_id = ? AND round_number = ? AND status = 'active'")
-        .bind(userId, lobbyId, round.round_number)
-        .run();
+      await context.env.DB.prepare("UPDATE cipher_rounds SET status = 'completed', winner_user_id = ?, completed_at = datetime('now') WHERE lobby_id = ? AND round_number = ? AND status = 'active'").bind(userId, lobbyId, round.round_number).run();
       await touchLobby(context, lobbyId);
       await maybeCompleteLobby(context, lobbyId);
     }
@@ -236,16 +200,9 @@ async function applyCipherSubmission(context: any, lobbyId: number, round: any, 
 
     await touchLobby(context, lobbyId);
 
-    const row = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM cipher_submissions WHERE lobby_id = ? AND round_number = ? AND correct < 0")
-      .bind(lobbyId, round.round_number)
-      .first();
-
+    const row = await context.env.DB.prepare("SELECT COUNT(*) AS count FROM cipher_submissions WHERE lobby_id = ? AND round_number = ? AND correct < 0").bind(lobbyId, round.round_number).first();
     if (Number(row?.count || 0) >= 2) {
-      await context.env.DB
-        .prepare("UPDATE cipher_rounds SET status = 'completed', winner_user_id = NULL, completed_at = datetime('now') WHERE lobby_id = ? AND round_number = ? AND status = 'active'")
-        .bind(lobbyId, round.round_number)
-        .run();
+      await context.env.DB.prepare("UPDATE cipher_rounds SET status = 'completed', winner_user_id = NULL, completed_at = datetime('now') WHERE lobby_id = ? AND round_number = ? AND status = 'active'").bind(lobbyId, round.round_number).run();
       await touchLobby(context, lobbyId);
       await maybeCompleteLobby(context, lobbyId);
     }
@@ -267,21 +224,14 @@ async function nextRound(context: any, lobbyId: number, userId: number) {
   const next = await getPendingRoundNumber(context, lobbyId);
   if (next > Number(lobby.round_count || ROUND_COUNT)) return Response.json(await buildState(context, lobbyId, userId));
 
-  await context.env.DB
-    .prepare("INSERT OR IGNORE INTO cipher_round_ready (lobby_id, round_number, user_id, ready_at) VALUES (?, ?, ?, datetime('now'))")
-    .bind(lobbyId, next, userId)
-    .run();
+  await context.env.DB.prepare("INSERT OR IGNORE INTO cipher_round_ready (lobby_id, round_number, user_id, ready_at) VALUES (?, ?, ?, datetime('now'))").bind(lobbyId, next, userId).run();
 
   const botId = getBotUserIdFromLobby(lobby);
   if (botId) {
-    await context.env.DB
-      .prepare("INSERT OR IGNORE INTO cipher_round_ready (lobby_id, round_number, user_id, ready_at) VALUES (?, ?, ?, datetime('now'))")
-      .bind(lobbyId, next, botId)
-      .run();
+    await context.env.DB.prepare("INSERT OR IGNORE INTO cipher_round_ready (lobby_id, round_number, user_id, ready_at) VALUES (?, ?, ?, datetime('now'))").bind(lobbyId, next, botId).run();
   }
 
   await touchLobby(context, lobbyId);
-
   if (await bothPlayersReady(context, lobby, next)) await createRound(context, lobby, next);
 
   return Response.json(await buildState(context, lobbyId, userId));
@@ -295,17 +245,11 @@ async function listLobbies(context: any, whereSql: string, args: any[]) {
 }
 
 async function getLobby(context: any, lobbyId: number) {
-  return await context.env.DB
-    .prepare("SELECT l.*, creator.name AS creator_name, creator.email AS creator_email, creator.avatar_url AS creator_avatar_url, opponent.name AS opponent_name, opponent.email AS opponent_email, opponent.avatar_url AS opponent_avatar_url, winner.name AS winner_name FROM cipher_lobbies l JOIN users creator ON l.creator_user_id = creator.id LEFT JOIN users opponent ON l.opponent_user_id = opponent.id LEFT JOIN users winner ON l.winner_user_id = winner.id WHERE l.id = ?")
-    .bind(lobbyId)
-    .first();
+  return await context.env.DB.prepare("SELECT l.*, creator.name AS creator_name, creator.email AS creator_email, creator.avatar_url AS creator_avatar_url, opponent.name AS opponent_name, opponent.email AS opponent_email, opponent.avatar_url AS opponent_avatar_url, winner.name AS winner_name FROM cipher_lobbies l JOIN users creator ON l.creator_user_id = creator.id LEFT JOIN users opponent ON l.opponent_user_id = opponent.id LEFT JOIN users winner ON l.winner_user_id = winner.id WHERE l.id = ?").bind(lobbyId).first();
 }
 
 async function getCurrentRound(context: any, lobbyId: number) {
-  return await context.env.DB
-    .prepare("SELECT * FROM cipher_rounds WHERE lobby_id = ? ORDER BY round_number DESC LIMIT 1")
-    .bind(lobbyId)
-    .first();
+  return await context.env.DB.prepare("SELECT r.*, winner.name AS winner_name FROM cipher_rounds r LEFT JOIN users winner ON r.winner_user_id = winner.id WHERE r.lobby_id = ? ORDER BY r.round_number DESC LIMIT 1").bind(lobbyId).first();
 }
 
 async function getPendingRoundNumber(context: any, lobbyId: number) {
@@ -320,11 +264,7 @@ async function createRound(context: any, lobby: any, roundNumber: number) {
   const tickMs = Math.max(320, 700 - roundNumber * 50);
   const startedAt = new Date(Date.now() + START_DELAY_MS).toISOString();
 
-  await context.env.DB
-    .prepare("INSERT OR IGNORE INTO cipher_rounds (lobby_id, round_number, target_code, options_json, tick_ms, started_at, status) VALUES (?, ?, ?, ?, ?, ?, 'active')")
-    .bind(lobby.id, roundNumber, targets.join(""), JSON.stringify({ targets, options }), tickMs, startedAt)
-    .run();
-
+  await context.env.DB.prepare("INSERT OR IGNORE INTO cipher_rounds (lobby_id, round_number, target_code, options_json, tick_ms, started_at, status) VALUES (?, ?, ?, ?, ?, ?, 'active')").bind(lobby.id, roundNumber, targets.join(""), JSON.stringify({ targets, options }), tickMs, startedAt).run();
   await touchLobby(context, lobby.id);
 }
 
@@ -357,9 +297,7 @@ function makeSimilarCode(target: string) {
 function parseLocks(round: any) {
   try {
     const raw = JSON.parse(round?.options_json || "[]");
-    if (raw && Array.isArray(raw.targets) && Array.isArray(raw.options)) {
-      return raw.targets.map((target: string) => ({ target, options: raw.options }));
-    }
+    if (raw && Array.isArray(raw.targets) && Array.isArray(raw.options)) return raw.targets.map((target: string) => ({ target, options: raw.options }));
     if (raw && Array.isArray(raw.locks)) return raw.locks;
     if (Array.isArray(raw) && raw[0] && typeof raw[0] === "object" && raw[0].target && Array.isArray(raw[0].options)) return raw;
     if (Array.isArray(raw)) return [{ target: round.target_code, options: raw }];
@@ -393,6 +331,8 @@ async function buildState(context: any, lobbyId: number, userId: number) {
   if (!isParticipant(lobby, userId)) return { error: "Bu oyunun oyuncusu değilsin." };
 
   await maybeRunCipherBot(context, lobby);
+  await ensureLobbyResultConsistency(context, lobbyId);
+
   const latestLobby = await getLobby(context, lobbyId);
   const currentRound = await getCurrentRound(context, lobbyId);
   const pendingRoundNumber = currentRound ? Number(currentRound.round_number) + (currentRound.status === "completed" ? 1 : 0) : 1;
@@ -478,31 +418,40 @@ function findNextActiveTime(round: any, lock: any, target: string, afterMs: numb
 }
 
 async function getScore(context: any, lobbyId: number) {
-  const rows = await context.env.DB
-    .prepare("SELECT winner_user_id, COUNT(*) AS wins FROM cipher_rounds WHERE lobby_id = ? AND status = 'completed' AND winner_user_id IS NOT NULL GROUP BY winner_user_id")
-    .bind(lobbyId)
-    .all();
-
+  const rows = await context.env.DB.prepare("SELECT winner_user_id, COUNT(*) AS wins FROM cipher_rounds WHERE lobby_id = ? AND status = 'completed' AND winner_user_id IS NOT NULL GROUP BY winner_user_id").bind(lobbyId).all();
   const score: Record<string, number> = {};
   for (const row of rows?.results || []) score[String(row.winner_user_id)] = Number(row.wins || 0);
   return score;
 }
 
 async function maybeCompleteLobby(context: any, lobbyId: number) {
+  await ensureLobbyResultConsistency(context, lobbyId);
+}
+
+async function ensureLobbyResultConsistency(context: any, lobbyId: number) {
   const lobby = await getLobby(context, lobbyId);
+  if (!lobby) return;
+
+  const current = await getCurrentRound(context, lobbyId);
+  if (!current || current.status !== "completed") return;
+
   const score = await getScore(context, lobbyId);
-  const targetWins = Math.floor(Number(lobby.round_count || ROUND_COUNT) / 2) + 1;
+  const roundCount = Number(lobby.round_count || ROUND_COUNT);
+  const targetWins = Math.floor(roundCount / 2) + 1;
   const creatorWins = Number(score[String(lobby.creator_user_id)] || 0);
   const opponentWins = Number(score[String(lobby.opponent_user_id)] || 0);
-  const current = await getCurrentRound(context, lobbyId);
+  const completedRow = await context.env.DB.prepare("SELECT COUNT(*) AS count FROM cipher_rounds WHERE lobby_id = ? AND status = 'completed'").bind(lobbyId).first();
+  const completedCount = Number(completedRow?.count || 0);
+  const reachedTarget = creatorWins >= targetWins || opponentWins >= targetWins;
+  const reachedRoundLimit = completedCount >= roundCount || Number(current.round_number || 0) >= roundCount;
 
-  if (creatorWins >= targetWins || opponentWins >= targetWins || Number(current?.round_number || 0) >= Number(lobby.round_count || ROUND_COUNT)) {
-    const winner = creatorWins > opponentWins ? Number(lobby.creator_user_id) : opponentWins > creatorWins ? Number(lobby.opponent_user_id) : null;
-    await context.env.DB
-      .prepare("UPDATE cipher_lobbies SET status = 'completed', winner_user_id = ?, updated_at = datetime('now') WHERE id = ? AND status = 'in_progress'")
-      .bind(winner, lobbyId)
-      .run();
+  if (!reachedTarget && !reachedRoundLimit) return;
 
+  const winner = creatorWins > opponentWins ? Number(lobby.creator_user_id) : opponentWins > creatorWins ? Number(lobby.opponent_user_id) : null;
+  const currentWinner = lobby.winner_user_id === null || lobby.winner_user_id === undefined ? null : Number(lobby.winner_user_id);
+
+  if (lobby.status !== "completed" || currentWinner !== winner) {
+    await context.env.DB.prepare("UPDATE cipher_lobbies SET status = 'completed', winner_user_id = ?, updated_at = datetime('now') WHERE id = ?").bind(winner, lobbyId).run();
     if (winner) await awardCoins(context, winner, Number(lobby.reward_amount || FIXED_REWARD_AMOUNT), lobbyId);
   }
 }
@@ -513,35 +462,22 @@ async function awardCoins(context: any, userId: number, amount: number, lobbyId:
     const existing = await context.env.DB.prepare("SELECT id FROM coin_transactions WHERE reason = ? LIMIT 1").bind(reason).first();
     if (existing) return;
 
-    await context.env.DB
-      .prepare("INSERT INTO coin_wallets (user_id, balance, lifetime_earned, updated_at) VALUES (?, ?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance, lifetime_earned = lifetime_earned + excluded.lifetime_earned, updated_at = datetime('now')")
-      .bind(userId, amount, amount)
-      .run();
-
+    await context.env.DB.prepare("INSERT INTO coin_wallets (user_id, balance, lifetime_earned, updated_at) VALUES (?, ?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance, lifetime_earned = lifetime_earned + excluded.lifetime_earned, updated_at = datetime('now')").bind(userId, amount, amount).run();
     await context.env.DB.prepare("INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)").bind(userId, amount, reason).run();
   } catch {}
 }
 
 async function cleanup(context: any) {
   await finalizeExpiredRounds(context);
-  await context.env.DB
-    .prepare("UPDATE cipher_lobbies SET status = 'expired', winner_user_id = NULL, updated_at = datetime('now') WHERE status = 'open' AND created_at < datetime('now', '-2 hours')")
-    .run();
-  await context.env.DB
-    .prepare("UPDATE cipher_lobbies SET status = 'cancelled', winner_user_id = NULL, updated_at = datetime('now') WHERE status = 'in_progress' AND updated_at < datetime('now', '-15 minutes')")
-    .run();
+  await context.env.DB.prepare("UPDATE cipher_lobbies SET status = 'expired', winner_user_id = NULL, updated_at = datetime('now') WHERE status = 'open' AND created_at < datetime('now', '-2 hours')").run();
+  await context.env.DB.prepare("UPDATE cipher_lobbies SET status = 'cancelled', winner_user_id = NULL, updated_at = datetime('now') WHERE status = 'in_progress' AND updated_at < datetime('now', '-15 minutes')").run();
 }
 
 async function finalizeExpiredRounds(context: any) {
-  const rows = await context.env.DB
-    .prepare("SELECT * FROM cipher_rounds WHERE status = 'active' ORDER BY started_at ASC LIMIT 50")
-    .all();
-
+  const rows = await context.env.DB.prepare("SELECT * FROM cipher_rounds WHERE status = 'active' ORDER BY started_at ASC LIMIT 50").all();
   for (const round of rows?.results || []) {
     const startedMs = Date.parse(round.started_at || "");
-    if (Number.isFinite(startedMs) && Date.now() - startedMs > ROUND_TIMEOUT_MS) {
-      await finalizeRoundByTimeout(context, round);
-    }
+    if (Number.isFinite(startedMs) && Date.now() - startedMs > ROUND_TIMEOUT_MS) await finalizeRoundByTimeout(context, round);
   }
 }
 
@@ -549,29 +485,19 @@ async function finalizeRoundByTimeout(context: any, round: any) {
   const lobby = await getLobby(context, Number(round.lobby_id));
   if (!lobby || lobby.status !== "in_progress" || !lobby.opponent_user_id) return;
 
-  const rows = await context.env.DB
-    .prepare("SELECT user_id, correct FROM cipher_submissions WHERE lobby_id = ? AND round_number = ?")
-    .bind(round.lobby_id, round.round_number)
-    .all();
-
+  const rows = await context.env.DB.prepare("SELECT user_id, correct FROM cipher_submissions WHERE lobby_id = ? AND round_number = ?").bind(round.lobby_id, round.round_number).all();
   const progress = new Map<number, number>([
     [Number(lobby.creator_user_id), 0],
     [Number(lobby.opponent_user_id), 0],
   ]);
 
-  for (const row of rows?.results || []) {
-    progress.set(Number(row.user_id), Number(row.correct || 0));
-  }
+  for (const row of rows?.results || []) progress.set(Number(row.user_id), Number(row.correct || 0));
 
   const creatorProgress = progress.get(Number(lobby.creator_user_id)) ?? 0;
   const opponentProgress = progress.get(Number(lobby.opponent_user_id)) ?? 0;
   const winner = creatorProgress > opponentProgress ? Number(lobby.creator_user_id) : opponentProgress > creatorProgress ? Number(lobby.opponent_user_id) : null;
 
-  await context.env.DB
-    .prepare("UPDATE cipher_rounds SET status = 'completed', winner_user_id = ?, completed_at = datetime('now') WHERE lobby_id = ? AND round_number = ? AND status = 'active'")
-    .bind(winner, round.lobby_id, round.round_number)
-    .run();
-
+  await context.env.DB.prepare("UPDATE cipher_rounds SET status = 'completed', winner_user_id = ?, completed_at = datetime('now') WHERE lobby_id = ? AND round_number = ? AND status = 'active'").bind(winner, round.lobby_id, round.round_number).run();
   await touchLobby(context, Number(round.lobby_id));
   await maybeCompleteLobby(context, Number(round.lobby_id));
 }
@@ -628,11 +554,7 @@ async function requireUser(context: any) {
   const token = getCookie(context.request.headers.get("Cookie") || "", "session");
   if (!token) return { ok: false, status: 401, error: "Giriş yapman gerekiyor." };
 
-  const user = await context.env.DB
-    .prepare("SELECT users.id, users.name, users.email, users.avatar_url, CASE WHEN lower(users.email) = ? THEN 'owner' ELSE COALESCE(users.role, 'client') END AS role FROM sessions JOIN users ON sessions.user_id = users.id WHERE sessions.token = ? AND sessions.expires_at > datetime('now')")
-    .bind(OWNER_EMAIL, token)
-    .first();
-
+  const user = await context.env.DB.prepare("SELECT users.id, users.name, users.email, users.avatar_url, CASE WHEN lower(users.email) = ? THEN 'owner' ELSE COALESCE(users.role, 'client') END AS role FROM sessions JOIN users ON sessions.user_id = users.id WHERE sessions.token = ? AND sessions.expires_at > datetime('now')").bind(OWNER_EMAIL, token).first();
   if (!user) return { ok: false, status: 401, error: "Oturum geçersiz." };
   if (user.role === "blocked") return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   if (!OFF_ROLES.includes(String(user.role))) return { ok: false, status: 403, error: "OFF erişimi gerekiyor." };
