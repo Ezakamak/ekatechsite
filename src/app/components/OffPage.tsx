@@ -10,6 +10,7 @@ import { CoreRaid } from "./CoreRaid";
 import { MarketAcademy } from "./MarketAcademy";
 import { TechCoinMiner } from "./TechCoinMiner";
 import { DropTech } from "./DropTech";
+import { TechCoinMines } from "./TechCoinMines";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 
 type User = {
@@ -28,7 +29,7 @@ type Wallet = {
   updated_at?: string | null;
 };
 
-type GameKey = "hub" | "duel" | "cipher" | "raid" | "market" | "miner" | "droptech";
+type GameKey = "hub" | "duel" | "cipher" | "raid" | "market" | "miner" | "droptech" | "mines";
 
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
@@ -72,7 +73,9 @@ export function OffPage() {
         minerDesc: "3 miner serverdan birine bağlan. Aynı anda sadece 1 server kullan, dakikada 1 Tech Coin üret, 1 saatin sonunda server otomatik boşalsın.",
         droptechTitle: "DropTech",
         droptechDesc: "Kutu aç, ışıklı şeritte item yakala ve OFF'a özel emoji koleksiyonunu tamamla. Eşyalar kullanılmaz; sadece envanterde görünür.",
-        minesRemoved: "EkaMines kaldırıldı. Tech Coin sistemi puan biriktirmek için duruyor.",
+        minesTitle: "Stake Mines TC",
+        minesDesc: "Gerçek para tamamen OFF. 25 karoda mayınlardan kaç, kombinasyon tabanlı %99 RTP çarpanıyla simüle TechCoin test bakiyeni yönet.",
+        minesRemoved: "EkaMines yerine gerçek para OFF, yerel TechCoin test bakiyeli Stake Mines TC aktif.",
         walletTitle: "Tech Coin cüzdanı",
         lifetime: "Toplam kazanılan",
         currency: "Para birimi",
@@ -106,7 +109,9 @@ export function OffPage() {
         minerDesc: "Connect to one of 3 miner servers. Use only 1 server at a time, earn 1 Tech Coin per minute, and automatically release the server after 1 hour.",
         droptechTitle: "DropTech",
         droptechDesc: "Open boxes, catch an item on the glowing strip, and complete your OFF-only emoji collection. Items are not usable; they only appear in inventory.",
-        minesRemoved: "EkaMines was removed. Tech Coin remains for score progression.",
+        minesTitle: "Stake Mines TC",
+        minesDesc: "Real money is fully OFF. Dodge mines on 25 tiles and manage a simulated TechCoin test balance with combination-based 99% RTP multipliers.",
+        minesRemoved: "Stake Mines TC is active with real money OFF and a local TechCoin test balance.",
         walletTitle: "Tech Coin wallet",
         lifetime: "Lifetime earned",
         currency: "Currency",
@@ -222,7 +227,7 @@ export function OffPage() {
             <TechDuelSync />
             <TechDuelBotAssist />
           </>
-        ) : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : activeGame === "miner" ? <TechCoinMiner /> : activeGame === "droptech" ? <DropTech /> : <MarketAcademy />}
+        ) : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : activeGame === "miner" ? <TechCoinMiner /> : activeGame === "droptech" ? <DropTech /> : activeGame === "mines" ? <TechCoinMines /> : <MarketAcademy />}
       </>
     );
   }
@@ -266,6 +271,7 @@ export function OffPage() {
           <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("cipher")} />
           <GameCard icon={<Gamepad2 className="h-6 w-6" />} status={copy.available} title={copy.clashTitle} description={copy.clashDesc} accent="cyan" buttonLabel={copy.open} onClick={() => navigateTo("/core-clash")} />
           <GameCard icon={<Gift className="h-6 w-6" />} status={copy.available} title={copy.droptechTitle} description={copy.droptechDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("droptech")} />
+          <GameCard icon={<Shield className="h-6 w-6" />} status={copy.available} title={copy.minesTitle} description={copy.minesDesc} accent="cyan" buttonLabel={copy.open} onClick={() => setActiveGame("mines")} />
           <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.available} title={copy.raidTitle} description={copy.raidDesc} accent="amber" buttonLabel={copy.open} onClick={() => setActiveGame("raid")} />
           <GameCard icon={<BarChart3 className="h-6 w-6" />} status={copy.available} title={copy.marketTitle} description={copy.marketDesc} accent="purple" buttonLabel={copy.open} onClick={() => setActiveGame("market")} />
           <GameCard icon={<Pickaxe className="h-6 w-6" />} status={copy.available} title={copy.minerTitle} description={copy.minerDesc} accent="amber" buttonLabel={copy.open} onClick={() => setActiveGame("miner")} />
