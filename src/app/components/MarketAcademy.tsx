@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useLanguage } from "../i18n";
 import { MarketAcademy as MarketAcademyV2 } from "./MarketAcademyV2";
 import { MarketStockCommentsDock } from "./MarketStockCommentsDock";
 import { MarketStockSubmissionPanel } from "./MarketStockSubmissionPanel";
@@ -8,11 +9,14 @@ const TECHNICAL_CONNECTION_TEXTS = [
   "The online market API did not respond. Trading is disabled.",
   "Failed to fetch",
   "NetworkError when attempting to fetch resource.",
+  "Sunucuya bağlanılıyor, lütfen bekleyiniz...",
+  "Connecting to server, please wait...",
 ];
 
-function normalizeInvestSimConnectionText() {
+function normalizeInvestSimConnectionText(language: string) {
   if (typeof document === "undefined") return;
 
+  const fallback = language === "tr" ? "Sunucuya bağlanılıyor, lütfen bekleyiniz..." : "Connecting to server, please wait...";
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
   let current = walker.nextNode();
@@ -25,19 +29,19 @@ function normalizeInvestSimConnectionText() {
   }
 
   for (const node of nodes) {
-    const original = node.nodeValue || "";
-    const isEnglish = original.includes("The online market API") || original.includes("Failed to fetch") || original.includes("NetworkError");
-    node.nodeValue = isEnglish ? "Connecting to server, please wait..." : "Sunucuya bağlanılıyor, lütfen bekleyiniz...";
+    node.nodeValue = fallback;
   }
 }
 
 function InvestSimVisualFixes() {
+  const { language } = useLanguage();
+
   useEffect(() => {
-    normalizeInvestSimConnectionText();
-    const observer = new MutationObserver(() => normalizeInvestSimConnectionText());
+    normalizeInvestSimConnectionText(language);
+    const observer = new MutationObserver(() => normalizeInvestSimConnectionText(language));
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => observer.disconnect();
-  }, []);
+  }, [language]);
 
   return (
     <style>{`
