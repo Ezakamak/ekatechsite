@@ -13,6 +13,7 @@ body,
   }
 }
 
+/* Legacy EkaTrade layout guard */
 @media (max-width: 1535px) {
   .xl\:grid-cols-\[1\.25fr_0\.75fr\] {
     grid-template-columns: minmax(0, 1fr) !important;
@@ -23,8 +24,39 @@ body,
   }
 }
 
+/* EkaTrade v2: iPad/tablet widths can hit Tailwind 2xl because of Safari viewport scaling.
+   Keep dashboard sections single-column until real desktop width. */
+@media (max-width: 1799px) {
+  [class*="2xl:grid-cols-[1.25fr_0.75fr]"],
+  [class*="xl:grid-cols-[0.95fr_1.05fr]"],
+  [class*="xl:grid-cols-[1.35fr_0.65fr]"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  [class*="2xl:grid-cols-[1.25fr_0.75fr]"] > *,
+  [class*="xl:grid-cols-[0.95fr_1.05fr]"] > *,
+  [class*="xl:grid-cols-[1.35fr_0.65fr]"] > * {
+    min-width: 0 !important;
+  }
+}
+
+/* The 72-stock board must not open two columns on tablet landscape. */
+@media (max-width: 1699px) {
+  [class*="xl:grid-cols-2"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
 @media (max-width: 1180px) {
   .lg\:grid-cols-2 {
     grid-template-columns: minmax(0, 1fr) !important;
   }
+}
+
+main,
+section,
+aside,
+[class*="grid"],
+[class*="rounded-"] {
+  min-width: 0;
 }
