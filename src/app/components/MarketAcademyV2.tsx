@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -74,6 +74,8 @@ type MarketState = {
 type ChartRange = "hourly" | "daily" | "weekly";
 type ViewMode = "all" | "owned" | "favorites";
 type Tone = "white" | "cyan" | "emerald" | "red" | "amber" | "purple";
+type PriceFlashMap = Record<string, "up" | "down">;
+type TradeBurst = { id: number; side: "buy" | "sell"; symbol: string; amount: number } | null;
 
 const FAVORITES_KEY = "eka-investsim-favorites";
 const PAGE_SIZE = 5;
@@ -185,6 +187,16 @@ function getRangeChange(values: number[]) {
   return { first, last, diff, percent };
 }
 
+function makePriceFlash(previous: MarketState, next: MarketState) {
+  const previousMap = new Map(previous.stocks.map((stock) => [stock.symbol, stock.price]));
+  return next.stocks.reduce<PriceFlashMap>((acc, stock) => {
+    const oldPrice = previousMap.get(stock.symbol);
+    if (typeof oldPrice !== "number" || oldPrice === stock.price) return acc;
+    acc[stock.symbol] = stock.price > oldPrice ? "up" : "down";
+    return acc;
+  }, {});
+}
+
 export function MarketAcademy() {
   const { language } = useLanguage();
   const tr = language === "tr";
@@ -201,11 +213,16 @@ export function MarketAcademy() {
   const [stockOrder, setStockOrder] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [detailSymbol, setDetailSymbol] = useState<string | null>(null);
+  const [openingSymbol, setOpeningSymbol] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(10);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [online, setOnline] = useState(false);
+  const [priceFlash, setPriceFlash] = useState<PriceFlashMap>({});
+  const [tradeBurst, setTradeBurst] = useState<TradeBurst>(null);
+  const [achievementToast, setAchievementToast] = useState<string | null>(null);
+  const completedAchievementRef = useRef<number | null>(null);
 
   const selectedStock = state.stocks.find((stock) => stock.symbol === selectedSymbol) || state.stocks[0] || FALLBACK_STOCKS[0];
   const selectedOwned = safeNumber(state.holdings[selectedStock.symbol]);
@@ -331,16 +348,40 @@ export function MarketAcademy() {
     if (!state.stocks.some((stock) => stock.symbol === selectedSymbol)) setSelectedSymbol(state.stocks[0]?.symbol || "EKA");
   }, [state.stocks, selectedSymbol]);
 
+  useEffect(() => {
+    if (completedAchievementRef.current === null) {
+      completedAchievementRef.current = completedAchievements;
+      return;
+    }
+    if (completedAchievements > completedAchievementRef.current) {
+      const unlocked = achievements.find((item) => item.done)?.title || copy.achievements;
+      setAchievementToast(unlocked);
+      window.setTimeout(() => setAchievementToast(null), 2800);
+    }
+    completedAchievementRef.current = completedAchievements;
+  }, [completedAchievements, achievements, copy.achievements]);
+
   function flash(text: string) {
     setMessage(text);
     window.setTimeout(() => setMessage(null), 3200);
+  }
+
+  function applyMarketState(next: MarketState) {
+    setState((previous) => {
+      const flashMap = makePriceFlash(previous, next);
+      if (Object.keys(flashMap).length) {
+        setPriceFlash(flashMap);
+        window.setTimeout(() => setPriceFlash({}), 900);
+      }
+      return next;
+    });
   }
 
   async function loadMarket(showLoader: boolean) {
     if (showLoader) setLoading(true);
     try {
       const data = normalizeMarketState(await readJson(await fetch("/api/market", { credentials: "same-origin", cache: "no-store" })));
-      setState(data);
+      applyMarketState(data);
       setOnline(true);
       if (data.rewards?.length) {
         const amount = data.rewards.reduce((sum: number, reward: any) => sum + safeNumber(reward.amount), 0);
@@ -364,7 +405,7 @@ export function MarketAcademy() {
     }
   }
 
-  async function postAction(payload: Record<string, unknown>, okMessage: string) {
+  async function postAction(payload: Record<string, unknown>, okMessage: string, burst?: TradeBurst) {
     setBusy(true);
     try {
       const data = normalizeMarketState(await readJson(await fetch("/api/market", {
@@ -374,10 +415,14 @@ export function MarketAcademy() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })));
-      setState(data);
+      applyMarketState(data);
       setOnline(true);
       loadLeaderboard();
       flash(okMessage);
+      if (burst) {
+        setTradeBurst(burst);
+        window.setTimeout(() => setTradeBurst(null), 1300);
+      }
     } catch (error) {
       flash(error instanceof Error ? error.message : copy.offline);
     } finally {
@@ -388,7 +433,11 @@ export function MarketAcademy() {
   function handleTrade(side: "buy" | "sell") {
     const qty = Math.floor(safeNumber(quantity));
     if (qty < 1) return flash(copy.invalidQty);
-    postAction({ action: side, symbol: selectedStock.symbol, quantity: qty }, side === "buy" ? copy.buyOk : copy.sellOk);
+    postAction(
+      { action: side, symbol: selectedStock.symbol, quantity: qty },
+      side === "buy" ? copy.buyOk : copy.sellOk,
+      { id: Date.now(), side, symbol: selectedStock.symbol, amount: qty },
+    );
   }
 
   function resetPortfolio() {
@@ -406,29 +455,43 @@ export function MarketAcademy() {
     });
   }
 
+  function openDetails(symbol: string) {
+    setOpeningSymbol(symbol);
+    window.setTimeout(() => {
+      setDetailSymbol(symbol);
+      setOpeningSymbol(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }, 260);
+  }
+
   const detailStock = detailSymbol ? state.stocks.find((stock) => stock.symbol === detailSymbol) : null;
   if (detailStock) return <StockDetailView stock={detailStock} state={state} copy={copy} tr={tr} locale={locale} online={online} busy={busy} onBack={() => setDetailSymbol(null)} onRefresh={() => loadMarket(false)} />;
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black px-3 pb-28 pt-28 text-white sm:px-6">
+    <main className="eka-investsim relative min-h-screen overflow-hidden bg-black px-3 pb-28 pt-28 text-white sm:px-6">
+      <AnimationStyles />
       <BackgroundGlow />
-      <div className="relative mx-auto max-w-7xl space-y-6">
+      <TradeBurstOverlay burst={tradeBurst} copy={copy} />
+      <DetailTransitionOverlay symbol={openingSymbol} copy={copy} />
+      <AchievementToast title={achievementToast} copy={copy} />
+      <div className="relative mx-auto max-w-7xl space-y-6 eka-page-in">
         <Hero copy={copy} online={online} />
+        <MarketTicker copy={copy} locale={locale} summary={summary} news={state.news} tr={tr} />
         {loading ? <StatusBox>{copy.loading}</StatusBox> : null}
         {message ? <StatusBox tone="amber">{message}</StatusBox> : null}
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard icon={<CircleDollarSign />} label={copy.cash} value={<CoinAmount amount={state.cash} locale={locale} size="lg" />} />
-          <MetricCard icon={<PieChart />} label={copy.total} value={<CoinAmount amount={portfolio.total} locale={locale} size="lg" />} />
-          <MetricCard icon={portfolio.pnl >= 0 ? <TrendingUp /> : <TrendingDown />} label={copy.pnl} value={<CoinAmount amount={portfolio.pnl} locale={locale} prefix={portfolio.pnl >= 0 ? "+" : ""} size="lg" />} detail={`${portfolio.pnl >= 0 ? "+" : ""}${formatPrice(portfolio.pnlPercent, locale)}%`} tone={portfolio.pnl >= 0 ? "emerald" : "red"} />
-          <MetricCard icon={<Award />} label={copy.achievements} value={`${completedAchievements}/${achievements.length}`} detail={`${completedMissions}/${missions.length} ${copy.completed}`} tone="cyan" />
+          <MetricCard delay={0} icon={<CircleDollarSign />} label={copy.cash} value={<CoinAmount amount={state.cash} locale={locale} size="lg" />} />
+          <MetricCard delay={70} icon={<PieChart />} label={copy.total} value={<CoinAmount amount={portfolio.total} locale={locale} size="lg" />} />
+          <MetricCard delay={140} icon={portfolio.pnl >= 0 ? <TrendingUp /> : <TrendingDown />} label={copy.pnl} value={<CoinAmount amount={portfolio.pnl} locale={locale} prefix={portfolio.pnl >= 0 ? "+" : ""} size="lg" />} detail={`${portfolio.pnl >= 0 ? "+" : ""}${formatPrice(portfolio.pnlPercent, locale)}%`} tone={portfolio.pnl >= 0 ? "emerald" : "red"} />
+          <MetricCard delay={210} icon={<Award />} label={copy.achievements} value={`${completedAchievements}/${achievements.length}`} detail={`${completedMissions}/${missions.length} ${copy.completed}`} tone="cyan" />
         </section>
 
         <DailySummaryCard copy={copy} locale={locale} summary={summary} />
 
         <section className="grid gap-6 2xl:grid-cols-[1.25fr_0.75fr]">
-          <MarketBoard copy={copy} tr={tr} locale={locale} state={state} sectors={sectors} selectedSector={selectedSector} visibleStocks={visibleStocks} totalFiltered={filteredStocks.length} selectedSymbol={selectedSymbol} query={query} view={view} favorites={favorites} hasMore={hasMoreStocks} visibleCount={visibleStocks.length} onLoadMore={() => setVisibleCount((value) => value + PAGE_SIZE)} onSector={setSelectedSector} onQuery={setQuery} onView={setView} onFavorite={toggleFavorite} onSelect={setSelectedSymbol} onDetails={setDetailSymbol} busy={busy} online={online} onRefresh={() => loadMarket(false)} onReset={resetPortfolio} />
-          <aside className="space-y-6">
+          <MarketBoard copy={copy} tr={tr} locale={locale} state={state} sectors={sectors} selectedSector={selectedSector} visibleStocks={visibleStocks} totalFiltered={filteredStocks.length} selectedSymbol={selectedSymbol} query={query} view={view} favorites={favorites} hasMore={hasMoreStocks} visibleCount={visibleStocks.length} priceFlash={priceFlash} onLoadMore={() => setVisibleCount((value) => value + PAGE_SIZE)} onSector={setSelectedSector} onQuery={setQuery} onView={setView} onFavorite={toggleFavorite} onSelect={setSelectedSymbol} onDetails={openDetails} busy={busy} online={online} onRefresh={() => loadMarket(false)} onReset={resetPortfolio} />
+          <aside className="space-y-6 eka-stagger" style={{ animationDelay: "260ms" }}>
             <OrderPanel copy={copy} locale={locale} stock={selectedStock} selectedSymbol={selectedSymbol} stocks={state.stocks} quantity={quantity} owned={selectedOwned} orderValue={orderValue} busy={busy} online={online} onSymbol={setSelectedSymbol} onQuantity={setQuantity} onTrade={handleTrade} />
             <RiskCard label={risk.label} text={risk.text} tone={risk.tone} title={copy.risk} />
           </aside>
@@ -451,32 +514,73 @@ export function MarketAcademy() {
   );
 }
 
+function AnimationStyles() {
+  return <style>{`
+    @keyframes eka-page-in { from { opacity: 0; transform: translateY(22px); filter: blur(10px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+    @keyframes eka-stagger-in { from { opacity: 0; transform: translateY(18px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes eka-glow-up { 0% { box-shadow: 0 0 0 rgba(16,185,129,0); } 35% { box-shadow: 0 0 38px rgba(16,185,129,.34); border-color: rgba(110,231,183,.6); } 100% { box-shadow: 0 0 0 rgba(16,185,129,0); } }
+    @keyframes eka-glow-down { 0% { box-shadow: 0 0 0 rgba(248,113,113,0); } 35% { box-shadow: 0 0 38px rgba(248,113,113,.34); border-color: rgba(252,165,165,.6); } 100% { box-shadow: 0 0 0 rgba(248,113,113,0); } }
+    @keyframes eka-draw-line { to { stroke-dashoffset: 0; } }
+    @keyframes eka-pulse-dot { 0%,100% { opacity: .6; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.35); } }
+    @keyframes eka-range-swap { from { opacity: 0; transform: translateY(10px) scale(.99); filter: blur(8px); } to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); } }
+    @keyframes eka-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    @keyframes eka-coin-burst-buy { 0% { opacity: 0; transform: translate(-40px, 28px) scale(.5) rotate(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(70px, -78px) scale(1.05) rotate(360deg); } }
+    @keyframes eka-coin-burst-sell { 0% { opacity: 0; transform: translate(70px, -78px) scale(.5) rotate(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-40px, 28px) scale(1.05) rotate(-360deg); } }
+    @keyframes eka-detail-open { from { opacity: 0; transform: scale(.86); filter: blur(14px); } to { opacity: 1; transform: scale(1); filter: blur(0); } }
+    @keyframes eka-achievement { 0% { opacity: 0; transform: translateY(-18px) scale(.96); } 18% { opacity: 1; transform: translateY(0) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes eka-rank-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: translateX(0); } }
+    .eka-page-in { animation: eka-page-in .55s ease both; }
+    .eka-stagger { opacity: 0; animation: eka-stagger-in .52s ease both; }
+    .eka-card-hover { transform: translateY(0) scale(1); transition: transform .22s ease, border-color .22s ease, background .22s ease, box-shadow .22s ease; }
+    .eka-card-hover:hover { transform: translateY(-5px) scale(1.012); box-shadow: 0 24px 60px rgba(0, 212, 255, .11), 0 0 42px rgba(139, 92, 246, .10); }
+    .eka-price-up { animation: eka-glow-up .85s ease both; }
+    .eka-price-down { animation: eka-glow-down .85s ease both; }
+    .eka-range-panel { animation: eka-range-swap .34s ease both; }
+    .eka-draw-line { stroke-dasharray: 240; stroke-dashoffset: 240; animation: eka-draw-line .95s ease forwards; }
+    .eka-pulse-dot { transform-origin: center; animation: eka-pulse-dot 1.25s ease-in-out infinite; }
+    .eka-ticker-track { width: max-content; animation: eka-ticker 28s linear infinite; }
+    .eka-rank-row { animation: eka-rank-in .35s ease both; }
+    @media (prefers-reduced-motion: reduce) { .eka-page-in, .eka-stagger, .eka-card-hover, .eka-price-up, .eka-price-down, .eka-range-panel, .eka-draw-line, .eka-pulse-dot, .eka-ticker-track, .eka-rank-row { animation: none !important; transition: none !important; transform: none !important; } }
+  `}</style>;
+}
+
 function BackgroundGlow() {
   return <><div className="absolute left-1/2 top-16 h-[30rem] w-[30rem] -translate-x-1/2 rounded-full bg-cyan-500/10 blur-3xl" /><div className="absolute bottom-28 right-0 h-96 w-96 rounded-full bg-purple-500/10 blur-3xl" /></>;
 }
 
 function Hero({ copy, online }: { copy: any; online: boolean }) {
-  return <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-cyan-500/10 backdrop-blur-xl sm:p-8"><div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"><div><div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100"><BarChart3 className="h-4 w-4" /> {copy.eyebrow}</div><h1 className="mt-5 text-4xl font-medium tracking-tight sm:text-7xl">{copy.title}</h1><p className="mt-5 max-w-3xl text-base leading-7 text-white/55 sm:text-lg sm:leading-8">{copy.subtitle}</p></div><div className={`rounded-3xl border p-4 text-sm leading-6 lg:max-w-sm ${online ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-amber-300/20 bg-amber-300/10 text-amber-100"}`}><div className="flex gap-3"><AlertTriangle className="mt-1 h-5 w-5 shrink-0" /><p>{online ? `${copy.online}. ${copy.disclaimer}` : copy.offline}</p></div></div></div></section>;
+  return <section className="eka-stagger overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-cyan-500/10 backdrop-blur-xl sm:p-8"><div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"><div><div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100"><BarChart3 className="h-4 w-4" /> {copy.eyebrow}</div><h1 className="mt-5 text-4xl font-medium tracking-tight sm:text-7xl">{copy.title}</h1><p className="mt-5 max-w-3xl text-base leading-7 text-white/55 sm:text-lg sm:leading-8">{copy.subtitle}</p></div><div className={`rounded-3xl border p-4 text-sm leading-6 lg:max-w-sm ${online ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-amber-300/20 bg-amber-300/10 text-amber-100"}`}><div className="flex gap-3"><AlertTriangle className="mt-1 h-5 w-5 shrink-0" /><p>{online ? `${copy.online}. ${copy.disclaimer}` : copy.offline}</p></div></div></div></section>;
+}
+
+function MarketTicker({ copy, locale, summary, news, tr }: { copy: any; locale: string; summary: any; news: NewsItem[]; tr: boolean }) {
+  const items = [
+    summary.topGainer ? `${copy.topGainer}: ${summary.topGainer.symbol} +${formatPrice(summary.topGainer.change, locale)}%` : null,
+    summary.topLoser ? `${copy.topLoser}: ${summary.topLoser.symbol} ${formatPrice(summary.topLoser.change, locale)}%` : null,
+    summary.bestSector ? `${copy.bestSector}: ${summary.bestSector.sector}` : null,
+    ...news.slice(0, 3).map((item) => `${item.target}: ${tr ? item.titleTr : item.titleEn}`),
+  ].filter(Boolean) as string[];
+  const tickerItems = items.length ? items : [copy.tickerEmpty];
+  return <div className="eka-stagger overflow-hidden rounded-full border border-white/10 bg-white/[0.04] py-3 text-sm text-white/60 backdrop-blur-xl" style={{ animationDelay: "90ms" }}><div className="eka-ticker-track flex gap-8 px-5">{[...tickerItems, ...tickerItems].map((item, index) => <span key={`${item}-${index}`} className="shrink-0"><span className="mr-8 text-cyan-200">•</span>{item}</span>)}</div></div>;
 }
 
 function StatusBox({ children, tone = "white" }: { children: ReactNode; tone?: "white" | "amber" }) {
   const classes = tone === "amber" ? "border-amber-300/20 bg-amber-300/10 text-amber-100" : "border-white/10 bg-white/[0.045] text-white/55";
-  return <div className={`rounded-[2rem] border p-4 text-sm backdrop-blur-xl ${classes}`}>{children}</div>;
+  return <div className={`eka-stagger rounded-[2rem] border p-4 text-sm backdrop-blur-xl ${classes}`}>{children}</div>;
 }
 
 function DailySummaryCard({ copy, locale, summary }: { copy: any; locale: string; summary: any }) {
-  return <section className="grid gap-4 lg:grid-cols-4"><SummaryTile icon={<TrendingUp />} title={copy.topGainer} label={summary.topGainer?.symbol || "-"} detail={summary.topGainer ? `${summary.topGainer.name} · +${formatPrice(summary.topGainer.change, locale)}%` : "-"} tone="emerald" /><SummaryTile icon={<TrendingDown />} title={copy.topLoser} label={summary.topLoser?.symbol || "-"} detail={summary.topLoser ? `${summary.topLoser.name} · ${formatPrice(summary.topLoser.change, locale)}%` : "-"} tone="red" /><SummaryTile icon={<Activity />} title={copy.bestSector} label={summary.bestSector?.sector || "-"} detail={summary.bestSector ? `+${formatPrice(summary.bestSector.avg, locale)}%` : "-"} tone="cyan" /><SummaryTile icon={<ListFilter />} title={copy.weakSector} label={summary.weakSector?.sector || "-"} detail={summary.weakSector ? `${formatPrice(summary.weakSector.avg, locale)}%` : "-"} tone="white" /></section>;
+  return <section className="grid gap-4 lg:grid-cols-4"><SummaryTile delay={0} icon={<TrendingUp />} title={copy.topGainer} label={summary.topGainer?.symbol || "-"} detail={summary.topGainer ? `${summary.topGainer.name} · +${formatPrice(summary.topGainer.change, locale)}%` : "-"} tone="emerald" /><SummaryTile delay={70} icon={<TrendingDown />} title={copy.topLoser} label={summary.topLoser?.symbol || "-"} detail={summary.topLoser ? `${summary.topLoser.name} · ${formatPrice(summary.topLoser.change, locale)}%` : "-"} tone="red" /><SummaryTile delay={140} icon={<Activity />} title={copy.bestSector} label={summary.bestSector?.sector || "-"} detail={summary.bestSector ? `+${formatPrice(summary.bestSector.avg, locale)}%` : "-"} tone="cyan" /><SummaryTile delay={210} icon={<ListFilter />} title={copy.weakSector} label={summary.weakSector?.sector || "-"} detail={summary.weakSector ? `${formatPrice(summary.weakSector.avg, locale)}%` : "-"} tone="white" /></section>;
 }
 
-function SummaryTile({ icon, title, label, detail, tone }: { icon: ReactNode; title: string; label: string; detail: string; tone: Tone }) {
+function SummaryTile({ icon, title, label, detail, tone, delay }: { icon: ReactNode; title: string; label: string; detail: string; tone: Tone; delay: number }) {
   const toneClass = tone === "emerald" ? "text-emerald-300" : tone === "red" ? "text-red-300" : tone === "cyan" ? "text-cyan-200" : "text-white";
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl"><div className={`flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] ${toneClass}`}>{icon}</div><p className="mt-4 text-sm text-white/40">{title}</p><p className={`mt-2 text-2xl font-semibold ${toneClass}`}>{label}</p><p className="mt-1 line-clamp-1 text-sm text-white/45">{detail}</p></div>;
+  return <div className="eka-stagger rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl" style={{ animationDelay: `${delay + 120}ms` }}><div className={`flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] ${toneClass}`}>{icon}</div><p className="mt-4 text-sm text-white/40">{title}</p><p className={`mt-2 text-2xl font-semibold ${toneClass}`}>{label}</p><p className="mt-1 line-clamp-1 text-sm text-white/45">{detail}</p></div>;
 }
 
-function MarketBoard(props: { copy: any; tr: boolean; locale: string; state: MarketState; sectors: string[]; selectedSector: string; visibleStocks: Stock[]; totalFiltered: number; selectedSymbol: string; query: string; view: ViewMode; favorites: Set<string>; hasMore: boolean; visibleCount: number; onLoadMore: () => void; onSector: (sector: string) => void; onQuery: (query: string) => void; onView: (view: ViewMode) => void; onFavorite: (symbol: string) => void; onSelect: (symbol: string) => void; onDetails: (symbol: string) => void; busy: boolean; online: boolean; onRefresh: () => void; onReset: () => void }) {
-  const { copy, tr, locale, state, sectors, selectedSector, visibleStocks, totalFiltered, selectedSymbol, query, view, favorites, hasMore, visibleCount, onLoadMore, onSector, onQuery, onView, onFavorite, onSelect, onDetails, busy, online, onRefresh, onReset } = props;
+function MarketBoard(props: { copy: any; tr: boolean; locale: string; state: MarketState; sectors: string[]; selectedSector: string; visibleStocks: Stock[]; totalFiltered: number; selectedSymbol: string; query: string; view: ViewMode; favorites: Set<string>; hasMore: boolean; visibleCount: number; priceFlash: PriceFlashMap; onLoadMore: () => void; onSector: (sector: string) => void; onQuery: (query: string) => void; onView: (view: ViewMode) => void; onFavorite: (symbol: string) => void; onSelect: (symbol: string) => void; onDetails: (symbol: string) => void; busy: boolean; online: boolean; onRefresh: () => void; onReset: () => void }) {
+  const { copy, tr, locale, state, sectors, selectedSector, visibleStocks, totalFiltered, selectedSymbol, query, view, favorites, hasMore, visibleCount, priceFlash, onLoadMore, onSector, onQuery, onView, onFavorite, onSelect, onDetails, busy, online, onRefresh, onReset } = props;
   const countForSector = (sector: string) => sector === "all" ? state.stocks.length : state.stocks.filter((stock) => stock.sector === sector).length;
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-4 backdrop-blur-xl sm:p-6"><div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between"><div><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.market}</p><h2 className="mt-2 text-3xl font-medium">{copy.fictionalStocks}</h2></div><div className="flex flex-wrap gap-3"><button type="button" disabled={busy} onClick={onRefresh} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-50"><LineChart className="h-4 w-4" /> {copy.refresh}</button><button type="button" disabled={busy || !online} onClick={onReset} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/75 transition-all hover:bg-white/[0.1] disabled:opacity-40"><RefreshCcw className="h-4 w-4" /> {copy.reset}</button></div></div><div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto]"><label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white/70"><Search className="h-4 w-4 text-cyan-200" /><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder={copy.searchPlaceholder} className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/30" /></label><div className="grid grid-cols-3 gap-2 sm:flex"><FilterButton active={view === "all"} onClick={() => onView("all")}>{copy.allStocks}</FilterButton><FilterButton active={view === "owned"} onClick={() => onView("owned")}>{copy.onlyOwned}</FilterButton><FilterButton active={view === "favorites"} onClick={() => onView("favorites")}>{copy.favorites}</FilterButton></div></div><div className="mt-5 flex gap-2 overflow-x-auto pb-2">{sectors.map((sector) => <button key={sector} type="button" onClick={() => onSector(sector)} className={`shrink-0 rounded-full border px-4 py-2 text-sm transition-all ${selectedSector === sector ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100" : "border-white/10 bg-black/25 text-white/55 hover:bg-white/[0.07] hover:text-white"}`}>{sector === "all" ? copy.allSectors : sector} <span className="ml-1 text-xs opacity-60">{countForSector(sector)}</span></button>)}</div><div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/45">{copy.sectorHint}: <span className="text-white/75">{selectedSector === "all" ? copy.allSectors : selectedSector}</span> · {visibleCount}/{totalFiltered} {copy.showing} · {copy.doubleClickHint}</div><div className="mt-5 grid gap-4 xl:grid-cols-2">{visibleStocks.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{copy.noStockResult}</p> : visibleStocks.map((stock) => { const positive = safeNumber(stock.change) >= 0; const history = buildRangeValues(state.history[stock.symbol], stock.price, "hourly"); return <button key={stock.symbol} type="button" onClick={() => onSelect(stock.symbol)} onDoubleClick={() => onDetails(stock.symbol)} className={`text-left rounded-[1.5rem] border p-4 transition-all ${selectedSymbol === stock.symbol ? "border-cyan-300/35 bg-cyan-300/10" : "border-white/10 bg-black/25 hover:bg-white/[0.06]"}`}><div className="flex items-start justify-between gap-3"><div><p className="text-xl font-semibold text-white">{stock.symbol}</p><p className="mt-1 text-sm text-white/45">{stock.name} · {stock.sector}</p></div><button type="button" onClick={(event) => { event.stopPropagation(); onFavorite(stock.symbol); }} className={`rounded-full border p-2 ${favorites.has(stock.symbol) ? "border-amber-300/30 bg-amber-300/10 text-amber-100" : "border-white/10 bg-white/[0.04] text-white/35"}`}><Star className="h-4 w-4" /></button></div><MiniSparkline values={history} positive={positive} /><div className="mt-4 flex items-end justify-between gap-4"><div><p className="text-xs text-white/35">{copy.price}</p><CoinAmount amount={stock.price} locale={locale} decimals /></div><div className={`text-right text-sm font-semibold ${positive ? "text-emerald-300" : "text-red-300"}`}>{positive ? "+" : ""}{formatPrice(stock.change, locale)}%</div></div><div className="mt-4 flex items-center justify-between gap-2 text-xs text-white/35"><span>{copy.risk}: {tr ? copy[stock.risk] : stock.risk}</span><span>{copy.detailHint}</span></div></button>; })}</div>{hasMore ? <button type="button" onClick={onLoadMore} className="mt-5 w-full rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-3 text-sm font-medium text-cyan-100 transition-all hover:bg-cyan-300/15">{copy.loadMoreStocks}</button> : null}</div>;
+  return <div className="eka-stagger rounded-[2rem] border border-white/10 bg-white/[0.045] p-4 backdrop-blur-xl sm:p-6" style={{ animationDelay: "220ms" }}><div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between"><div><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.market}</p><h2 className="mt-2 text-3xl font-medium">{copy.fictionalStocks}</h2></div><div className="flex flex-wrap gap-3"><button type="button" disabled={busy} onClick={onRefresh} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-50"><LineChart className="h-4 w-4" /> {copy.refresh}</button><button type="button" disabled={busy || !online} onClick={onReset} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/75 transition-all hover:bg-white/[0.1] disabled:opacity-40"><RefreshCcw className="h-4 w-4" /> {copy.reset}</button></div></div><div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto]"><label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white/70"><Search className="h-4 w-4 text-cyan-200" /><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder={copy.searchPlaceholder} className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/30" /></label><div className="grid grid-cols-3 gap-2 sm:flex"><FilterButton active={view === "all"} onClick={() => onView("all")}>{copy.allStocks}</FilterButton><FilterButton active={view === "owned"} onClick={() => onView("owned")}>{copy.onlyOwned}</FilterButton><FilterButton active={view === "favorites"} onClick={() => onView("favorites")}>{copy.favorites}</FilterButton></div></div><div className="mt-5 flex gap-2 overflow-x-auto pb-2">{sectors.map((sector) => <button key={sector} type="button" onClick={() => onSector(sector)} className={`shrink-0 rounded-full border px-4 py-2 text-sm transition-all ${selectedSector === sector ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100" : "border-white/10 bg-black/25 text-white/55 hover:bg-white/[0.07] hover:text-white"}`}>{sector === "all" ? copy.allSectors : sector} <span className="ml-1 text-xs opacity-60">{countForSector(sector)}</span></button>)}</div><div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/45">{copy.sectorHint}: <span className="text-white/75">{selectedSector === "all" ? copy.allSectors : selectedSector}</span> · {visibleCount}/{totalFiltered} {copy.showing} · {copy.doubleClickHint}</div><div className="mt-5 grid gap-4 xl:grid-cols-2">{visibleStocks.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{copy.noStockResult}</p> : visibleStocks.map((stock, index) => { const positive = safeNumber(stock.change) >= 0; const history = buildRangeValues(state.history[stock.symbol], stock.price, "hourly"); const flash = priceFlash[stock.symbol]; return <button key={stock.symbol} type="button" onClick={() => onSelect(stock.symbol)} onDoubleClick={() => onDetails(stock.symbol)} className={`eka-card-hover eka-stagger text-left rounded-[1.5rem] border p-4 ${flash === "up" ? "eka-price-up" : flash === "down" ? "eka-price-down" : ""} ${selectedSymbol === stock.symbol ? "border-cyan-300/35 bg-cyan-300/10" : "border-white/10 bg-black/25 hover:bg-white/[0.06]"}`} style={{ animationDelay: `${index * 45}ms` }}><div className="flex items-start justify-between gap-3"><div><p className="text-xl font-semibold text-white">{stock.symbol}</p><p className="mt-1 text-sm text-white/45">{stock.name} · {stock.sector}</p></div><button type="button" onClick={(event) => { event.stopPropagation(); onFavorite(stock.symbol); }} className={`rounded-full border p-2 transition-all ${favorites.has(stock.symbol) ? "border-amber-300/30 bg-amber-300/10 text-amber-100" : "border-white/10 bg-white/[0.04] text-white/35 hover:text-amber-100"}`}><Star className="h-4 w-4" /></button></div><MiniSparkline values={history} positive={positive} /><div className="mt-4 flex items-end justify-between gap-4"><div><p className="text-xs text-white/35">{copy.price}</p><CoinAmount amount={stock.price} locale={locale} decimals /></div><div className={`text-right text-sm font-semibold transition-all ${positive ? "text-emerald-300" : "text-red-300"}`}>{positive ? "+" : ""}{formatPrice(stock.change, locale)}%</div></div><div className="mt-4 flex items-center justify-between gap-2 text-xs text-white/35"><span>{copy.risk}: {tr ? copy[stock.risk] : stock.risk}</span><span>{copy.detailHint}</span></div></button>; })}</div>{hasMore ? <button type="button" onClick={onLoadMore} className="mt-5 w-full rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-3 text-sm font-medium text-cyan-100 transition-all hover:bg-cyan-300/15">{copy.loadMoreStocks}</button> : null}</div>;
 }
 
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
@@ -485,7 +589,7 @@ function FilterButton({ active, onClick, children }: { active: boolean; onClick:
 
 function OrderPanel(props: { copy: any; locale: string; stock: Stock; selectedSymbol: string; stocks: Stock[]; quantity: number; owned: number; orderValue: number; busy: boolean; online: boolean; onSymbol: (symbol: string) => void; onQuantity: (value: number) => void; onTrade: (side: "buy" | "sell") => void }) {
   const { copy, locale, stock, selectedSymbol, stocks, quantity, owned, orderValue, busy, online, onSymbol, onQuantity, onTrade } = props;
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.orderPanel}</p><div className="mt-5 grid gap-4"><label className="grid gap-2 text-sm text-white/45">{copy.symbol}<select value={selectedSymbol} onChange={(event) => onSymbol(event.target.value)} className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-white outline-none">{stocks.map((item) => <option key={item.symbol} value={item.symbol}>{item.symbol} · {item.name}</option>)}</select></label><label className="grid gap-2 text-sm text-white/45">{copy.quantity}<input type="number" min={1} value={quantity} onChange={(event) => onQuantity(Number(event.target.value))} className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-white outline-none" /></label><div className="grid gap-3 sm:grid-cols-2"><InfoCell label={copy.owned} value={`${formatNumber(owned, locale)} ${copy.shares}`} /><InfoCell label={copy.value} value={<CoinAmount amount={orderValue} locale={locale} />} /></div><div className="grid gap-3 sm:grid-cols-2"><button type="button" disabled={busy || !online} onClick={() => onTrade("buy")} className="rounded-full bg-white px-5 py-3 font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-40">{copy.buy}</button><button type="button" disabled={busy || !online || owned <= 0} onClick={() => onTrade("sell")} className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 font-medium text-white/75 transition-all hover:bg-white/[0.1] disabled:opacity-40">{copy.sell}</button></div><p className="text-xs leading-5 text-white/35">{stock.symbol} · {stock.name} · {copy.price}: {formatPrice(stock.price, locale)}</p></div></div>;
+  return <div className="eka-card-hover rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.orderPanel}</p><div className="mt-5 grid gap-4"><label className="grid gap-2 text-sm text-white/45">{copy.symbol}<select value={selectedSymbol} onChange={(event) => onSymbol(event.target.value)} className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-white outline-none">{stocks.map((item) => <option key={item.symbol} value={item.symbol}>{item.symbol} · {item.name}</option>)}</select></label><label className="grid gap-2 text-sm text-white/45">{copy.quantity}<input type="number" min={1} value={quantity} onChange={(event) => onQuantity(Number(event.target.value))} className="rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-white outline-none" /></label><div className="grid gap-3 sm:grid-cols-2"><InfoCell label={copy.owned} value={`${formatNumber(owned, locale)} ${copy.shares}`} /><InfoCell label={copy.value} value={<CoinAmount amount={orderValue} locale={locale} />} /></div><div className="grid gap-3 sm:grid-cols-2"><button type="button" disabled={busy || !online} onClick={() => onTrade("buy")} className="rounded-full bg-white px-5 py-3 font-medium text-black transition-all hover:bg-gray-200 active:scale-95 disabled:opacity-40">{copy.buy}</button><button type="button" disabled={busy || !online || owned <= 0} onClick={() => onTrade("sell")} className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 font-medium text-white/75 transition-all hover:bg-white/[0.1] active:scale-95 disabled:opacity-40">{copy.sell}</button></div><p className="text-xs leading-5 text-white/35">{stock.symbol} · {stock.name} · {copy.price}: {formatPrice(stock.price, locale)}</p></div></div>;
 }
 
 function StockDetailView(props: { stock: Stock; state: MarketState; copy: any; tr: boolean; locale: string; online: boolean; busy: boolean; onBack: () => void; onRefresh: () => void }) {
@@ -498,7 +602,7 @@ function StockDetailView(props: { stock: Stock; state: MarketState; copy: any; t
   const relatedNews = state.news.filter((item) => item.target === stock.symbol);
   const high = Math.max(...history);
   const low = Math.min(...history);
-  return <main className="relative min-h-screen overflow-hidden bg-black px-3 pb-28 pt-28 text-white sm:px-6"><BackgroundGlow /><div className="relative mx-auto max-w-7xl space-y-6"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={onBack} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/75 transition-all hover:bg-white/[0.1]"><ArrowLeft className="h-4 w-4" /> {copy.backToMarket}</button><button type="button" disabled={busy} onClick={onRefresh} className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-50"><RefreshCcw className="h-4 w-4" /> {copy.refresh}</button></div><section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-purple-500/10 backdrop-blur-xl sm:p-8"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.stockDetail}</p><div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-5xl font-semibold tracking-tight sm:text-7xl">{stock.symbol}</h1><p className="mt-3 text-lg text-white/55">{stock.name} · {stock.sector}</p><p className="mt-4 max-w-3xl text-sm leading-6 text-white/45">{tr ? stock.descriptionTr : stock.descriptionEn}</p></div><div className={`rounded-3xl border p-4 text-sm leading-6 ${online ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-amber-300/20 bg-amber-300/10 text-amber-100"}`}>{online ? copy.online : copy.offline}</div></div></section><section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]"><div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.bigChart}</p><h2 className="mt-2 text-3xl font-medium">{copy[`${range}Range`]}</h2></div><div className="grid grid-cols-3 gap-2 rounded-full border border-white/10 bg-black/25 p-1">{(["hourly", "daily", "weekly"] as ChartRange[]).map((item) => <button key={item} type="button" onClick={() => setRange(item)} className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${range === item ? "bg-white text-black" : "text-white/55 hover:bg-white/[0.08] hover:text-white"}`}>{copy[`${item}Short`]}</button>)}</div></div><LargeSparkline values={history} positive={positive} /><div className="mt-5 grid gap-3 sm:grid-cols-3"><InfoBox label={copy.rangeChange} value={<span className={positive ? "text-emerald-300" : "text-red-300"}>{positive ? "+" : ""}{formatPrice(rangeChange.percent, locale)}%</span>} /><InfoBox label={copy.highPrice} value={formatPrice(high, locale)} /><InfoBox label={copy.lowPrice} value={formatPrice(low, locale)} /></div></div><aside className="space-y-6"><div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.metrics}</p><div className="mt-5 grid gap-3"><InfoBox label={copy.currentPrice} value={<CoinAmount amount={stock.price} locale={locale} decimals />} /><InfoBox label={copy.previousPrice} value={<CoinAmount amount={safeNumber(stock.previousPrice)} locale={locale} decimals />} /><InfoBox label={copy.positionValue} value={<CoinAmount amount={owned * stock.price} locale={locale} decimals />} /><InfoBox label={copy.volatility} value={`${formatPrice(stock.volatility * 100, locale)}%`} /></div></div><div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.relatedNews}</p><div className="mt-5 space-y-3">{relatedNews.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-4 text-sm leading-6 text-white/45">{copy.noRelatedNews}</p> : relatedNews.map((item, index) => <div key={`${item.day}-${index}`} className="rounded-3xl border border-white/10 bg-black/25 p-4"><p className="text-xs text-white/35">{copy.day} {item.day} · {stock.symbol}</p><p className="mt-2 text-sm font-medium">{tr ? item.titleTr : item.titleEn}</p><p className={`mt-2 text-sm ${item.impact >= 0 ? "text-emerald-300" : "text-red-300"}`}>{item.impact >= 0 ? "+" : ""}{formatPrice(item.impact * 100, locale)}%</p></div>)}</div></div></aside></section></div></main>;
+  return <main className="eka-investsim relative min-h-screen overflow-hidden bg-black px-3 pb-28 pt-28 text-white sm:px-6"><AnimationStyles /><BackgroundGlow /><div className="relative mx-auto max-w-7xl space-y-6 eka-page-in"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={onBack} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/75 transition-all hover:bg-white/[0.1]"><ArrowLeft className="h-4 w-4" /> {copy.backToMarket}</button><button type="button" disabled={busy} onClick={onRefresh} className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-50"><RefreshCcw className="h-4 w-4" /> {copy.refresh}</button></div><section className="eka-stagger rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-purple-500/10 backdrop-blur-xl sm:p-8"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.stockDetail}</p><div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-5xl font-semibold tracking-tight sm:text-7xl">{stock.symbol}</h1><p className="mt-3 text-lg text-white/55">{stock.name} · {stock.sector}</p><p className="mt-4 max-w-3xl text-sm leading-6 text-white/45">{tr ? stock.descriptionTr : stock.descriptionEn}</p></div><div className={`rounded-3xl border p-4 text-sm leading-6 ${online ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-amber-300/20 bg-amber-300/10 text-amber-100"}`}>{online ? copy.online : copy.offline}</div></div></section><section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]"><div className="eka-stagger rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6" style={{ animationDelay: "120ms" }}><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.bigChart}</p><h2 className="mt-2 text-3xl font-medium">{copy[`${range}Range`]}</h2></div><div className="grid grid-cols-3 gap-2 rounded-full border border-white/10 bg-black/25 p-1">{(["hourly", "daily", "weekly"] as ChartRange[]).map((item) => <button key={item} type="button" onClick={() => setRange(item)} className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${range === item ? "bg-white text-black shadow-lg shadow-white/10" : "text-white/55 hover:bg-white/[0.08] hover:text-white"}`}>{copy[`${item}Short`]}</button>)}</div></div><LargeSparkline key={`${range}-${history.join("-")}`} values={history} positive={positive} /><div className="mt-5 grid gap-3 sm:grid-cols-3"><InfoBox label={copy.rangeChange} value={<span className={positive ? "text-emerald-300" : "text-red-300"}>{positive ? "+" : ""}{formatPrice(rangeChange.percent, locale)}%</span>} /><InfoBox label={copy.highPrice} value={formatPrice(high, locale)} /><InfoBox label={copy.lowPrice} value={formatPrice(low, locale)} /></div></div><aside className="space-y-6"><div className="eka-card-hover rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.metrics}</p><div className="mt-5 grid gap-3"><InfoBox label={copy.currentPrice} value={<CoinAmount amount={stock.price} locale={locale} decimals />} /><InfoBox label={copy.previousPrice} value={<CoinAmount amount={safeNumber(stock.previousPrice)} locale={locale} decimals />} /><InfoBox label={copy.positionValue} value={<CoinAmount amount={owned * stock.price} locale={locale} decimals />} /><InfoBox label={copy.volatility} value={`${formatPrice(stock.volatility * 100, locale)}%`} /></div></div><div className="eka-card-hover rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.relatedNews}</p><div className="mt-5 space-y-3">{relatedNews.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-4 text-sm leading-6 text-white/45">{copy.noRelatedNews}</p> : relatedNews.map((item, index) => <div key={`${item.day}-${index}`} className="eka-rank-row rounded-3xl border border-white/10 bg-black/25 p-4"><p className="text-xs text-white/35">{copy.day} {item.day} · {stock.symbol}</p><p className="mt-2 text-sm font-medium">{tr ? item.titleTr : item.titleEn}</p><p className={`mt-2 text-sm ${item.impact >= 0 ? "text-emerald-300" : "text-red-300"}`}>{item.impact >= 0 ? "+" : ""}{formatPrice(item.impact * 100, locale)}%</p></div>)}</div></div></aside></section></div></main>;
 }
 
 function MiniSparkline({ values, positive }: { values: number[]; positive: boolean }) {
@@ -507,7 +611,7 @@ function MiniSparkline({ values, positive }: { values: number[]; positive: boole
   const max = Math.max(...safeValues);
   const range = max - min || 1;
   const points = safeValues.map((value, index) => `${(index / Math.max(1, safeValues.length - 1)) * 100},${38 - ((value - min) / range) * 32}`).join(" ");
-  return <svg viewBox="0 0 100 42" className="mt-4 h-14 w-full overflow-visible"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={positive ? "text-emerald-300" : "text-red-300"} /></svg>;
+  return <svg viewBox="0 0 100 42" className="mt-4 h-14 w-full overflow-visible"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`${positive ? "text-emerald-300" : "text-red-300"} transition-all`} /></svg>;
 }
 
 function LargeSparkline({ values, positive }: { values: number[]; positive: boolean }) {
@@ -516,7 +620,8 @@ function LargeSparkline({ values, positive }: { values: number[]; positive: bool
   const max = Math.max(...safeValues);
   const range = max - min || 1;
   const points = safeValues.map((value, index) => `${(index / Math.max(1, safeValues.length - 1)) * 100},${160 - ((value - min) / range) * 130}`).join(" ");
-  return <div className="mt-6 overflow-hidden rounded-[2rem] border border-white/10 bg-black/30 p-4"><svg viewBox="0 0 100 180" preserveAspectRatio="none" className="h-80 w-full overflow-visible"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={positive ? "text-emerald-300" : "text-red-300"} /><circle cx="100" cy={160 - (((safeValues[safeValues.length - 1] || min) - min) / range) * 130} r="1.4" className={positive ? "fill-emerald-300" : "fill-red-300"} /></svg></div>;
+  const lastY = 160 - (((safeValues[safeValues.length - 1] || min) - min) / range) * 130;
+  return <div className="eka-range-panel mt-6 overflow-hidden rounded-[2rem] border border-white/10 bg-black/30 p-4"><svg viewBox="0 0 100 180" preserveAspectRatio="none" className="h-80 w-full overflow-visible"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`eka-draw-line ${positive ? "text-emerald-300" : "text-red-300"}`} /><circle cx="100" cy={lastY} r="1.6" className={`eka-pulse-dot ${positive ? "fill-emerald-300" : "fill-red-300"}`} /></svg></div>;
 }
 
 function CoinIcon({ size = "sm" }: { size?: "xs" | "sm" | "md" }) {
@@ -530,9 +635,9 @@ function CoinAmount({ amount, locale, prefix = "", decimals = false, size = "sm"
   return <span className={`inline-flex items-center justify-end gap-2 font-semibold tracking-tight text-white ${textSize}`}><span>{prefix}{value}</span><CoinIcon size={size === "xl" || size === "lg" ? "md" : size === "md" ? "sm" : "xs"} /></span>;
 }
 
-function MetricCard({ icon, label, value, detail, tone = "white" }: { icon: ReactNode; label: string; value: ReactNode; detail?: string; tone?: Tone }) {
+function MetricCard({ icon, label, value, detail, tone = "white", delay = 0 }: { icon: ReactNode; label: string; value: ReactNode; detail?: string; tone?: Tone; delay?: number }) {
   const toneClass = tone === "cyan" ? "text-cyan-200" : tone === "emerald" ? "text-emerald-300" : tone === "red" ? "text-red-300" : "text-white";
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl"><div className={`flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] ${toneClass}`}>{icon}</div><p className="mt-4 text-sm text-white/40">{label}</p><div className={`mt-2 ${toneClass}`}>{value}</div>{detail ? <p className="mt-1 text-sm text-white/40">{detail}</p> : null}</div>;
+  return <div className="eka-stagger eka-card-hover rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl" style={{ animationDelay: `${delay}ms` }}><div className={`flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] ${toneClass}`}>{icon}</div><p className="mt-4 text-sm text-white/40">{label}</p><div className={`mt-2 ${toneClass}`}>{value}</div>{detail ? <p className="mt-1 text-sm text-white/40">{detail}</p> : null}</div>;
 }
 
 function InfoCell({ label, value }: { label: string; value: ReactNode }) { return <div><p className="text-white/35">{label}</p><div className="mt-1 font-medium">{value}</div></div>; }
@@ -540,27 +645,42 @@ function InfoBox({ label, value }: { label: string; value: ReactNode }) { return
 
 function RiskCard({ label, text, tone, title }: { label: string; text: string; tone: Tone; title: string }) {
   const toneClass = tone === "red" ? "border-red-300/25 bg-red-300/10 text-red-100" : tone === "amber" ? "border-amber-300/25 bg-amber-300/10 text-amber-100" : tone === "emerald" ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100" : "border-cyan-300/25 bg-cyan-300/10 text-cyan-100";
-  return <div className={`rounded-[2rem] border p-5 backdrop-blur-xl sm:p-6 ${toneClass}`}><p className="text-sm uppercase tracking-[0.2em] opacity-70">{title}</p><h2 className="mt-3 text-3xl font-medium">{label}</h2><p className="mt-4 text-sm leading-6 opacity-75">{text}</p></div>;
+  return <div className={`eka-card-hover rounded-[2rem] border p-5 backdrop-blur-xl sm:p-6 ${toneClass}`}><p className="text-sm uppercase tracking-[0.2em] opacity-70">{title}</p><h2 className="mt-3 text-3xl font-medium">{label}</h2><p className="mt-4 text-sm leading-6 opacity-75">{text}</p></div>;
 }
 
 function PortfolioCard({ copy, portfolio, locale }: { copy: any; portfolio: any; locale: string }) {
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.portfolio}</p><div className="mt-5 space-y-3">{portfolio.rows.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{copy.emptyPortfolio}</p> : portfolio.rows.map((row: any) => { const pnlPercent = safeNumber(row.pnlPercent); const isProfit = pnlPercent >= 0; return <div key={row.symbol} className="rounded-3xl border border-white/10 bg-black/25 p-4"><div className="flex items-center justify-between gap-4"><div><p className="font-medium">{row.symbol} · {row.name}</p><p className="mt-1 text-sm text-white/40">{row.shares} {copy.shares} · {row.sector}</p></div><div className="text-right"><CoinAmount amount={row.value} locale={locale} size="sm" /><p className={`mt-1 text-sm font-medium ${isProfit ? "text-emerald-300" : "text-red-300"}`}>{isProfit ? "+" : ""}{formatPrice(pnlPercent, locale)}% {copy.profitLossShort}</p></div></div></div>; })}</div></div>;
+  return <div className="eka-stagger rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6" style={{ animationDelay: "300ms" }}><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.portfolio}</p><div className="mt-5 space-y-3">{portfolio.rows.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{copy.emptyPortfolio}</p> : portfolio.rows.map((row: any) => { const pnlPercent = safeNumber(row.pnlPercent); const isProfit = pnlPercent >= 0; return <div key={row.symbol} className="eka-card-hover rounded-3xl border border-white/10 bg-black/25 p-4"><div className="flex items-center justify-between gap-4"><div><p className="font-medium">{row.symbol} · {row.name}</p><p className="mt-1 text-sm text-white/40">{row.shares} {copy.shares} · {row.sector}</p></div><div className="text-right"><CoinAmount amount={row.value} locale={locale} size="sm" /><p className={`mt-1 text-sm font-medium ${isProfit ? "text-emerald-300" : "text-red-300"}`}>{isProfit ? "+" : ""}{formatPrice(pnlPercent, locale)}% {copy.profitLossShort}</p></div></div></div>; })}</div></div>;
 }
 
 function LeaderboardCard({ copy, locale, rows }: { copy: any; locale: string; rows: LeaderboardRow[] }) {
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.leaderboard}</p><Trophy className="h-5 w-5 text-amber-200" /></div><div className="mt-5 space-y-3">{rows.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/45">{copy.emptyLeaderboard}</p> : rows.map((row) => { const profit = safeNumber(row.marketProfit ?? row.totalValue); return <div key={row.userId} className="flex items-center gap-3 rounded-3xl border border-white/10 bg-black/25 p-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-semibold">#{row.rank}</span>{row.avatar_url ? <img src={row.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">{row.name.slice(0, 1).toUpperCase()}</span>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{row.name}</p><p className="text-xs text-white/35">{row.holdingsCount} {copy.shares} · {row.tradesCount} {copy.trades} · {profit >= 0 ? "+" : ""}{formatPrice(safeNumber(row.profitPercent), locale)}%</p></div><span className={profit >= 0 ? "text-emerald-300" : "text-red-300"}><CoinAmount amount={profit} locale={locale} prefix={profit >= 0 ? "+" : ""} size="sm" /></span></div>; })}</div></div>;
+  return <div className="eka-stagger rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6" style={{ animationDelay: "360ms" }}><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.leaderboard}</p><Trophy className="h-5 w-5 text-amber-200" /></div><div className="mt-5 space-y-3">{rows.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/45">{copy.emptyLeaderboard}</p> : rows.map((row, index) => { const profit = safeNumber(row.marketProfit ?? row.totalValue); return <div key={row.userId} className={`eka-rank-row flex items-center gap-3 rounded-3xl border border-white/10 bg-black/25 p-3 ${row.rank <= 3 ? "shadow-lg shadow-amber-500/10" : ""}`} style={{ animationDelay: `${index * 60}ms` }}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${row.rank <= 3 ? "border-amber-300/30 bg-amber-300/10 text-amber-100" : "border-white/10 bg-white/[0.06]"}`}>#{row.rank}</span>{row.avatar_url ? <img src={row.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">{row.name.slice(0, 1).toUpperCase()}</span>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{row.name}</p><p className="text-xs text-white/35">{row.holdingsCount} {copy.shares} · {row.tradesCount} {copy.trades} · {profit >= 0 ? "+" : ""}{formatPrice(safeNumber(row.profitPercent), locale)}%</p></div><span className={profit >= 0 ? "text-emerald-300" : "text-red-300"}><CoinAmount amount={profit} locale={locale} prefix={profit >= 0 ? "+" : ""} size="sm" /></span></div>; })}</div></div>;
 }
 
 function AchievementCard({ copy, achievements }: { copy: any; achievements: Array<{ key: string; title: string; desc: string; done: boolean; icon: ReactNode }> }) {
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.achievements}</p><Award className="h-5 w-5 text-cyan-200" /></div><div className="mt-5 grid gap-3">{achievements.map((item) => <div key={item.key} className={`rounded-3xl border p-4 ${item.done ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-white/10 bg-black/25 text-white/45"}`}><div className="flex gap-3"><div className="mt-1">{item.icon}</div><div><p className="font-medium">{item.title}</p><p className="mt-1 text-sm leading-6 opacity-75">{item.desc}</p></div></div></div>)}</div></div>;
+  return <div className="eka-stagger rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6" style={{ animationDelay: "420ms" }}><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.achievements}</p><Award className="h-5 w-5 text-cyan-200" /></div><div className="mt-5 grid gap-3">{achievements.map((item) => <div key={item.key} className={`eka-card-hover rounded-3xl border p-4 ${item.done ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100 shadow-lg shadow-emerald-500/10" : "border-white/10 bg-black/25 text-white/45"}`}><div className="flex gap-3"><div className="mt-1">{item.icon}</div><div><p className="font-medium">{item.title}</p><p className="mt-1 text-sm leading-6 opacity-75">{item.desc}</p></div></div></div>)}</div></div>;
 }
 
 function MissionCard({ title, missions }: { title: string; missions: Array<{ done: boolean; title: string; desc: string }> }) {
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{title}</p><div className="mt-5 space-y-3">{missions.map((mission) => <div key={mission.title} className={`rounded-3xl border p-4 ${mission.done ? "border-emerald-300/20 bg-emerald-300/10" : "border-white/10 bg-black/25"}`}><div className="flex gap-3"><CheckCircle2 className={`mt-1 h-5 w-5 shrink-0 ${mission.done ? "text-emerald-300" : "text-white/25"}`} /><div><p className="font-medium">{mission.title}</p><p className="mt-1 text-sm leading-6 text-white/45">{mission.desc}</p></div></div></div>)}</div></div>;
+  return <div className="eka-stagger rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6" style={{ animationDelay: "470ms" }}><p className="text-sm uppercase tracking-[0.2em] text-white/35">{title}</p><div className="mt-5 space-y-3">{missions.map((mission) => <div key={mission.title} className={`eka-card-hover rounded-3xl border p-4 ${mission.done ? "border-emerald-300/20 bg-emerald-300/10" : "border-white/10 bg-black/25"}`}><div className="flex gap-3"><CheckCircle2 className={`mt-1 h-5 w-5 shrink-0 ${mission.done ? "text-emerald-300" : "text-white/25"}`} /><div><p className="font-medium">{mission.title}</p><p className="mt-1 text-sm leading-6 text-white/45">{mission.desc}</p></div></div></div>)}</div></div>;
 }
 
 function NewsCard({ title, empty, lesson, dayLabel, news, tr, locale }: { title: string; empty: string; lesson: string; dayLabel: string; news: NewsItem[]; tr: boolean; locale: string }) {
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><p className="text-sm uppercase tracking-[0.2em] text-white/35">{title}</p><div className="mt-5 space-y-3">{news.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{empty}</p> : news.map((item, index) => <div key={`${item.day}-${item.target}-${index}`} className="rounded-3xl border border-white/10 bg-black/25 p-4"><div className="flex items-center gap-2 text-xs text-white/35"><Newspaper className="h-4 w-4" /> {dayLabel} {item.day} · {item.target}</div><p className="mt-2 font-medium">{tr ? item.titleTr : item.titleEn}</p><p className={`mt-2 text-sm ${item.tone === "positive" ? "text-emerald-300" : item.tone === "negative" ? "text-red-300" : "text-cyan-300"}`}>{item.impact > 0 ? "+" : ""}{formatPrice(item.impact * 100, locale)}%</p><p className="mt-3 text-sm leading-6 text-white/45"><span className="text-white/70">{lesson}:</span> {tr ? item.lessonTr : item.lessonEn}</p></div>)}</div></div>;
+  return <div className="eka-stagger rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6" style={{ animationDelay: "520ms" }}><p className="text-sm uppercase tracking-[0.2em] text-white/35">{title}</p><div className="mt-5 space-y-3">{news.length === 0 ? <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{empty}</p> : news.map((item, index) => <div key={`${item.day}-${item.target}-${index}`} className="eka-rank-row rounded-3xl border border-white/10 bg-black/25 p-4" style={{ animationDelay: `${index * 70}ms` }}><div className="flex items-center gap-2 text-xs text-white/35"><Newspaper className="h-4 w-4" /> {dayLabel} {item.day} · {item.target}</div><p className="mt-2 font-medium">{tr ? item.titleTr : item.titleEn}</p><p className={`mt-2 text-sm ${item.tone === "positive" ? "text-emerald-300" : item.tone === "negative" ? "text-red-300" : "text-cyan-300"}`}>{item.impact > 0 ? "+" : ""}{formatPrice(item.impact * 100, locale)}%</p><p className="mt-3 text-sm leading-6 text-white/45"><span className="text-white/70">{lesson}:</span> {tr ? item.lessonTr : item.lessonEn}</p></div>)}</div></div>;
+}
+
+function TradeBurstOverlay({ burst, copy }: { burst: TradeBurst; copy: any }) {
+  if (!burst) return null;
+  return <div className="pointer-events-none fixed bottom-8 right-6 z-[120] rounded-[2rem] border border-amber-300/20 bg-black/75 px-5 py-4 text-amber-100 shadow-2xl shadow-amber-500/20 backdrop-blur-xl"><p className="mb-2 text-sm font-medium">{burst.side === "buy" ? copy.buyAnimation : copy.sellAnimation} · {burst.symbol}</p><div className="relative h-16 w-52 overflow-visible">{Array.from({ length: 12 }).map((_, index) => <img key={index} src={coinIcon} alt="" className="absolute h-6 w-6 rounded-full" style={{ left: `${10 + index * 7}%`, top: `${18 + (index % 3) * 8}px`, animation: `${burst.side === "buy" ? "eka-coin-burst-buy" : "eka-coin-burst-sell"} 950ms ease-out forwards`, animationDelay: `${index * 35}ms` }} />)}</div></div>;
+}
+
+function DetailTransitionOverlay({ symbol, copy }: { symbol: string | null; copy: any }) {
+  if (!symbol) return null;
+  return <div className="pointer-events-none fixed inset-0 z-[110] flex items-center justify-center bg-black/55 backdrop-blur-sm"><div className="rounded-[2rem] border border-cyan-300/25 bg-white/[0.07] px-8 py-7 text-center shadow-2xl shadow-cyan-500/20" style={{ animation: "eka-detail-open 260ms ease both" }}><p className="text-sm uppercase tracking-[0.24em] text-cyan-100/70">{copy.openingDetail}</p><h2 className="mt-2 text-5xl font-semibold text-white">{symbol}</h2></div></div>;
+}
+
+function AchievementToast({ title, copy }: { title: string | null; copy: any }) {
+  if (!title) return null;
+  return <div className="fixed right-5 top-24 z-[125] max-w-xs rounded-[2rem] border border-emerald-300/25 bg-emerald-300/10 p-5 text-emerald-100 shadow-2xl shadow-emerald-500/20 backdrop-blur-xl" style={{ animation: "eka-achievement .42s ease both" }}><div className="flex gap-3"><Award className="mt-1 h-5 w-5 shrink-0" /><div><p className="text-sm uppercase tracking-[0.18em] opacity-70">{copy.unlocked}</p><p className="mt-1 font-semibold">{title}</p></div></div></div>;
 }
 
 const trCopy = {
@@ -599,6 +719,8 @@ const trCopy = {
   quantity: "Adet",
   buy: "Tech Coin ile al",
   sell: "Tech Coin'e sat",
+  buyAnimation: "Coinler pozisyona aktı",
+  sellAnimation: "Coinler cüzdana döndü",
   owned: "Sende var",
   portfolio: "Hesap portföyün",
   leaderboard: "Kâr leaderboard'u",
@@ -607,6 +729,7 @@ const trCopy = {
   risk: "Risk",
   missions: "Eğitim görevleri",
   news: "Global haber akışı",
+  tickerEmpty: "Piyasa verisi bekleniyor · İşlemler Tech Coin ile simüle edilir",
   emptyNews: "Henüz haber yok. Piyasa otomatik tick aldığında haber oluşur.",
   lesson: "Ders notu",
   price: "Tech Coin fiyatı",
@@ -624,6 +747,7 @@ const trCopy = {
   high: "Yüksek",
   detailHint: "Çift tıkla: detay",
   doubleClickHint: "Detaylı grafik için hisseye çift tıkla",
+  openingDetail: "Detay ekranı açılıyor",
   backToMarket: "Piyasaya dön",
   stockDetail: "Hisse detay ekranı",
   bigChart: "Detaylı fiyat grafiği",
@@ -644,6 +768,7 @@ const trCopy = {
   dailyShort: "Günlük",
   weeklyShort: "Haftalık",
   rewardPrefix: "Tech Coin ödülü",
+  unlocked: "Rozet açıldı",
   profitLossShort: "K/Z",
   starter: "Başlangıç",
   noCoins: "Cüzdanında Tech Coin yoksa alım yapamazsın. Önce OFF görevlerinden coin kazan.",
@@ -708,19 +833,24 @@ const enCopy = {
   noStockResult: "No stocks found for this filter.",
   buy: "Buy with Tech Coin",
   sell: "Sell for Tech Coin",
+  buyAnimation: "Coins moved into position",
+  sellAnimation: "Coins returned to wallet",
   portfolio: "Account portfolio",
   leaderboard: "Profit leaderboard",
   emptyLeaderboard: "No leaderboard data yet. It will fill after trades.",
   trades: "trades",
   missions: "Learning missions",
   news: "Global news feed",
+  tickerEmpty: "Waiting for market data · Trades are simulated with Tech Coin",
   achievements: "Achievement badges",
   profitLossShort: "P/L",
   doubleClickHint: "Double-click a stock for the detailed chart",
+  openingDetail: "Opening detail view",
   hourlyRange: "Hourly change",
   dailyRange: "Daily change",
   weeklyRange: "Weekly change",
   hourlyShort: "Hourly",
   dailyShort: "Daily",
   weeklyShort: "Weekly",
+  unlocked: "Achievement unlocked",
 };
