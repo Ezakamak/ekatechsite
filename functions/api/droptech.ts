@@ -223,6 +223,10 @@ export async function onRequestPost(context: any) {
     if (action === "heartbeat") return Response.json(await heartbeatPresence(context, auth.user.id));
     if (action === "sell_item") return Response.json(await sellItem(context, auth.user.id, String(body?.item_id || ""), Number(body?.quantity || 1)));
     if (action === "sell_all_items") return Response.json(await sellAllItems(context, auth.user.id));
+    if (action === "create_battle") return Response.json(await createBattleLobby(context, auth.user.id, body));
+    if (action === "join_battle") return Response.json(await joinBattleLobby(context, auth.user.id, Number(body?.battle_id || 0)));
+    if (action === "battle_bot") return Response.json(await addBotToBattle(context, auth.user.id, Number(body?.battle_id || 0)));
+    if (action === "battle_emoji") return Response.json(await sendBattleEmoji(context, auth.user.id, Number(body?.battle_id || 0), String(body?.emoji || "🔥")));
     if (action === "create_trade") return Response.json(await createTradeOffer(context, auth.user.id, body));
     if (action === "accept_trade") return Response.json(await acceptTradeRequest(context, auth.user.id, Number(body?.trade_id || 0)));
     if (action === "update_trade_items") return Response.json(await updateTradeItems(context, auth.user.id, body));
@@ -245,6 +249,9 @@ async function ensureTables(context: any) {
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_openings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, item_id TEXT NOT NULL, rarity TEXT NOT NULL, box_type TEXT DEFAULT 'standard_cache', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_presence (user_id INTEGER PRIMARY KEY, last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_trades (id INTEGER PRIMARY KEY AUTOINCREMENT, proposer_id INTEGER NOT NULL, recipient_id INTEGER NOT NULL, offer_item_id TEXT NOT NULL, offer_quantity INTEGER NOT NULL DEFAULT 1, request_item_id TEXT NOT NULL, request_quantity INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_battle_lobbies (id INTEGER PRIMARY KEY AUTOINCREMENT, creator_user_id INTEGER NOT NULL, opponent_user_id INTEGER, opponent_is_bot INTEGER DEFAULT 0, status TEXT NOT NULL DEFAULT 'waiting', box_sequence_json TEXT NOT NULL, creator_paid INTEGER NOT NULL DEFAULT 0, opponent_paid INTEGER NOT NULL DEFAULT 0, creator_score INTEGER NOT NULL DEFAULT 0, opponent_score INTEGER NOT NULL DEFAULT 0, winner_user_id INTEGER, winner_side TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, started_at TEXT, completed_at TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_battle_rounds (id INTEGER PRIMARY KEY AUTOINCREMENT, lobby_id INTEGER NOT NULL, round_number INTEGER NOT NULL, box_type TEXT NOT NULL, creator_item_id TEXT NOT NULL, opponent_item_id TEXT NOT NULL, creator_points INTEGER NOT NULL DEFAULT 0, opponent_points INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(lobby_id, round_number))`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS droptech_battle_emotes (id INTEGER PRIMARY KEY AUTOINCREMENT, lobby_id INTEGER NOT NULL, user_id INTEGER NOT NULL, emoji TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS coin_wallets (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 100, lifetime_earned INTEGER DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS coin_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, amount INTEGER NOT NULL, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await addColumnIfMissing(context, "droptech_openings", "box_type", "TEXT DEFAULT 'standard_cache'");
@@ -254,6 +261,10 @@ async function ensureTables(context: any) {
   await addColumnIfMissing(context, "droptech_trades", "proposer_confirmed", "INTEGER DEFAULT 0");
   await addColumnIfMissing(context, "droptech_trades", "recipient_confirmed", "INTEGER DEFAULT 0");
   await ensureCoinColumns(context);
+  await addColumnIfMissing(context, "droptech_battle_lobbies", "opponent_is_bot", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(context, "droptech_battle_lobbies", "creator_score", "INTEGER NOT NULL DEFAULT 0");
+  await addColumnIfMissing(context, "droptech_battle_lobbies", "opponent_score", "INTEGER NOT NULL DEFAULT 0");
+  await addColumnIfMissing(context, "droptech_battle_lobbies", "winner_side", "TEXT");
 }
 
 async function ensureCoinColumns(context: any) {
@@ -386,6 +397,95 @@ async function sellAllItems(context: any, userId: number) {
   await context.env.DB.prepare(`UPDATE coin_wallets SET balance = COALESCE(balance, 100) + ?, lifetime_earned = COALESCE(lifetime_earned, 0) + ?, updated_at = datetime('now') WHERE user_id = ?`).bind(payout, payout, userId).run();
   await logTechCoinEvent(context, userId, payout, `DropTech toplu envanter bozdurma: ${totalQuantity} eşya`);
   return { ...await buildState(context, userId), sold_all: { quantity: totalQuantity, payout } };
+}
+
+
+async function createBattleLobby(context: any, userId: number, body: any) {
+  const rawBoxes = Array.isArray(body?.box_sequence) ? body.box_sequence : [body?.box_type || "standard_cache"];
+  const boxSequence = rawBoxes.map((box: any) => String(box)).filter((box: string) => BOX_TYPES.some((entry) => entry.id === box)).slice(0, 8);
+  if (!boxSequence.length) throw new DropTechUserError("Battle için en az 1 geçerli kasa seç.");
+  const active: any = await context.env.DB.prepare(`SELECT id FROM droptech_battle_lobbies WHERE creator_user_id = ? AND status = 'waiting' LIMIT 1`).bind(userId).first();
+  if (active) throw new DropTechUserError("Zaten bekleyen bir kasa savaşı lobin var.");
+  const cost = battleCost(boxSequence);
+  const wallet: any = await getTechCoinWallet(context, userId);
+  if (Number(wallet?.balance || 0) < cost) throw new DropTechUserError(`Kasa savaşı kurmak için ${cost} Tech Coin gerekiyor.`, 402);
+  const spent = await spendTechCoinForDropTech(context, userId, cost, `DropTech Battle kurulum bedeli: ${boxSequence.length} kasa`);
+  if (!spent) throw new DropTechUserError("Tech Coin bakiyesi güncel değil; sayfayı yenile.", 402);
+  await context.env.DB.prepare(`INSERT INTO droptech_battle_lobbies (creator_user_id, status, box_sequence_json, creator_paid, updated_at) VALUES (?, 'waiting', ?, ?, CURRENT_TIMESTAMP)`).bind(userId, JSON.stringify(boxSequence), cost).run();
+  return { ...await buildState(context, userId), battle_created: true };
+}
+
+async function joinBattleLobby(context: any, userId: number, battleId: number) {
+  const lobby: any = await context.env.DB.prepare(`SELECT * FROM droptech_battle_lobbies WHERE id = ? AND status = 'waiting'`).bind(battleId).first();
+  if (!lobby) throw new DropTechUserError("Katılabileceğin açık battle lobisi bulunamadı.");
+  if (Number(lobby.creator_user_id) === userId) throw new DropTechUserError("Kendi battle lobine oyuncu olarak katılamazsın; bot ile devam edebilirsin.");
+  const boxSequence = safeJsonArray(lobby.box_sequence_json).filter((box) => BOX_TYPES.some((entry) => entry.id === box));
+  const cost = battleCost(boxSequence);
+  const wallet: any = await getTechCoinWallet(context, userId);
+  if (Number(wallet?.balance || 0) < cost) throw new DropTechUserError(`Battle'a katılmak için ${cost} Tech Coin gerekiyor.`, 402);
+  const spent = await spendTechCoinForDropTech(context, userId, cost, `DropTech Battle katılım bedeli: #${battleId}`);
+  if (!spent) throw new DropTechUserError("Tech Coin bakiyesi güncel değil; sayfayı yenile.", 402);
+  await context.env.DB.prepare(`UPDATE droptech_battle_lobbies SET opponent_user_id = ?, opponent_paid = ?, status = 'in_progress', started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'waiting'`).bind(userId, cost, battleId).run();
+  await resolveBattle(context, battleId);
+  return { ...await buildState(context, userId), battle_joined: true, active_battle_id: battleId };
+}
+
+async function addBotToBattle(context: any, userId: number, battleId: number) {
+  const lobby: any = await context.env.DB.prepare(`SELECT * FROM droptech_battle_lobbies WHERE id = ? AND creator_user_id = ? AND status = 'waiting'`).bind(battleId, userId).first();
+  if (!lobby) throw new DropTechUserError("Bot ile başlatılacak bekleyen battle lobisi bulunamadı.");
+  await context.env.DB.prepare(`UPDATE droptech_battle_lobbies SET opponent_is_bot = 1, status = 'in_progress', started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'waiting'`).bind(battleId).run();
+  await resolveBattle(context, battleId);
+  return { ...await buildState(context, userId), battle_bot: true, active_battle_id: battleId };
+}
+
+async function sendBattleEmoji(context: any, userId: number, battleId: number, emoji: string) {
+  const allowed = ["🔥", "😂", "😱", "💎", "🤖", "⚡", "🏆", "😭"];
+  const safeEmoji = allowed.includes(emoji) ? emoji : "🔥";
+  const lobby: any = await context.env.DB.prepare(`SELECT * FROM droptech_battle_lobbies WHERE id = ? AND (creator_user_id = ? OR opponent_user_id = ?)`).bind(battleId, userId, userId).first();
+  if (!lobby) throw new DropTechUserError("Emoji gönderebileceğin battle bulunamadı.");
+  await context.env.DB.prepare(`INSERT INTO droptech_battle_emotes (lobby_id, user_id, emoji) VALUES (?, ?, ?)`).bind(battleId, userId, safeEmoji).run();
+  return { ...await buildState(context, userId), battle_emoji: safeEmoji };
+}
+
+async function resolveBattle(context: any, battleId: number) {
+  const lobby: any = await context.env.DB.prepare(`SELECT * FROM droptech_battle_lobbies WHERE id = ? AND status = 'in_progress'`).bind(battleId).first();
+  if (!lobby) return;
+  const existing: any = await context.env.DB.prepare(`SELECT id FROM droptech_battle_rounds WHERE lobby_id = ? LIMIT 1`).bind(battleId).first();
+  if (existing) return;
+  const boxSequence = safeJsonArray(lobby.box_sequence_json).filter((box) => BOX_TYPES.some((entry) => entry.id === box));
+  let creatorScore = 0;
+  let opponentScore = 0;
+  const creatorItems: string[] = [];
+  const opponentItems: string[] = [];
+  for (let index = 0; index < boxSequence.length; index += 1) {
+    const boxType = boxSequence[index];
+    const creatorItem = pickDropItem(boxType);
+    const opponentItem = pickDropItem(boxType);
+    creatorScore += creatorItem.tech_coin_value;
+    opponentScore += opponentItem.tech_coin_value;
+    creatorItems.push(creatorItem.id);
+    opponentItems.push(opponentItem.id);
+    await context.env.DB.prepare(`INSERT OR IGNORE INTO droptech_battle_rounds (lobby_id, round_number, box_type, creator_item_id, opponent_item_id, creator_points, opponent_points) VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(battleId, index + 1, boxType, creatorItem.id, opponentItem.id, creatorItem.tech_coin_value, opponentItem.tech_coin_value).run();
+  }
+  const winnerSide = creatorScore === opponentScore ? (Math.random() > 0.5 ? "creator" : "opponent") : creatorScore > opponentScore ? "creator" : "opponent";
+  const winnerUserId = winnerSide === "creator" ? Number(lobby.creator_user_id) : Number(lobby.opponent_user_id || 0);
+  if (winnerUserId) {
+    for (const itemId of [...creatorItems, ...opponentItems]) await addInventoryItem(context, winnerUserId, itemId, 1);
+  }
+  await context.env.DB.prepare(`UPDATE droptech_battle_lobbies SET status = 'completed', creator_score = ?, opponent_score = ?, winner_user_id = ?, winner_side = ?, completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(creatorScore, opponentScore, winnerUserId || null, winnerSide, battleId).run();
+}
+
+function battleCost(boxSequence: string[]) {
+  return boxSequence.reduce((sum, boxType) => sum + boxOpenCost(boxType), 0);
+}
+
+function safeJsonArray(value: string) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed.map((entry) => String(entry)) : [];
+  } catch {
+    return [];
+  }
 }
 
 async function createTradeOffer(context: any, userId: number, body: any) {
@@ -533,6 +633,7 @@ async function buildState(context: any, userId: number) {
     odds_by_box: Object.fromEntries(BOX_TYPES.map((boxType) => [boxType.id, rarityOdds(boxType.id)])),
     online_users: await getOnlineUsers(context, userId),
     trades: await getTradeOffers(context, userId),
+    battles: await getBattleLobbies(context, userId),
     value_rules: {
       mode: "exclusive_box_series",
       wallet_source: "coin_wallets",
@@ -547,6 +648,37 @@ async function buildState(context: any, userId: number) {
       market_enabled: false,
       rarity_values: RARITY_VALUES,
     },
+  };
+}
+
+
+async function getBattleLobbies(context: any, userId: number) {
+  const rows = await context.env.DB.prepare(`SELECT b.*, creator.name AS creator_name, creator.avatar_url AS creator_avatar_url, opponent.name AS opponent_name, opponent.avatar_url AS opponent_avatar_url FROM droptech_battle_lobbies b JOIN users creator ON creator.id = b.creator_user_id LEFT JOIN users opponent ON opponent.id = b.opponent_user_id WHERE b.status = 'waiting' OR b.creator_user_id = ? OR b.opponent_user_id = ? ORDER BY CASE b.status WHEN 'waiting' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END, b.updated_at DESC LIMIT 18`).bind(userId, userId).all();
+  const lobbies = rows?.results || [];
+  const enriched = [];
+  for (const lobby of lobbies) {
+    const boxSequence = safeJsonArray(lobby.box_sequence_json);
+    const roundRows = await context.env.DB.prepare(`SELECT * FROM droptech_battle_rounds WHERE lobby_id = ? ORDER BY round_number ASC`).bind(lobby.id).all();
+    const emoteRows = await context.env.DB.prepare(`SELECT e.*, users.name FROM droptech_battle_emotes e JOIN users ON users.id = e.user_id WHERE e.lobby_id = ? ORDER BY e.id DESC LIMIT 10`).bind(lobby.id).all();
+    enriched.push({
+      ...lobby,
+      box_sequence: boxSequence,
+      cost: battleCost(boxSequence),
+      boxes: boxSequence.map((boxType) => withBoxValue(BOX_TYPES.find((entry) => entry.id === boxType) || BOX_TYPES[0])),
+      rounds: (roundRows?.results || []).map(enrichBattleRound),
+      emotes: emoteRows?.results || [],
+      opponent_name: Number(lobby.opponent_is_bot) ? "EKA Bot" : lobby.opponent_name,
+      opponent_avatar_url: Number(lobby.opponent_is_bot) ? null : lobby.opponent_avatar_url,
+    });
+  }
+  return enriched;
+}
+
+function enrichBattleRound(row: any) {
+  return {
+    ...row,
+    creator_item: DROP_ITEMS.find((item) => item.id === row.creator_item_id) || null,
+    opponent_item: DROP_ITEMS.find((item) => item.id === row.opponent_item_id) || null,
   };
 }
 
