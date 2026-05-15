@@ -23,6 +23,7 @@ import { BackToTop } from "./components/BackToTop";
 import { CookieConsent } from "./components/CookieConsent";
 import { AdminPanel } from "./components/AdminPanel";
 import { AdminOffCredits } from "./components/AdminOffCredits";
+import { AdminMarketComments } from "./components/AdminMarketComments";
 import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
 import { AuthPage } from "./components/AuthPage";
 import { AccountPage } from "./components/AccountPage";
@@ -153,6 +154,7 @@ export default function App() {
             <div className="bg-black px-4 pb-24 sm:px-6">
               <div className="mx-auto max-w-7xl space-y-6">
                 <AdminOffCredits />
+                <AdminMarketComments />
                 <MaintenancePanel />
                 <AdminTodoPanel />
                 <AdminProjectTools />
