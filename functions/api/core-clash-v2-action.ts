@@ -16,6 +16,7 @@ type Step = {
 const MAX_HAND = 6;
 const MAX_ENERGY = 8;
 const MAX_TURNS = 30;
+const MAX_HP = 60;
 const BOT_EMAIL_MARKER = ".bot@ekatech.local";
 const PASS_CARD: Card = { id: "pass", name: "Skip", type: "pass", cost: 0 };
 
@@ -163,6 +164,8 @@ function chooseBotCard(player: any, mapKey: string, name: string) {
     if (card.type === "attack") score += skill === "hard" ? 5 : 3;
     if (card.type === "overload" && heat >= 2) score -= 6;
     if (card.type === "utility" && skill !== "easy") score += 2;
+    if (card.tags?.includes("heal") && hp <= 30) score += 4;
+    if (card.tags?.includes("energy") && energy <= 4) score += 3;
     score += hashUnit(`${player.id}:${card.id}:${skill}`) * (skill === "hard" ? 2 : 7);
     return { id: card.id, score };
   }).sort((a, b) => b.score - a.score);
@@ -247,18 +250,40 @@ function applyCard(mapBoost: CardType, self: any, enemy: any, card: Card, enemyC
   let heal = 0;
   let reflect = 0;
   let blocked = false;
+  let reduction = 0;
 
-  if (card.id === "pass") steps.push({ actor, card: card.name, text: `${actor === "creator" ? "Creator" : "Opponent"} skip geçti.` });
+  if (card.id === "pass") steps.push({ actor, card: card.name, text: `${actorName(actor)} skip geçti.` });
+
+  if (card.id === "ping_snipe") damage = 4;
   if (card.id === "glitch_strike") damage = 7;
   if (card.id === "packet_burst") damage = enemyCard.type === "defense" ? 6 : 10;
+  if (card.id === "buffer_barrage") damage = enemyCard.type === "trap" ? 6 : 9;
   if (card.id === "pierce_injection") damage = 8;
   if (card.id === "double_ping") damage = 8;
-  if (card.id === "core_spike") { damage = 13; self.heat += 1; }
-  if (card.id === "core_overload") { damage = 16; self.heat += 2; }
+  if (card.id === "cache_bomb") { damage = 9; enemy.energy_delta_next -= 1; }
+  if (card.id === "exploit_chain") damage = enemyCard.type === "utility" || enemyCard.type === "trap" ? 12 : 7;
+  if (card.id === "core_spike") { damage = 12; self.heat += 1; }
+  if (card.id === "kernel_lance") { damage = 11; self.heat += 1; }
+  if (card.id === "core_overload") { damage = 15; self.heat += 2; }
+  if (card.id === "meltdown") { damage = 18; self.heat += 3; self.hp -= 4; }
+
   if (card.id === "blackout") { enemy.draw_block_next = 1; enemy.energy_delta_next -= 1; self.heat += 1; steps.push({ actor, card: card.name, text: `${actorName(actor)} Blackout oynadı.` }); }
-  if (card.id === "full_restore") { heal = 16; self.heat += 2; }
+  if (card.id === "singularity_push") { damage = 8; enemy.energy_delta_next -= 2; enemy.draw_block_next = 1; self.heat += 2; }
+  if (card.id === "admin_override") { blocked = enemyCard.type === "attack" || enemyCard.type === "overload"; heal = 6; self.heat += 2; }
+
   if (card.id === "emergency_patch") heal = 6;
+  if (card.id === "repair_drone") { heal = 8; self.energy_delta_next += 1; }
+  if (card.id === "reboot_protocol") { heal = 14; self.heat = Math.max(0, self.heat - 2); self.energy_delta_next -= 1; }
+  if (card.id === "full_restore") { heal = 15; self.heat += 2; }
+  if (card.id === "shield_bash") { heal = 3; if (enemyCard.type === "attack" || enemyCard.type === "overload") damage = 5; }
+  if (card.id === "quarantine_wall") { heal = 3; if (enemyCard.type === "utility" || enemyCard.type === "trap") enemy.draw_block_next = 1; }
+
   if (card.id === "battery_backup") self.energy_delta_next += 2;
+  if (card.id === "energy_surge") self.energy_delta_next += 3;
+  if (card.id === "packet_duplication") { self.draw_block_next = -1; self.energy_delta_next += 1; }
+  if (card.id === "quick_compile") self.draw_block_next = -1;
+  if (card.id === "signal_boost") { self.draw_block_next = -1; self.energy_delta_next += 1; }
+  if (card.id === "cooldown_flush") { self.heat = Math.max(0, self.heat - 3); heal = Math.max(heal, 2); }
   if (card.id === "data_drain") enemy.energy_delta_next -= 2;
   if (card.id === "system_scan") self.draw_block_next = -1;
   if (card.id === "hand_jam" && enemyCard.type === "utility") { enemy.draw_block_next = 1; enemy.energy_delta_next -= 1; steps.push({ actor, card: card.name, text: `${actorName(actor)} Hand Jam ile utility bozdu.` }); }
@@ -267,23 +292,33 @@ function applyCard(mapBoost: CardType, self: any, enemy: any, card: Card, enemyC
   if (boosted && card.type === "attack") { damage += 1; if (card.cost >= 5) self.heat += 1; }
   if (boosted && card.type === "utility") self.draw_block_next = -1;
 
-  if (enemyCard.id === "core_shield" && damage > 0 && card.id !== "pierce_injection") blocked = true;
-  if (enemyCard.id === "firewall" && damage > 0 && card.id !== "pierce_injection") damage = Math.ceil(damage / 2);
-  if (enemyCard.id === "false_firewall" && card.id === "pierce_injection") blocked = true;
+  const pierces = card.id === "pierce_injection" || card.id === "kernel_lance";
+  if (enemyCard.id === "core_shield" && damage > 0 && !pierces) blocked = true;
+  if (enemyCard.id === "admin_override" && damage > 0 && !pierces) blocked = true;
+  if (enemyCard.id === "firewall" && damage > 0 && !pierces) damage = Math.ceil(damage / 2);
+  if (enemyCard.id === "nano_barrier" && damage > 0 && !pierces) reduction += 4;
+  if (enemyCard.id === "quarantine_wall" && (card.type === "utility" || card.type === "trap")) { enemy.energy_delta_next += 1; damage = Math.max(0, damage - 2); }
+  if (enemyCard.id === "false_firewall" && pierces) blocked = true;
   if (enemyCard.id === "mirror_bug" && (card.type === "attack" || card.type === "overload")) reflect += Math.ceil(damage / 2);
+  if (enemyCard.id === "redirect_loop" && card.type === "attack") reflect += Math.ceil(damage * 0.45);
   if (enemyCard.id === "packet_trap" && card.cost >= 4) reflect += enemyCard.type === mapBoost ? 8 : 6;
-  if (enemyCard.id === "static_field" && card.id === "double_ping") reflect += 5;
+  if (enemyCard.id === "logic_bomb" && card.cost >= 5) reflect += 10;
+  if (enemyCard.id === "honeypot" && card.type === "utility") { reflect += 4; self.energy_delta_next -= 1; }
+  if (enemyCard.id === "checksum_snare" && card.cost <= 2 && card.id !== "pass") { reflect += 3; enemy.energy_delta_next += 1; }
+  if (enemyCard.id === "static_field" && (card.id === "double_ping" || card.id === "buffer_barrage")) reflect += 5;
   if (card.id === "decoy_packet" && enemyCard.type === "trap") { reflect = 0; steps.push({ actor, card: card.name, text: `${actorName(actor)} Decoy Packet ile trap boşa çıkardı.` }); }
 
   if (blocked) damage = 0;
+  if (reduction > 0) damage = Math.max(0, damage - reduction);
   if (boosted && card.type === "defense") heal += 1;
   if (boosted && card.type === "trap" && reflect > 0) reflect += 1;
 
-  self.hp = Math.min(60, self.hp + heal);
+  self.hp = Math.min(MAX_HP, self.hp + heal);
   enemy.hp = Math.max(0, enemy.hp - damage);
   self.hp = Math.max(0, self.hp - reflect);
 
   if (blocked) steps.push({ actor, card: card.name, text: `${actorName(actor)} saldırısı bloklandı.` });
+  if (reduction > 0 && damage > 0) steps.push({ actor: target, card: enemyCard.name, text: `${actorName(actor)} hasarı ${reduction} azaltıldı.` });
   if (damage > 0) steps.push({ actor, card: card.name, text: `${actorName(actor)} ${card.name} ile ${damage} hasar verdi.`, target, damage });
   if (heal > 0) steps.push({ actor, card: card.name, text: `${actorName(actor)} ${heal} HP yeniledi.`, target: actor, heal });
   if (reflect > 0) steps.push({ actor: target, card: enemyCard.name, text: `${actorName(actor)} ${reflect} yansıma hasarı aldı.`, target: actor, damage: reflect });
