@@ -1,5 +1,6 @@
 import { MarketAcademy as MarketAcademyV2 } from "./MarketAcademyV2";
 import { MarketStockCommentsDock } from "./MarketStockCommentsDock";
+import { MarketStockSubmissionPanel } from "./MarketStockSubmissionPanel";
 
 function InvestSimVisualFixes() {
   return (
@@ -17,6 +18,7 @@ export function MarketAcademy() {
   return (
     <>
       <MarketAcademyV2 />
+      <MarketStockSubmissionPanel />
       <InvestSimVisualFixes />
       <MarketStockCommentsDock />
     </>
