@@ -15,25 +15,6 @@ type StockSeed = {
   risk: Risk;
 };
 
-type NewsConcept = {
-  tone: NewsTone;
-  impact: number;
-  titleTr: string;
-  titleEn: string;
-  lessonTr: string;
-  lessonEn: string;
-};
-
-type NewsSeed = {
-  target: string;
-  impact: number;
-  tone: NewsTone;
-  titleTr: string;
-  titleEn: string;
-  lessonTr: string;
-  lessonEn: string;
-};
-
 type RewardSeed = {
   key: string;
   amount: number;
@@ -138,50 +119,10 @@ const REWARDS: RewardSeed[] = [
   { key: "portfolio_growth_5", amount: 35, titleTr: "Portföyünü başlangıca göre %5 büyüttün", titleEn: "Grew your portfolio 5% above baseline" },
 ];
 
-const NEWS_CONCEPTS: NewsConcept[] = [
-  { tone: "positive", impact: 0.045, titleTr: "{name} yeni müşteri kazanımı açıkladı.", titleEn: "{name} announced a new customer win.", lessonTr: "Yeni müşteri gelir beklentisini artırabilir; sürdürülebilirlik ayrıca izlenir.", lessonEn: "A new customer can improve revenue expectations; sustainability still needs to be watched." },
-  { tone: "positive", impact: 0.052, titleTr: "{name} operasyon verimliliğinde iyileşme bildirdi.", titleEn: "{name} reported improved operational efficiency.", lessonTr: "Verimlilik artışı aynı satıştan daha fazla kâr üretme ihtimalini güçlendirir.", lessonEn: "Efficiency gains can increase the chance of producing more profit from the same sales." },
-  { tone: "positive", impact: 0.061, titleTr: "{name} yeni ürün lansmanında güçlü talep gördü.", titleEn: "{name} saw strong demand after a new product launch.", lessonTr: "Talep haberi fiyatı destekleyebilir; önemli olan talebin satışa dönüşmesidir.", lessonEn: "Demand news can support price; what matters is whether demand converts into sales." },
-  { tone: "positive", impact: 0.038, titleTr: "{sector} sektöründe beklentiler toparlandı; {name} olumlu ayrıştı.", titleEn: "Expectations improved in the {sector} sector; {name} outperformed.", lessonTr: "Sektör havası iyi olduğunda aynı sektördeki şirketler birlikte etkilenebilir.", lessonEn: "When sector sentiment improves, companies in that sector can move together." },
-  { tone: "positive", impact: 0.072, titleTr: "{name} büyük ölçekli stratejik ortaklık duyurdu.", titleEn: "{name} announced a large-scale strategic partnership.", lessonTr: "Ortaklıklar büyüme hikâyesini güçlendirir ama beklenti fazla şişerse risk artar.", lessonEn: "Partnerships can strengthen growth stories, but overextended expectations increase risk." },
-  { tone: "positive", impact: 0.034, titleTr: "{name} borçluluk oranını düşürdüğünü açıkladı.", titleEn: "{name} said it reduced its debt ratio.", lessonTr: "Borç azalması finansal riski düşürebilir ve şirketi daha dayanıklı gösterebilir.", lessonEn: "Lower debt can reduce financial risk and make a company look more resilient." },
-  { tone: "positive", impact: 0.066, titleTr: "{name} beklentilerin üzerinde dönemsel sonuç yayımladı.", titleEn: "{name} published results above expectations.", lessonTr: "Piyasa çoğu zaman mutlak sonuçtan çok beklentiye göre gelen sürprizi fiyatlar.", lessonEn: "Markets often price the surprise versus expectations more than the absolute result." },
-  { tone: "negative", impact: -0.042, titleTr: "{name} beklenenden zayıf talep sinyali verdi.", titleEn: "{name} signaled weaker-than-expected demand.", lessonTr: "Talep zayıflığı gelir beklentisini bozar ve kısa vadeli baskı yaratabilir.", lessonEn: "Weak demand hurts revenue expectations and can create short-term pressure." },
-  { tone: "negative", impact: -0.054, titleTr: "{name} maliyet artışı nedeniyle marj baskısı bildirdi.", titleEn: "{name} reported margin pressure from rising costs.", lessonTr: "Maliyet artışı satış iyi olsa bile kârlılığı düşürebilir.", lessonEn: "Rising costs can reduce profitability even when sales look healthy." },
-  { tone: "negative", impact: -0.067, titleTr: "{name} ürün veya proje teslimatında gecikme açıkladı.", titleEn: "{name} announced a product or project delivery delay.", lessonTr: "Gecikmeler beklentiyi bozar; yüksek oynak hisselerde etki daha sert olabilir.", lessonEn: "Delays weaken expectations; impact can be sharper in high-volatility stocks." },
-  { tone: "negative", impact: -0.049, titleTr: "{sector} sektöründe regülasyon belirsizliği arttı; {name} baskı gördü.", titleEn: "Regulatory uncertainty increased in the {sector} sector; {name} came under pressure.", lessonTr: "Regülasyon belirsizliği şirketten bağımsız sektör riski yaratabilir.", lessonEn: "Regulatory uncertainty can create sector risk independent of company quality." },
-  { tone: "negative", impact: -0.074, titleTr: "{name} beklenti altı finansal sonuç yayımladı.", titleEn: "{name} published financial results below expectations.", lessonTr: "Beklenti altı sonuç, kötü haber fiyatlanmadıysa sert tepki doğurabilir.", lessonEn: "Below-expectation results can cause a sharp reaction if bad news was not priced in." },
-  { tone: "neutral", impact: 0.012, titleTr: "{name} yatırımcı sunumunu güncelledi.", titleEn: "{name} updated its investor presentation.", lessonTr: "Her haber büyük fiyat hareketi yaratmaz; bazen bilgi akışı sadece izleme sinyalidir.", lessonEn: "Not every headline causes a large move; some news is simply information to monitor." },
-  { tone: "neutral", impact: -0.009, titleTr: "{name} olağan kurul toplantısı takvimini paylaştı.", titleEn: "{name} shared its regular meeting calendar.", lessonTr: "Takvim haberleri genelde sınırlı etki yapar; önemli olan toplantıdan çıkacak kararlardır.", lessonEn: "Calendar news usually has limited impact; decisions from the meeting matter more." },
-  { tone: "neutral", impact: 0.008, titleTr: "{name} sürdürülebilirlik hedeflerini tekrar teyit etti.", titleEn: "{name} reaffirmed its sustainability targets.", lessonTr: "Hedef teyidi güven verir ama fiyat etkisi genellikle performans verisiyle oluşur.", lessonEn: "Target reaffirmation can build trust, but price impact usually needs performance data." },
-];
-
-const STOCK_SYMBOLS = STOCKS.map((stock) => stock.symbol);
-const NEWS_POOL: NewsSeed[] = buildNewsPool();
-
-function buildNewsPool() {
-  return STOCKS.flatMap((stock) => {
-    const riskMultiplier = stock.risk === "high" ? 1.22 : stock.risk === "low" ? 0.72 : 1;
-    const sectorMultiplier = stock.sector === "Perakende" ? 0.82 : stock.sector === "Teknoloji" ? 1.08 : 1;
-    return NEWS_CONCEPTS.map((concept) => ({
-      target: stock.symbol,
-      impact: Number((concept.impact * riskMultiplier * sectorMultiplier).toFixed(4)),
-      tone: concept.tone,
-      titleTr: fillNewsTemplate(concept.titleTr, stock),
-      titleEn: fillNewsTemplate(concept.titleEn, stock),
-      lessonTr: concept.lessonTr,
-      lessonEn: concept.lessonEn,
-    }));
-  });
-}
-
-function fillNewsTemplate(template: string, stock: StockSeed) {
-  return template.replaceAll("{name}", stock.name).replaceAll("{symbol}", stock.symbol).replaceAll("{sector}", stock.sector);
-}
-
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
   if (!auth.ok) return json({ error: auth.error }, auth.status);
+
   try {
     await ensureMarket(context);
     await migrateLegacyPortfolio(context, auth.user.id);
@@ -197,13 +138,16 @@ export async function onRequestGet(context: any) {
 export async function onRequestPost(context: any) {
   const auth = await requireUser(context);
   if (!auth.ok) return json({ error: auth.error }, auth.status);
+
   try {
     await ensureMarket(context);
     await migrateLegacyPortfolio(context, auth.user.id);
     await tickMarketIfNeeded(context);
     await ensurePortfolioBaseline(context, auth.user.id);
+
     const body = await context.request.json().catch(() => ({}));
     const action = String(body?.action || "");
+
     if (action === "buy" || action === "sell") {
       const symbol = String(body?.symbol || "").toUpperCase().trim();
       const quantity = Math.floor(Number(body?.quantity || 0));
@@ -212,10 +156,12 @@ export async function onRequestPost(context: any) {
       const rewards = await evaluateMarketRewards(context, auth.user.id);
       return json(await getMarketState(context, auth.user.id, rewards));
     }
+
     if (action === "reset") {
       await liquidatePortfolio(context, auth.user.id);
       return json(await getMarketState(context, auth.user.id, []));
     }
+
     return json({ error: "Bilinmeyen market işlemi." }, 400);
   } catch (error) {
     return json({ error: readableError(error) }, 400);
@@ -229,7 +175,8 @@ async function ensureMarket(context: any) {
   await db.prepare(`CREATE TABLE IF NOT EXISTS market_accounts (user_id INTEGER PRIMARY KEY, cash REAL NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS market_holdings (user_id INTEGER NOT NULL, symbol TEXT NOT NULL, shares INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, symbol))`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS market_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, symbol TEXT NOT NULL, side TEXT NOT NULL, quantity INTEGER NOT NULL, price REAL NOT NULL, total REAL NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
-  await db.prepare(`CREATE TABLE IF NOT EXISTS market_price_history (id INTEGER PRIMARY KEY AUTOINCREMENT, symbol TEXT NOT NULL, price REAL NOT NULL, day INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS market_price_history (id INTEGER PRIMARY KEY AUTOINCREMENT, symbol TEXT NOT NULL, price REAL NOT NULL, day INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  await addColumnIfMissing(context, "market_price_history", "day", "INTEGER NOT NULL DEFAULT 1");
   await db.prepare(`CREATE TABLE IF NOT EXISTS market_news (id INTEGER PRIMARY KEY AUTOINCREMENT, day INTEGER NOT NULL, symbol TEXT NOT NULL, impact REAL NOT NULL, tone TEXT NOT NULL, title_tr TEXT NOT NULL, title_en TEXT NOT NULL, lesson_tr TEXT NOT NULL, lesson_en TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS market_reward_claims (user_id INTEGER NOT NULL, reward_key TEXT NOT NULL, amount INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, reward_key))`).run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS market_portfolio_baselines (user_id INTEGER PRIMARY KEY, starting_value REAL NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
@@ -238,17 +185,46 @@ async function ensureMarket(context: any) {
   await db.prepare(`CREATE TABLE IF NOT EXISTS coin_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, amount INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await db.prepare(`INSERT OR IGNORE INTO market_meta (key, value) VALUES ('day', '1')`).run();
   await db.prepare(`INSERT OR IGNORE INTO market_meta (key, value) VALUES ('last_tick', '0')`).run();
+
   await migrateLegacySymbols(context);
+
   for (const stock of STOCKS) {
-    await db.prepare(`INSERT INTO market_stocks (symbol, name, sector, description_tr, description_en, price, previous_price, volatility, risk) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET name = excluded.name, sector = excluded.sector, description_tr = excluded.description_tr, description_en = excluded.description_en, volatility = excluded.volatility, risk = excluded.risk, updated_at = CURRENT_TIMESTAMP`).bind(stock.symbol, stock.name, stock.sector, stock.descriptionTr, stock.descriptionEn, stock.price, stock.price, stock.volatility, stock.risk).run();
-    const historyCount: any = await db.prepare(`SELECT COUNT(*) AS count FROM market_price_history WHERE symbol = ?`).bind(stock.symbol).first();
-    if (Number(historyCount?.count || 0) === 0) await db.prepare(`INSERT INTO market_price_history (symbol, price, day) VALUES (?, ?, 1)`).bind(stock.symbol, stock.price).run();
+    await db
+      .prepare(`
+        INSERT INTO market_stocks (symbol, name, sector, description_tr, description_en, price, previous_price, volatility, risk)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+          name = excluded.name,
+          sector = excluded.sector,
+          description_tr = excluded.description_tr,
+          description_en = excluded.description_en,
+          volatility = excluded.volatility,
+          risk = excluded.risk,
+          updated_at = CURRENT_TIMESTAMP
+      `)
+      .bind(stock.symbol, stock.name, stock.sector, stock.descriptionTr, stock.descriptionEn, stock.price, stock.price, stock.volatility, stock.risk)
+      .run();
   }
-  await cleanupLegacyStocks(context);
+
+  await seedMissingHistory(context);
+}
+
+async function seedMissingHistory(context: any) {
+  const db = context.env.DB;
+  const day = Number((await getMeta(context, "day")) || 1);
+  const stocks = (await db.prepare(`SELECT symbol, price FROM market_stocks`).all())?.results || [];
+
+  for (const stock of stocks as any[]) {
+    const historyCount: any = await db.prepare(`SELECT COUNT(*) AS count FROM market_price_history WHERE symbol = ?`).bind(stock.symbol).first();
+    if (Number(historyCount?.count || 0) === 0) {
+      await db.prepare(`INSERT INTO market_price_history (symbol, price, day) VALUES (?, ?, ?)`).bind(stock.symbol, Number(stock.price || 0), day).run();
+    }
+  }
 }
 
 async function migrateLegacySymbols(context: any) {
   const db = context.env.DB;
+
   for (const [oldSymbol, newSymbol] of Object.entries(LEGACY_SYMBOL_MAP)) {
     const oldRows = (await db.prepare(`SELECT user_id, shares FROM market_holdings WHERE symbol = ? AND shares > 0`).bind(oldSymbol).all())?.results || [];
     for (const row of oldRows as any[]) {
@@ -256,14 +232,9 @@ async function migrateLegacySymbols(context: any) {
       await db.prepare(`UPDATE market_holdings SET shares = shares + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND symbol = ?`).bind(Number(row.shares || 0), row.user_id, newSymbol).run();
     }
     await db.prepare(`DELETE FROM market_holdings WHERE symbol = ?`).bind(oldSymbol).run();
+    await db.prepare(`DELETE FROM market_stocks WHERE symbol = ?`).bind(oldSymbol).run();
+    await db.prepare(`DELETE FROM market_price_history WHERE symbol = ?`).bind(oldSymbol).run();
   }
-}
-
-async function cleanupLegacyStocks(context: any) {
-  const db = context.env.DB;
-  const placeholders = STOCK_SYMBOLS.map(() => "?").join(", ");
-  await db.prepare(`DELETE FROM market_stocks WHERE symbol NOT IN (${placeholders})`).bind(...STOCK_SYMBOLS).run();
-  await db.prepare(`DELETE FROM market_price_history WHERE symbol NOT IN (${placeholders})`).bind(...STOCK_SYMBOLS).run();
 }
 
 async function migrateLegacyPortfolio(context: any, userId: number) {
@@ -276,26 +247,76 @@ async function tickMarketIfNeeded(context: any) {
   const lastTick = Number((await getMeta(context, "last_tick")) || 0);
   const now = Date.now();
   if (now - lastTick < MARKET_TICK_MS) return;
+
   const currentDay = Number((await getMeta(context, "day")) || 1);
   const nextDay = currentDay + 1;
   const stocks = (await db.prepare(`SELECT * FROM market_stocks ORDER BY symbol`).all())?.results || [];
   if (!stocks.length) return;
-  const news = NEWS_POOL[Math.floor(Math.random() * NEWS_POOL.length)];
-  const targetStock: any = stocks.find((stock: any) => stock.symbol === news.target);
-  const targetSector = targetStock?.sector || "";
+
+  const targetStock: any = stocks[Math.floor(Math.random() * stocks.length)];
+  const news = buildNewsForStock(targetStock);
   const marketMood = (Math.random() - 0.48) * 0.025;
+
   for (const stock of stocks as any[]) {
     const oldPrice = Number(stock.price || 1);
-    const baseMove = (Math.random() - 0.5) * Number(stock.volatility || 0.04);
+    const volatility = Number(stock.volatility || 0.04);
+    const baseMove = (Math.random() - 0.5) * volatility;
     const directImpact = stock.symbol === news.target ? news.impact : 0;
-    const sectorImpact = stock.sector === targetSector ? news.impact * 0.18 : 0;
+    const sectorImpact = stock.sector === targetStock.sector && stock.symbol !== news.target ? news.impact * 0.18 : 0;
     const nextPrice = clampPrice(oldPrice * (1 + marketMood + baseMove + directImpact + sectorImpact));
     await db.prepare(`UPDATE market_stocks SET previous_price = price, price = ?, updated_at = CURRENT_TIMESTAMP WHERE symbol = ?`).bind(nextPrice, stock.symbol).run();
     await db.prepare(`INSERT INTO market_price_history (symbol, price, day) VALUES (?, ?, ?)`).bind(stock.symbol, nextPrice, nextDay).run();
   }
-  await db.prepare(`INSERT INTO market_news (day, symbol, impact, tone, title_tr, title_en, lesson_tr, lesson_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(nextDay, news.target, news.impact, news.tone, news.titleTr, news.titleEn, news.lessonTr, news.lessonEn).run();
+
+  await db
+    .prepare(`INSERT INTO market_news (day, symbol, impact, tone, title_tr, title_en, lesson_tr, lesson_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(nextDay, news.target, news.impact, news.tone, news.titleTr, news.titleEn, news.lessonTr, news.lessonEn)
+    .run();
+
   await setMeta(context, "day", String(nextDay));
   await setMeta(context, "last_tick", String(now));
+}
+
+function buildNewsForStock(stock: any) {
+  const name = String(stock.name || stock.symbol);
+  const positive = Math.random() >= 0.48;
+  const neutral = Math.random() > 0.86;
+  const impact = neutral ? 0 : Number(((positive ? 1 : -1) * (0.018 + Math.random() * 0.04)).toFixed(4));
+  const tone: NewsTone = neutral ? "neutral" : positive ? "positive" : "negative";
+
+  if (tone === "positive") {
+    return {
+      target: stock.symbol,
+      impact,
+      tone,
+      titleTr: `${name} için olumlu beklenti oluştu.`,
+      titleEn: `${name} gained positive expectations.`,
+      lessonTr: "Olumlu haber fiyatı destekleyebilir; risk seviyesi hareketin sertliğini belirler.",
+      lessonEn: "Positive news can support price; risk level affects the size of the move.",
+    };
+  }
+
+  if (tone === "negative") {
+    return {
+      target: stock.symbol,
+      impact,
+      tone,
+      titleTr: `${name} için baskı yaratan gelişme görüldü.`,
+      titleEn: `${name} faced a pressure-building event.`,
+      lessonTr: "Olumsuz haber düşüş yaratabilir; yüksek riskli hisselerde hareket daha sert olabilir.",
+      lessonEn: "Negative news can create downside; high-risk stocks may move more sharply.",
+    };
+  }
+
+  return {
+    target: stock.symbol,
+    impact,
+    tone,
+    titleTr: `${name} tarafında nötr piyasa akışı izleniyor.`,
+    titleEn: `${name} is seeing neutral market flow.`,
+    lessonTr: "Nötr haberlerde genel piyasa havası ve oynaklık daha belirleyici olur.",
+    lessonEn: "In neutral news, broad market mood and volatility matter more.",
+  };
 }
 
 async function executeTrade(context: any, userId: number, symbol: string, quantity: number, side: "buy" | "sell") {
@@ -303,13 +324,15 @@ async function executeTrade(context: any, userId: number, symbol: string, quanti
   await ensureCoinWallet(context, userId);
   const stock: any = await db.prepare(`SELECT symbol, price FROM market_stocks WHERE symbol = ?`).bind(symbol).first();
   if (!stock) throw new Error("Böyle bir simülasyon hissesi yok.");
+
   const price = Number(stock.price || 0);
   const total = Math.max(1, Math.round(price * quantity));
+
   if (side === "buy") {
     const balance = await getWalletBalance(context, userId);
     if (balance < total) throw new Error("Yeterli Tech Coin yok.");
     await db.prepare(`UPDATE coin_wallets SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).bind(total, userId).run();
-    await db.prepare(`INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)`).bind(userId, -total, `EkaTrade buy ${symbol}`).run();
+    await db.prepare(`INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)`).bind(userId, -total, `Eka InvestSim buy ${symbol}`).run();
     await db.prepare(`INSERT OR IGNORE INTO market_holdings (user_id, symbol, shares) VALUES (?, ?, 0)`).bind(userId, symbol).run();
     await db.prepare(`UPDATE market_holdings SET shares = shares + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND symbol = ?`).bind(quantity, userId, symbol).run();
   } else {
@@ -318,8 +341,9 @@ async function executeTrade(context: any, userId: number, symbol: string, quanti
     if (shares < quantity) throw new Error("Bu kadar adet sende yok.");
     await db.prepare(`UPDATE market_holdings SET shares = shares - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND symbol = ?`).bind(quantity, userId, symbol).run();
     await db.prepare(`UPDATE coin_wallets SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).bind(total, userId).run();
-    await db.prepare(`INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)`).bind(userId, total, `EkaTrade sell ${symbol}`).run();
+    await db.prepare(`INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)`).bind(userId, total, `Eka InvestSim sell ${symbol}`).run();
   }
+
   await db.prepare(`INSERT INTO market_transactions (user_id, symbol, side, quantity, price, total) VALUES (?, ?, ?, ?, ?, ?)`).bind(userId, symbol, side, quantity, price, total).run();
 }
 
@@ -328,13 +352,16 @@ async function liquidatePortfolio(context: any, userId: number) {
   await ensureCoinWallet(context, userId);
   const holdings = (await db.prepare(`SELECT symbol, shares FROM market_holdings WHERE user_id = ? AND shares > 0`).bind(userId).all())?.results || [];
   if (!holdings.length) return;
+
   const stocks = (await db.prepare(`SELECT symbol, price FROM market_stocks`).all())?.results || [];
   const prices = Object.fromEntries((stocks as any[]).map((stock) => [stock.symbol, Number(stock.price || 0)]));
   const total = Math.round((holdings as any[]).reduce((sum, holding) => sum + Number(holding.shares || 0) * Number(prices[holding.symbol] || 0), 0));
+
   if (total > 0) {
     await db.prepare(`UPDATE coin_wallets SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`).bind(total, userId).run();
-    await db.prepare(`INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)`).bind(userId, total, "EkaTrade portfolio liquidation").run();
+    await db.prepare(`INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)`).bind(userId, total, "Eka InvestSim portfolio liquidation").run();
   }
+
   await db.prepare(`DELETE FROM market_holdings WHERE user_id = ?`).bind(userId).run();
 }
 
@@ -346,20 +373,23 @@ async function evaluateMarketRewards(context: any, userId: number) {
   const newsCount = Number((await db.prepare(`SELECT COUNT(*) AS count FROM market_news`).first())?.count || 0);
   const startingValue = await ensurePortfolioBaseline(context, userId);
   const achieved = new Set<string>();
+
   if (tradeCount >= 1) achieved.add("first_trade");
   if (portfolio.holdingCount >= 3) achieved.add("diversified_3");
   if (tradeCount >= 1 && portfolio.cashRatio >= 0.1) achieved.add("cash_buffer_10");
   if (portfolio.holdingCount >= 2 && portfolio.maxWeight <= 0.5) achieved.add("concentration_under_50");
   if (newsCount >= 3) achieved.add("observed_3_news");
   if (tradeCount >= 1 && startingValue > 0 && portfolio.total >= startingValue * 1.05) achieved.add("portfolio_growth_5");
+
   const awarded: RewardSeed[] = [];
   for (const reward of REWARDS) {
     if (!achieved.has(reward.key)) continue;
     const inserted = await db.prepare(`INSERT OR IGNORE INTO market_reward_claims (user_id, reward_key, amount) VALUES (?, ?, ?)`).bind(userId, reward.key, reward.amount).run();
     if (!inserted.meta?.changes) continue;
-    await awardTechCoin(context, userId, reward.amount, `EkaTrade Academy: ${reward.titleTr}`);
+    await awardTechCoin(context, userId, reward.amount, `Eka InvestSim: ${reward.titleTr}`);
     awarded.push(reward);
   }
+
   return awarded;
 }
 
@@ -375,20 +405,24 @@ async function getMarketState(context: any, userId: number, rewards: RewardSeed[
   const portfolio = await calculatePortfolio(context, userId);
   const startingValue = await ensurePortfolioBaseline(context, userId);
   const wallet: any = await db.prepare(`SELECT balance, lifetime_earned FROM coin_wallets WHERE user_id = ?`).bind(userId).first();
+
   const stocks = ((await db.prepare(`SELECT symbol, name, sector, description_tr AS descriptionTr, description_en AS descriptionEn, price, previous_price AS previousPrice, volatility, risk FROM market_stocks ORDER BY sector, symbol`).all())?.results || []).map((stock: any) => {
     const price = Number(stock.price || 0);
     const previous = Number(stock.previousPrice || price || 1);
     const change = previous > 0 ? ((price - previous) / previous) * 100 : 0;
     return { ...stock, price, volatility: Number(stock.volatility || 0), change };
   });
-  const historyRows = (await db.prepare(`SELECT symbol, price FROM market_price_history ORDER BY id DESC LIMIT 1200`).all())?.results || [];
+
+  const historyRows = (await db.prepare(`SELECT symbol, price FROM market_price_history ORDER BY id DESC LIMIT 1600`).all())?.results || [];
   const history: Record<string, number[]> = {};
   for (const stock of stocks as any[]) history[stock.symbol] = [];
   for (const row of [...(historyRows as any[])].reverse()) {
     if (!history[row.symbol]) continue;
-    if (history[row.symbol].length < 14) history[row.symbol].push(Number(row.price || 0));
+    if (history[row.symbol].length < 70) history[row.symbol].push(Number(row.price || 0));
   }
-  const news = ((await db.prepare(`SELECT day, symbol AS target, impact, tone, title_tr AS titleTr, title_en AS titleEn, lesson_tr AS lessonTr, lesson_en AS lessonEn, created_at AS createdAt FROM market_news ORDER BY id DESC LIMIT 6`).all())?.results || []).map((item: any) => ({ ...item, day: Number(item.day || 1), impact: Number(item.impact || 0) }));
+
+  const news = ((await db.prepare(`SELECT day, symbol AS target, impact, tone, title_tr AS titleTr, title_en AS titleEn, lesson_tr AS lessonTr, lesson_en AS lessonEn, created_at AS createdAt FROM market_news ORDER BY id DESC LIMIT 8`).all())?.results || []).map((item: any) => ({ ...item, day: Number(item.day || 1), impact: Number(item.impact || 0) }));
+
   return {
     mode: "real-tech-coin-wallet",
     day: Number((await getMeta(context, "day")) || 1),
@@ -415,6 +449,7 @@ async function calculatePortfolio(context: any, userId: number) {
   const prices = Object.fromEntries((stocks as any[]).map((stock) => [stock.symbol, Number(stock.price || 0)]));
   const holdings: Record<string, number> = {};
   let invested = 0;
+
   for (const row of holdingRows as any[]) {
     const shares = Number(row.shares || 0);
     const price = Number(prices[row.symbol] || 0);
@@ -422,8 +457,10 @@ async function calculatePortfolio(context: any, userId: number) {
     holdings[row.symbol] = shares;
     invested += shares * price;
   }
+
   const total = walletBalance + invested;
   const weights = Object.entries(holdings).map(([symbol, shares]) => (Number(shares) * Number(prices[symbol] || 0)) / Math.max(1, total));
+
   return {
     walletBalance,
     holdings,
@@ -463,10 +500,25 @@ async function setMeta(context: any, key: string, value: string) {
   await context.env.DB.prepare(`INSERT OR REPLACE INTO market_meta (key, value) VALUES (?, ?)`).bind(key, value).run();
 }
 
+async function addColumnIfMissing(context: any, table: string, column: string, definition: string) {
+  try {
+    const columns = (await context.env.DB.prepare(`PRAGMA table_info(${table})`).all())?.results || [];
+    const exists = (columns as any[]).some((item) => item.name === column);
+    if (!exists) await context.env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  } catch {
+    // D1 migration must not block the market endpoint if the column already exists.
+  }
+}
+
 async function requireUser(context: any) {
   const token = getCookie(context.request.headers.get("Cookie") || "", "session");
   if (!token) return { ok: false, status: 401, error: "Giriş yapman gerekiyor." };
-  const user = await context.env.DB.prepare(`SELECT users.id, users.name, users.email, users.avatar_url, CASE WHEN lower(users.email) = ? THEN 'owner' ELSE COALESCE(users.role, 'client') END AS role FROM sessions JOIN users ON sessions.user_id = users.id WHERE sessions.token = ? AND datetime(replace(substr(sessions.expires_at, 1, 19), 'T', ' ')) > datetime('now')`).bind(OWNER_EMAIL, token).first();
+
+  const user = await context.env.DB
+    .prepare(`SELECT users.id, users.name, users.email, users.avatar_url, CASE WHEN lower(users.email) = ? THEN 'owner' ELSE COALESCE(users.role, 'client') END AS role FROM sessions JOIN users ON sessions.user_id = users.id WHERE sessions.token = ? AND datetime(replace(substr(sessions.expires_at, 1, 19), 'T', ' ')) > datetime('now')`)
+    .bind(OWNER_EMAIL, token)
+    .first();
+
   if (!user) return { ok: false, status: 401, error: "Oturum geçersiz." };
   if (user.role === "blocked") return { ok: false, status: 403, error: "Bu hesap engellenmiş." };
   return { ok: true, user };
