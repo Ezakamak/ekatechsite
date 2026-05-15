@@ -1,6 +1,5 @@
 import { createPlayer, getLobby, requireUser } from "./core-clash-v2";
 
-const BOT_REWARD_AMOUNT = 25;
 const BOT_PROFILES = [
   { name: "Byte BOT", email: "byte.bot@ekatech.local" },
   { name: "Glitch BOT", email: "glitch.bot@ekatech.local" },
@@ -29,8 +28,8 @@ export async function onRequestPost(context: any) {
     if (!bot?.id) return Response.json({ error: "Bot profili hazırlanamadı." }, { status: 500 });
 
     const update = await context.env.DB
-      .prepare("UPDATE core_clash_lobbies SET opponent_user_id = ?, reward_amount = COALESCE(reward_amount, ?), status = 'in_progress', updated_at = datetime('now') WHERE id = ? AND status = 'open' AND opponent_user_id IS NULL")
-      .bind(bot.id, BOT_REWARD_AMOUNT, lobbyId)
+      .prepare("UPDATE core_clash_lobbies SET opponent_user_id = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ? AND status = 'open' AND opponent_user_id IS NULL")
+      .bind(bot.id, lobbyId)
       .run();
 
     if (Number(update?.meta?.changes || 0) === 0) return Response.json({ error: "Bu lobby'ye başka biri katılmış." }, { status: 409 });
