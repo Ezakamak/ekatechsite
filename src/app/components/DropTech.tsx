@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Gift, PackageOpen, RefreshCw, Sparkles } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
@@ -79,6 +79,14 @@ const boxClass: Record<string, string> = {
   fuchsia: "border-fuchsia-300/30 bg-fuchsia-300/10 text-fuchsia-100",
 };
 
+const STRIP_TARGET_INDEX = 26;
+const STRIP_ITEM_WIDTH = 96;
+const STRIP_GAP = 12;
+const STRIP_PADDING_LEFT = 32;
+const STRIP_ITEM_CENTER = STRIP_ITEM_WIDTH / 2;
+const STRIP_STEP = STRIP_ITEM_WIDTH + STRIP_GAP;
+const STRIP_STOP_OFFSET = STRIP_PADDING_LEFT + STRIP_TARGET_INDEX * STRIP_STEP + STRIP_ITEM_CENTER;
+
 function nameOf(item: DropItem | InventoryItem | DropBox | null | undefined, tr: boolean) {
   if (!item) return "";
   return tr ? item.name_tr : item.name_en;
@@ -91,10 +99,14 @@ function formatNumber(value: number, locale: string) {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value || 0));
 }
 function buildStrip(items: DropItem[], won?: DropItem | null) {
-  if (!items.length) return [];
+  const source = items.length ? items : won ? [won] : [];
+  if (!source.length) return [];
   const strip: DropItem[] = [];
-  for (let i = 0; i < 32; i += 1) strip.push(items[i % items.length]);
-  if (won) strip.splice(24, 1, won);
+  const offset = won ? won.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) : 0;
+  for (let i = 0; i < 44; i += 1) {
+    strip.push(source[(i * 7 + offset) % source.length]);
+  }
+  if (won) strip[STRIP_TARGET_INDEX] = won;
   return strip;
 }
 
@@ -130,6 +142,7 @@ export function DropTech() {
     buyAndOpen: "Tech Coin ile al ve aç",
     open: "Seçili kutuyu aç",
     opening: "Kutu açılıyor...",
+    preparing: "Sonuç hazırlanıyor...",
     notEnough: "Yeterli Tech Coin yok.",
     won: "Çıkan eşya",
     inventory: "DropTech Collection",
@@ -159,6 +172,7 @@ export function DropTech() {
     buyAndOpen: "Buy and open with Tech Coin",
     open: "Open selected box",
     opening: "Opening box...",
+    preparing: "Preparing result...",
     notEnough: "Not enough Tech Coin.",
     won: "Item found",
     inventory: "DropTech Collection",
@@ -228,7 +242,7 @@ export function DropTech() {
       const found = data.won as DropItem;
       window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: found?.rarity === "legendary" || found?.rarity === "glitch" ? "win" : "coin" } }));
       setWon(found);
-      window.setTimeout(() => { setState(data); setOpening(false); }, 2600);
+      window.setTimeout(() => { setState(data); setOpening(false); }, 2700);
     } catch (caught) {
       setOpening(false);
       setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Kutu açılamadı." });
@@ -284,7 +298,8 @@ export function DropTech() {
           <div className="relative min-h-[420px] overflow-hidden rounded-[2rem] border border-white/10 bg-black/50 p-5 shadow-2xl shadow-purple-500/10 backdrop-blur-xl sm:p-6">
             <div className="relative z-10 flex min-h-[380px] flex-col items-center justify-center gap-6 text-center">
               {!opening && !won && <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center gap-5"><div className={`relative flex h-40 w-40 items-center justify-center rounded-[2rem] border shadow-2xl ${boxClass[selectedBox?.accent || "purple"] || boxClass.purple}`}><span className="text-7xl">{selectedBox?.emoji || "📦"}</span><span className="absolute -right-3 -top-3 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100">x{selectedQuantity}</span></div><div><p className="font-medium">{nameOf(selectedBox, tr)}</p><p className="mt-2 max-w-sm text-sm leading-6 text-white/50">{descOf(selectedBox, tr)}</p><div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm"><CoinIcon /> {copy.openCost}: {formatNumber(selectedOpenCost, locale)} TC</div></div></motion.div>}
-              {opening && <div className="w-full space-y-8"><motion.div animate={{ rotate: [0, -3, 3, -2, 2, 0], scale: [1, 1.04, 1] }} transition={{ duration: 0.7, repeat: Infinity }} className={`mx-auto flex h-32 w-32 items-center justify-center rounded-[2rem] border shadow-2xl ${boxClass[selectedBox?.accent || "purple"] || boxClass.purple}`}><span className="text-6xl">{selectedBox?.emoji || "📦"}</span></motion.div><div className="relative mx-auto max-w-3xl overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/55 py-4"><div className="pointer-events-none absolute left-1/2 top-0 z-20 h-full w-px bg-white/80 shadow-[0_0_30px_rgba(255,255,255,.7)]" /><motion.div animate={{ x: [0, -1660] }} transition={{ duration: 2.35, ease: [0.12, 0.72, 0.18, 1] }} className="flex gap-3 px-8">{strip.map((item, index) => <div key={`${item.id}-${index}`} className={`flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-2xl border text-center shadow-xl ${rarityClass[item.rarity]}`}><span className="text-3xl">{item.emoji}</span><span className="mt-1 max-w-20 truncate text-[10px]">{nameOf(item, tr)}</span></div>)}</motion.div></div></div>}
+              {opening && !won && <div className="flex flex-col items-center gap-5"><motion.div animate={{ rotate: [0, -4, 4, -2, 2, 0], scale: [1, 1.06, 1] }} transition={{ duration: 0.7, repeat: Infinity }} className={`mx-auto flex h-32 w-32 items-center justify-center rounded-[2rem] border shadow-2xl ${boxClass[selectedBox?.accent || "purple"] || boxClass.purple}`}><span className="text-6xl">{selectedBox?.emoji || "📦"}</span></motion.div><p className="text-sm text-white/45">{copy.preparing}</p></div>}
+              {opening && won && <div className="w-full space-y-8"><motion.div animate={{ rotate: [0, -3, 3, -2, 2, 0], scale: [1, 1.04, 1] }} transition={{ duration: 0.7, repeat: Infinity }} className={`mx-auto flex h-32 w-32 items-center justify-center rounded-[2rem] border shadow-2xl ${boxClass[selectedBox?.accent || "purple"] || boxClass.purple}`}><span className="text-6xl">{selectedBox?.emoji || "📦"}</span></motion.div><div className="relative mx-auto max-w-3xl overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/55 py-4"><div className="pointer-events-none absolute left-1/2 top-0 z-20 h-full w-px bg-white/80 shadow-[0_0_30px_rgba(255,255,255,.7)]" /><motion.div key={`${won.id}-${Date.now()}`} animate={{ x: ["0px", `calc(50% - ${STRIP_STOP_OFFSET}px)`] }} transition={{ duration: 2.45, ease: [0.12, 0.72, 0.18, 1] }} className="flex gap-3 px-8" style={{ width: "max-content" }}>{strip.map((item, index) => <div key={`${item.id}-${index}`} className={`flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-2xl border text-center shadow-xl ${index === STRIP_TARGET_INDEX ? "ring-2 ring-white/80" : ""} ${rarityClass[item.rarity]}`}><span className="text-3xl">{item.emoji}</span><span className="mt-1 max-w-20 truncate text-[10px]">{nameOf(item, tr)}</span></div>)}</motion.div></div></div>}
               <AnimatePresence>{!opening && won && <motion.div initial={{ opacity: 0, scale: 0.78, y: 22 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }} className={`w-full max-w-md rounded-[2rem] border p-6 shadow-2xl ${rarityClass[won.rarity]}`}><p className="text-xs uppercase tracking-[0.24em] opacity-65">{copy.won}</p><div className="mt-4 text-7xl">{won.emoji}</div><h2 className="mt-4 text-3xl font-semibold">{nameOf(won, tr)}</h2><p className="mt-2 text-sm uppercase tracking-[0.18em] opacity-70">{rarityText[won.rarity]}</p><p className="mt-4 text-sm leading-6 opacity-75">{descOf(won, tr)}</p><div className="mt-4 inline-flex items-center gap-2 rounded-full border border-black/10 bg-black/20 px-4 py-2 text-sm font-semibold"><CoinIcon /> {copy.itemValue}: {formatNumber(Number(won.tech_coin_value || 0), locale)} TC</div><button onClick={() => setWon(null)} className="mt-5 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200">{copy.add}</button></motion.div>}</AnimatePresence>
             </div>
           </div>
@@ -308,6 +323,6 @@ function CoinIcon({ small = false }: { small?: boolean }) {
 function ValueRow({ label, value, locale }: { label: string; value: number; locale: string }) {
   return <div className="flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2"><span className="opacity-65">{label}</span><span className="inline-flex items-center gap-1 font-semibold"><CoinIcon small /> {formatNumber(value, locale)} TC</span></div>;
 }
-function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button onClick={onClick} className={`rounded-full border px-4 py-2 text-xs font-medium transition ${active ? "border-white/40 bg-white text-black" : "border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.08]"}`}>{children}</button>;
 }
