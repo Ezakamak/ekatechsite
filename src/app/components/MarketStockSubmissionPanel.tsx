@@ -18,7 +18,20 @@ type Submission = {
 
 const MIN_INITIAL_PRICE = 25;
 const MAX_INITIAL_PRICE = 250;
-const sectorsTr = ["Teknoloji", "Finans", "Enerji", "Sağlık", "Perakende", "Ulaşım", "Gıda", "Oyun", "Yapay Zeka", "Savunma", "Eğlence", "Diğer"];
+const sectorOptions = [
+  { tr: "Teknoloji", en: "Technology" },
+  { tr: "Finans", en: "Finance" },
+  { tr: "Enerji", en: "Energy" },
+  { tr: "Sağlık", en: "Healthcare" },
+  { tr: "Perakende", en: "Retail" },
+  { tr: "Ulaşım", en: "Transportation" },
+  { tr: "Gıda", en: "Food" },
+  { tr: "Oyun", en: "Gaming" },
+  { tr: "Yapay Zeka", en: "Artificial Intelligence" },
+  { tr: "Savunma", en: "Defense" },
+  { tr: "Eğlence", en: "Entertainment" },
+  { tr: "Diğer", en: "Other" },
+];
 
 export function MarketStockSubmissionPanel() {
   const { language } = useLanguage();
@@ -53,6 +66,8 @@ export function MarketStockSubmissionPanel() {
             rejected: "Reddedildi",
             reviewerNote: "Admin notu",
             disclaimer: "Bu alan gerçek hisse, yatırım veya para değildir; sadece OFF Tech Coin simülasyonudur.",
+            descriptionPlaceholder: "Şirketin ne yaptığını, neden farklı olduğunu ve simülasyondaki temasını yaz...",
+            englishDescriptionPlaceholder: "İsteğe bağlı İngilizce açıklama...",
           }
         : {
             eyebrow: "Community market",
@@ -81,6 +96,8 @@ export function MarketStockSubmissionPanel() {
             rejected: "Rejected",
             reviewerNote: "Admin note",
             disclaimer: "This is not a real stock, investment or money system; it is only an OFF Tech Coin simulation.",
+            descriptionPlaceholder: "Explain what the company does, why it is different, and its simulation theme...",
+            englishDescriptionPlaceholder: "Optional English description...",
           },
     [tr]
   );
@@ -219,7 +236,7 @@ export function MarketStockSubmissionPanel() {
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label={copy.sector}>
                 <select value={form.sector} onChange={(event) => updateField("sector", event.target.value)} className="field-input">
-                  {sectorsTr.map((sector) => <option key={sector} value={sector}>{sector}</option>)}
+                  {sectorOptions.map((sector) => <option key={sector.tr} value={sector.tr}>{tr ? sector.tr : sector.en}</option>)}
                 </select>
               </Field>
               <Field label={copy.initialPrice} help={copy.priceHelp}>
@@ -235,10 +252,10 @@ export function MarketStockSubmissionPanel() {
             </div>
 
             <Field label={copy.descriptionTr}>
-              <textarea value={form.descriptionTr} onChange={(event) => updateField("descriptionTr", event.target.value.slice(0, 420))} placeholder="Şirketin ne yaptığını, neden farklı olduğunu ve simülasyondaki temasını yaz..." className="field-input min-h-28 resize-none" />
+              <textarea value={form.descriptionTr} onChange={(event) => updateField("descriptionTr", event.target.value.slice(0, 420))} placeholder={copy.descriptionPlaceholder} className="field-input min-h-28 resize-none" />
             </Field>
             <Field label={copy.descriptionEn} required={false}>
-              <textarea value={form.descriptionEn} onChange={(event) => updateField("descriptionEn", event.target.value.slice(0, 420))} placeholder="Optional English description..." className="field-input min-h-24 resize-none" />
+              <textarea value={form.descriptionEn} onChange={(event) => updateField("descriptionEn", event.target.value.slice(0, 420))} placeholder={copy.englishDescriptionPlaceholder} className="field-input min-h-24 resize-none" />
             </Field>
 
             <button
@@ -268,7 +285,7 @@ export function MarketStockSubmissionPanel() {
                         {statusLabel(item.status)}
                       </span>
                     </div>
-                    <p className="mt-3 text-sm leading-6 text-white/55">{item.description_tr}</p>
+                    <p className="mt-3 text-sm leading-6 text-white/55">{tr ? item.description_tr : item.description_en || item.description_tr}</p>
                     {item.reviewer_note ? <p className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-3 text-xs text-white/45"><span className="text-white/70">{copy.reviewerNote}:</span> {item.reviewer_note}</p> : null}
                   </article>
                 ))
