@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import {
+  Activity,
   AlertTriangle,
+  ArrowLeft,
   BarChart3,
   BookOpen,
   Brain,
@@ -155,6 +157,20 @@ export function MarketAcademy() {
         low: "Düşük",
         medium: "Orta",
         high: "Yüksek",
+        detailHint: "Çift tıkla: detay",
+        backToMarket: "Piyasaya dön",
+        stockDetail: "Hisse detay ekranı",
+        bigChart: "Büyük fiyat grafiği",
+        relatedNews: "Bu hisseyle ilgili haberler",
+        noRelatedNews: "Bu hisse için henüz özel haber yok. Global piyasa ilerledikçe burada görünür.",
+        currentPrice: "Güncel fiyat",
+        previousPrice: "Önceki fiyat",
+        positionValue: "Pozisyon değeri",
+        volatility: "Oynaklık",
+        highPrice: "Grafik zirvesi",
+        lowPrice: "Grafik dibi",
+        learningNote: "Öğrenme notu",
+        stockProfile: "Şirket profili",
       }
     : {
         eyebrow: "Online SQL-based market academy",
@@ -197,10 +213,25 @@ export function MarketAcademy() {
         low: "Low",
         medium: "Medium",
         high: "High",
+        detailHint: "Double-click: details",
+        backToMarket: "Back to market",
+        stockDetail: "Stock detail screen",
+        bigChart: "Large price chart",
+        relatedNews: "News for this stock",
+        noRelatedNews: "No stock-specific news yet. It will appear here as the global market advances.",
+        currentPrice: "Current price",
+        previousPrice: "Previous price",
+        positionValue: "Position value",
+        volatility: "Volatility",
+        highPrice: "Chart high",
+        lowPrice: "Chart low",
+        learningNote: "Learning note",
+        stockProfile: "Company profile",
       };
 
   const [state, setState] = useState<MarketState>(FALLBACK_STATE);
   const [selectedSymbol, setSelectedSymbol] = useState(FALLBACK_STATE.stocks[0].symbol);
+  const [detailSymbol, setDetailSymbol] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(10);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -350,6 +381,23 @@ export function MarketAcademy() {
     postAction({ action: "reset" }, copy.resetOk);
   }
 
+  const detailStock = detailSymbol ? state.stocks.find((stock) => stock.symbol === detailSymbol) : null;
+  if (detailStock) {
+    return (
+      <StockDetailView
+        stock={detailStock}
+        state={state}
+        copy={copy}
+        tr={tr}
+        locale={locale}
+        online={online}
+        busy={busy}
+        onBack={() => setDetailSymbol(null)}
+        onRefresh={() => loadMarket(false)}
+      />
+    );
+  }
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-28 pt-28 text-white sm:px-6">
       <div className="absolute left-1/2 top-16 h-[30rem] w-[30rem] -translate-x-1/2 rounded-full bg-cyan-500/10 blur-3xl" />
@@ -404,7 +452,13 @@ export function MarketAcademy() {
 
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
               {state.stocks.map((stock) => (
-                <button key={stock.symbol} type="button" onClick={() => setSelectedSymbol(stock.symbol)} className={`group rounded-3xl border p-4 text-left transition-all ${selectedSymbol === stock.symbol ? "border-cyan-300/40 bg-cyan-300/[0.08]" : "border-white/10 bg-black/25 hover:bg-white/[0.06]"}`}>
+                <button
+                  key={stock.symbol}
+                  type="button"
+                  onClick={() => setSelectedSymbol(stock.symbol)}
+                  onDoubleClick={() => setDetailSymbol(stock.symbol)}
+                  className={`group rounded-3xl border p-4 text-left transition-all ${selectedSymbol === stock.symbol ? "border-cyan-300/40 bg-cyan-300/[0.08]" : "border-white/10 bg-black/25 hover:bg-white/[0.06]"}`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
@@ -423,6 +477,9 @@ export function MarketAcademy() {
                   <div className="mt-3 flex items-center justify-between text-xs text-white/35">
                     <span>{tr ? "Risk" : "Risk"}: {stock.risk === "low" ? copy.low : stock.risk === "medium" ? copy.medium : copy.high}</span>
                     <span>{copy.owned}: {safeNumber(state.holdings[stock.symbol])} {copy.shares}</span>
+                  </div>
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center text-xs text-cyan-100/70 transition-all group-hover:border-cyan-300/25 group-hover:bg-cyan-300/10">
+                    {copy.detailHint}
                   </div>
                 </button>
               ))}
@@ -482,6 +539,145 @@ export function MarketAcademy() {
   );
 }
 
+function StockDetailView({
+  stock,
+  state,
+  copy,
+  tr,
+  locale,
+  online,
+  busy,
+  onBack,
+  onRefresh,
+}: {
+  stock: Stock;
+  state: MarketState;
+  copy: any;
+  tr: boolean;
+  locale: string;
+  online: boolean;
+  busy: boolean;
+  onBack: () => void;
+  onRefresh: () => void;
+}) {
+  const values = state.history[stock.symbol]?.length ? state.history[stock.symbol] : [stock.price];
+  const high = Math.max(...values, stock.price);
+  const low = Math.min(...values, stock.price);
+  const owned = safeNumber(state.holdings[stock.symbol]);
+  const positionValue = owned * stock.price;
+  const relatedNews = state.news.filter((item) => item.target === stock.symbol);
+  const positive = stock.change >= 0;
+  const riskLabel = stock.risk === "low" ? copy.low : stock.risk === "medium" ? copy.medium : copy.high;
+
+  return (
+    <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-28 pt-28 text-white sm:px-6">
+      <div className="absolute left-1/2 top-16 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-purple-500/10 blur-3xl" />
+      <div className="absolute bottom-28 right-0 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
+
+      <div className="relative mx-auto max-w-7xl space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <button type="button" onClick={onBack} className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-medium text-white/80 transition-all hover:bg-white/[0.1]">
+            <ArrowLeft className="h-4 w-4" /> {copy.backToMarket}
+          </button>
+          <button type="button" disabled={busy} onClick={onRefresh} className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-50">
+            <RefreshCcw className="h-4 w-4" /> {copy.refresh}
+          </button>
+        </div>
+
+        <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 shadow-2xl shadow-purple-500/10 backdrop-blur-xl sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-purple-300/20 bg-purple-300/10 px-4 py-2 text-sm text-purple-100">
+                <Activity className="h-4 w-4" /> {copy.stockDetail}
+              </div>
+              <div className="mt-5 flex flex-wrap items-end gap-3">
+                <h1 className="text-5xl font-medium tracking-tight sm:text-7xl">{stock.symbol}</h1>
+                <span className="pb-2 text-2xl text-white/50">{stock.name}</span>
+              </div>
+              <p className="mt-5 max-w-3xl text-lg leading-8 text-white/55">{tr ? stock.descriptionTr : stock.descriptionEn}</p>
+            </div>
+            <div className={`rounded-3xl border p-5 text-right ${positive ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-red-300/20 bg-red-300/10 text-red-100"}`}>
+              <p className="text-sm opacity-70">{copy.currentPrice}</p>
+              <p className="mt-2 text-4xl font-semibold">{formatPrice(stock.price, locale)} ₺</p>
+              <p className="mt-1 text-sm">{positive ? "+" : ""}{formatPrice(stock.change, locale)}%</p>
+            </div>
+          </div>
+        </motion.section>
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <MetricCard icon={<CircleDollarSign />} label={copy.currentPrice} value={`${formatPrice(stock.price, locale)} ₺`} tone={positive ? "emerald" : "red"} />
+          <MetricCard icon={<TrendingUp />} label={copy.previousPrice} value={`${formatPrice(stock.previousPrice || stock.price, locale)} ₺`} />
+          <MetricCard icon={<PieChart />} label={copy.owned} value={`${owned} ${copy.shares}`} />
+          <MetricCard icon={<BarChart3 />} label={copy.positionValue} value={`${formatMoney(positionValue, locale)} ₺`} tone="cyan" />
+          <MetricCard icon={<Activity />} label={copy.volatility} value={`${formatPrice(stock.volatility * 100, locale)}%`} />
+          <MetricCard icon={<ShieldCheck />} label={copy.risk} value={riskLabel} tone={stock.risk === "high" ? "red" : stock.risk === "medium" ? "cyan" : "emerald"} />
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.bigChart}</p>
+                <h2 className="mt-2 text-3xl font-medium">{stock.symbol} · {copy.price}</h2>
+              </div>
+              <div className={`rounded-full border px-4 py-2 text-sm ${online ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-amber-300/20 bg-amber-300/10 text-amber-100"}`}>
+                {online ? copy.online : copy.offline}
+              </div>
+            </div>
+            <LargeSparkline values={values} positive={positive} />
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <InfoBox label={copy.highPrice} value={`${formatPrice(high, locale)} ₺`} />
+              <InfoBox label={copy.lowPrice} value={`${formatPrice(low, locale)} ₺`} />
+              <InfoBox label={copy.day} value={`${state.day}`} />
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
+              <p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.stockProfile}</p>
+              <div className="mt-5 space-y-3 text-sm leading-6 text-white/55">
+                <InfoLine label={copy.symbol} value={stock.symbol} />
+                <InfoLine label={copy.sector} value={stock.sector} />
+                <InfoLine label={copy.risk} value={riskLabel} />
+                <InfoLine label={copy.owned} value={`${owned} ${copy.shares}`} />
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-cyan-300/20 bg-cyan-300/10 p-5 text-cyan-100 backdrop-blur-xl sm:p-6">
+              <p className="text-sm uppercase tracking-[0.2em] opacity-70">{copy.learningNote}</p>
+              <p className="mt-3 text-sm leading-6 opacity-80">
+                {tr
+                  ? "Detay ekranında tek hisseye fazla odaklanma riskini gör. Büyük grafik yönü gösterir ama tek başına karar sebebi değildir; haber, sektör ve portföy ağırlığı birlikte okunur."
+                  : "Use the detail screen to see the risk of focusing too much on one stock. The large chart shows direction, but it is not a decision reason by itself; read news, sector and portfolio weight together."}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
+          <p className="text-sm uppercase tracking-[0.2em] text-white/35">{copy.relatedNews}</p>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {relatedNews.length === 0 ? (
+              <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/50">{copy.noRelatedNews}</p>
+            ) : (
+              relatedNews.map((item, index) => (
+                <div key={`${item.day}-${item.target}-${index}`} className="rounded-3xl border border-white/10 bg-black/25 p-4">
+                  <div className="flex items-center gap-2 text-xs text-white/35">
+                    <Newspaper className="h-4 w-4" /> {copy.day} {item.day} · {item.target}
+                  </div>
+                  <p className="mt-2 font-medium">{tr ? item.titleTr : item.titleEn}</p>
+                  <p className={`mt-2 text-sm ${item.tone === "positive" ? "text-emerald-300" : item.tone === "negative" ? "text-red-300" : "text-cyan-300"}`}>{item.impact > 0 ? "+" : ""}{formatPrice(item.impact * 100, locale)}%</p>
+                  <p className="mt-3 text-sm leading-6 text-white/45"><span className="text-white/70">{copy.lesson}:</span> {tr ? item.lessonTr : item.lessonEn}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
 function normalizeMarketState(data: any): MarketState {
   const stocks = Array.isArray(data?.stocks) && data.stocks.length ? data.stocks : FALLBACK_STATE.stocks;
   const holdings = data?.holdings && typeof data.holdings === "object" ? data.holdings : {};
@@ -531,6 +727,24 @@ function InfoCell({ label, value }: { label: string; value: string }) {
   );
 }
 
+function InfoBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+      <p className="text-xs uppercase tracking-[0.16em] text-white/35">{label}</p>
+      <p className="mt-2 text-xl font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function InfoLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
+      <span className="text-white/40">{label}</span>
+      <span className="font-medium text-white">{value}</span>
+    </div>
+  );
+}
+
 function MiniSparkline({ values, positive }: { values: number[]; positive: boolean }) {
   const safeValues = values.length > 1 ? values : [values[0] || 1, values[0] || 1];
   const min = Math.min(...safeValues);
@@ -542,6 +756,30 @@ function MiniSparkline({ values, positive }: { values: number[]; positive: boole
     <svg viewBox="0 0 100 42" className="mt-4 h-14 w-full overflow-visible">
       <polyline points={points} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={positive ? "text-emerald-300" : "text-red-300"} />
     </svg>
+  );
+}
+
+function LargeSparkline({ values, positive }: { values: number[]; positive: boolean }) {
+  const safeValues = values.length > 1 ? values : [values[0] || 1, values[0] || 1];
+  const min = Math.min(...safeValues);
+  const max = Math.max(...safeValues);
+  const range = max - min || 1;
+  const points = safeValues.map((value, index) => `${(index / Math.max(1, safeValues.length - 1)) * 100},${160 - ((value - min) / range) * 130}`).join(" ");
+  const areaPoints = `0,180 ${points} 100,180`;
+
+  return (
+    <div className="mt-6 overflow-hidden rounded-[2rem] border border-white/10 bg-black/30 p-4">
+      <svg viewBox="0 0 100 180" preserveAspectRatio="none" className="h-80 w-full overflow-visible">
+        <defs>
+          <linearGradient id="stockArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.24" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon points={areaPoints} className={positive ? "text-emerald-300" : "text-red-300"} fill="url(#stockArea)" />
+        <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={positive ? "text-emerald-300" : "text-red-300"} />
+      </svg>
+    </div>
   );
 }
 
