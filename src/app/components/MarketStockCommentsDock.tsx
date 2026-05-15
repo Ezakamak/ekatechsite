@@ -132,7 +132,7 @@ export function MarketStockCommentsDock() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 left-5 z-[130] inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-black/80 px-4 py-3 text-sm font-medium text-cyan-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-all hover:bg-cyan-300/10"
+        className="fixed bottom-40 left-5 z-[130] inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-black/80 px-4 py-3 text-sm font-medium text-cyan-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-all hover:bg-cyan-300/10 md:bottom-24 md:left-8"
       >
         <MessageCircle className="h-4 w-4" /> {symbol} {copy.open}
       </button>
@@ -140,7 +140,7 @@ export function MarketStockCommentsDock() {
   }
 
   return (
-    <aside className="fixed bottom-5 left-5 z-[130] w-[calc(100vw-2.5rem)] max-w-md overflow-hidden rounded-[2rem] border border-white/10 bg-black/85 text-white shadow-2xl shadow-black/50 backdrop-blur-xl">
+    <aside className="fixed bottom-40 left-5 z-[130] w-[calc(100vw-2.5rem)] max-w-md overflow-hidden rounded-[2rem] border border-white/10 bg-black/85 text-white shadow-2xl shadow-black/50 backdrop-blur-xl md:bottom-24 md:left-8 md:w-[26rem]">
       <div className="border-b border-white/10 bg-white/[0.04] p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
