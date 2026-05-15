@@ -10,6 +10,7 @@ import { CoreRaid } from "./CoreRaid";
 import { MarketAcademy } from "./MarketAcademy";
 import { TechCoinMiner } from "./TechCoinMiner";
 import { DropTech } from "./DropTech";
+import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 
 type User = {
   id: number;
@@ -136,24 +137,32 @@ export function OffPage() {
     if (!user) return;
 
     let active = true;
-    fetch("/api/coins", { credentials: "same-origin", cache: "no-store" })
-      .then(async (response) => response.json().catch(() => null))
-      .then((data) => {
-        if (!active || !data) return;
-        setWallet({
-          currency: data.currency || "Tech Coin",
-          symbol: data.symbol || "TC",
-          balance: Number(data.balance || 0),
-          lifetime_earned: Number(data.lifetime_earned || 0),
-          updated_at: data.updated_at || null,
+    const loadWallet = () => {
+      fetch("/api/coins", { credentials: "same-origin", cache: "no-store" })
+        .then(async (response) => response.json().catch(() => null))
+        .then((data) => {
+          if (!active || !data) return;
+          setWallet({
+            currency: data.currency || "Tech Coin",
+            symbol: data.symbol || "TC",
+            balance: Number(data.balance || 0),
+            lifetime_earned: Number(data.lifetime_earned || 0),
+            updated_at: data.updated_at || null,
+          });
+        })
+        .catch(() => {
+          if (active) setWallet({ currency: "Tech Coin", symbol: "TC", balance: 0, lifetime_earned: 0 });
         });
-      })
-      .catch(() => {
-        if (active) setWallet({ currency: "Tech Coin", symbol: "TC", balance: 0, lifetime_earned: 0 });
-      });
+    };
+
+    loadWallet();
+    const timer = window.setInterval(loadWallet, 10_000);
+    window.addEventListener("ekatech-techcoin-refresh", loadWallet);
 
     return () => {
       active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("ekatech-techcoin-refresh", loadWallet);
     };
   }, [user?.id]);
 
@@ -195,7 +204,7 @@ export function OffPage() {
   if (activeGame !== "hub") {
     return (
       <>
-        <div className="fixed right-5 top-24 z-[80] px-2 sm:right-6">
+        <div className="fixed right-5 top-24 z-[80] flex flex-col items-end gap-3 px-2 sm:right-6">
           <button
             type="button"
             onClick={() => {
@@ -206,6 +215,7 @@ export function OffPage() {
           >
             ← {copy.backHub}
           </button>
+          <TechCoinWalletBadge />
         </div>
         {activeGame === "duel" ? (
           <>

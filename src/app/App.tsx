@@ -44,6 +44,7 @@ import { CoreClash } from "./components/CoreClashVisualEffects";
 import { AutoEnterLobbies } from "./components/AutoEnterLobbies";
 import { GamePresenceManager } from "./components/GamePresenceManager";
 import { OffSoundEngine } from "./components/OffSoundEngine";
+import { TechCoinWalletBadge } from "./components/TechCoinWalletBadge";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -143,6 +144,7 @@ export default function App() {
       <AutoEnterLobbies />
       <GamePresenceManager />
       <OffSoundEngine />
+      {isCoreClash ? <div className="fixed right-5 top-24 z-[80] px-2 sm:right-6"><TechCoinWalletBadge /></div> : null}
       <div className="min-h-screen bg-black dark">
         <Navbar />
 

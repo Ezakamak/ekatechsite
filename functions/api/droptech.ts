@@ -222,6 +222,7 @@ export async function onRequestPost(context: any) {
     if (action === "open") return Response.json(await openBox(context, auth.user.id, String(body?.box_type || "standard_cache")));
     if (action === "heartbeat") return Response.json(await heartbeatPresence(context, auth.user.id));
     if (action === "sell_item") return Response.json(await sellItem(context, auth.user.id, String(body?.item_id || ""), Number(body?.quantity || 1)));
+    if (action === "sell_all_items") return Response.json(await sellAllItems(context, auth.user.id));
     if (action === "create_trade") return Response.json(await createTradeOffer(context, auth.user.id, body));
     if (action === "accept_trade") return Response.json(await acceptTradeRequest(context, auth.user.id, Number(body?.trade_id || 0)));
     if (action === "update_trade_items") return Response.json(await updateTradeItems(context, auth.user.id, body));
@@ -362,6 +363,29 @@ async function sellItem(context: any, userId: number, itemId: string, quantity: 
   await context.env.DB.prepare(`UPDATE coin_wallets SET balance = COALESCE(balance, 100) + ?, lifetime_earned = COALESCE(lifetime_earned, 0) + ?, updated_at = datetime('now') WHERE user_id = ?`).bind(payout, payout, userId).run();
   await logTechCoinEvent(context, userId, payout, `DropTech eşya bozdurma: ${qty}x ${item.name_tr}`);
   return { ...await buildState(context, userId), sold: { ...item, quantity: qty, payout } };
+}
+
+async function sellAllItems(context: any, userId: number) {
+  const rows = await context.env.DB.prepare(`SELECT item_id, quantity FROM droptech_inventory WHERE user_id = ?`).bind(userId).all();
+  const inventory = rows?.results || [];
+  if (!inventory.length) throw new DropTechUserError("Envanterde bozdurulacak eşya yok.");
+
+  let totalQuantity = 0;
+  let payout = 0;
+  for (const row of inventory) {
+    const quantity = Math.max(0, Math.floor(Number(row.quantity || 0)));
+    const item = DROP_ITEMS.find((entry) => entry.id === String(row.item_id));
+    if (!item || quantity <= 0) continue;
+    totalQuantity += quantity;
+    payout += item.tech_coin_value * quantity;
+  }
+
+  if (totalQuantity <= 0 || payout <= 0) throw new DropTechUserError("Envanterde bozdurulacak geçerli eşya yok.");
+
+  await context.env.DB.prepare(`DELETE FROM droptech_inventory WHERE user_id = ?`).bind(userId).run();
+  await context.env.DB.prepare(`UPDATE coin_wallets SET balance = COALESCE(balance, 100) + ?, lifetime_earned = COALESCE(lifetime_earned, 0) + ?, updated_at = datetime('now') WHERE user_id = ?`).bind(payout, payout, userId).run();
+  await logTechCoinEvent(context, userId, payout, `DropTech toplu envanter bozdurma: ${totalQuantity} eşya`);
+  return { ...await buildState(context, userId), sold_all: { quantity: totalQuantity, payout } };
 }
 
 async function createTradeOffer(context: any, userId: number, body: any) {
