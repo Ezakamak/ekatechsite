@@ -1,4 +1,6 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+const MIN_INITIAL_PRICE = 25;
+const MAX_INITIAL_PRICE = 250;
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
@@ -45,7 +47,9 @@ export async function onRequestPost(context: any) {
     if (!name || name.length < 3) return json({ error: "Şirket/hisse adı zorunlu ve en az 3 karakter olmalı." }, 400);
     if (!sector || sector.length < 3) return json({ error: "Sektör zorunlu ve en az 3 karakter olmalı." }, 400);
     if (!descriptionTr || descriptionTr.length < 20) return json({ error: "Açıklama zorunlu ve en az 20 karakter olmalı." }, 400);
-    if (!Number.isFinite(initialPrice) || initialPrice < 5 || initialPrice > 10000) return json({ error: "Başlangıç fiyatı 5 ile 10000 Tech Coin arasında olmalı." }, 400);
+    if (!Number.isFinite(initialPrice) || initialPrice < MIN_INITIAL_PRICE || initialPrice > MAX_INITIAL_PRICE) {
+      return json({ error: `Başlangıç fiyatı ${MIN_INITIAL_PRICE} ile ${MAX_INITIAL_PRICE} Tech Coin arasında olmalı.` }, 400);
+    }
     if (!risk) return json({ error: "Risk seviyesi düşük, orta veya yüksek olmalı." }, 400);
 
     const existingStock = await context.env.DB
