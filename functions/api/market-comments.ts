@@ -19,7 +19,7 @@ export async function onRequestGet(context: any) {
           market_stock_comments.comment,
           market_stock_comments.created_at,
           users.name AS user_name,
-          users.avatar_url AS user_avatar_url
+          CASE WHEN COALESCE(users.avatar_approved, 0) = 1 THEN users.avatar_url ELSE '' END AS user_avatar_url
         FROM market_stock_comments
         JOIN users ON users.id = market_stock_comments.user_id
         WHERE market_stock_comments.symbol = ? AND market_stock_comments.status = 'approved'
