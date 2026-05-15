@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Gift, PackageOpen, RefreshCw, Sparkles, Repeat2, Coins } from "lucide-react";
+import { Bot, Coins, Gift, PackageOpen, RefreshCw, Repeat2, Send, Sparkles, Swords } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 
@@ -50,6 +50,9 @@ type TechCoinWallet = {
 };
 
 type OnlineUser = { id: number; name: string; avatar_url?: string | null; last_seen_at?: string };
+type BattleRound = { round_number: number; box_type: string; creator_points: number; opponent_points: number; creator_item?: DropItem | null; opponent_item?: DropItem | null };
+type BattleLobby = { id: number; creator_user_id: number; opponent_user_id?: number | null; opponent_is_bot?: number; status: "waiting" | "in_progress" | "completed"; creator_name: string; opponent_name?: string | null; box_sequence: string[]; boxes?: DropBox[]; cost: number; creator_score?: number; opponent_score?: number; winner_user_id?: number | null; winner_side?: "creator" | "opponent" | null; rounds?: BattleRound[]; emotes?: { id: number; user_id: number; name: string; emoji: string; created_at: string }[] };
+
 type TradeOffer = {
   id: number;
   proposer_id: number;
@@ -82,6 +85,7 @@ type DropTechState = {
   items: DropItem[];
   online_users?: OnlineUser[];
   trades?: TradeOffer[];
+  battles?: BattleLobby[];
   odds: Record<Rarity, number>;
   won?: DropItem;
   opened_box?: DropBox;
@@ -153,6 +157,7 @@ export function DropTech() {
   const stripViewportRef = useRef<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<Rarity | "all">("all");
   const [tradeUserId, setTradeUserId] = useState("");
+  const [battleSequence, setBattleSequence] = useState<string[]>(["standard_cache", "signal_crate", "circuit_box"]);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const copy = useMemo(() => tr ? {
@@ -365,6 +370,39 @@ export function DropTech() {
     }
   }
 
+  async function createBattle() {
+    setMessage(null);
+    try {
+      const data = await postAction({ action: "create_battle", box_sequence: battleSequence }, "Battle lobisi oluşturulamadı.");
+      setMessage({ type: "success", text: tr ? "Kasa savaşı lobisi oluşturuldu." : "Case battle lobby created." });
+      window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
+      if (data?.battles?.[0]?.id) window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+    } catch (caught) {
+      setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Battle lobisi oluşturulamadı." });
+    }
+  }
+
+  async function joinBattle(battleId: number, bot = false) {
+    setMessage(null);
+    try {
+      await postAction({ action: bot ? "battle_bot" : "join_battle", battle_id: battleId }, "Battle başlatılamadı.");
+      setMessage({ type: "success", text: bot ? (tr ? "Bot oyuna kilitlendi; savaş başladı." : "Bot locked in; battle started.") : (tr ? "Battle başladı; oyuncular kilitlendi." : "Battle started; players locked.") });
+      window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "win" } }));
+      window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
+    } catch (caught) {
+      setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Battle başlatılamadı." });
+    }
+  }
+
+  async function sendBattleEmoji(battleId: number, emoji: string) {
+    try {
+      await postAction({ action: "battle_emoji", battle_id: battleId, emoji }, "Emoji gönderilemedi.");
+      window.dispatchEvent(new CustomEvent("ekatech-off-sound", { detail: { key: "coin" } }));
+    } catch (caught) {
+      setMessage({ type: "error", text: caught instanceof Error ? caught.message : "Emoji gönderilemedi." });
+    }
+  }
+
   async function sendTrade() {
     setMessage(null);
     try {
@@ -452,6 +490,8 @@ export function DropTech() {
   const collectionValue = Number(state?.collection_value || 0);
   const openButtonDisabled = opening || !canOpenSelectedBox;
   const openButtonText = opening ? copy.opening : hasOwnedSelectedBox ? copy.open : canAffordSelectedBox ? copy.buyAndOpen : copy.notEnough;
+  const battles = state?.battles || [];
+  const battleCost = battleSequence.reduce((sum, boxId) => sum + Number(boxes.find((box) => box.id === boxId)?.open_cost || 0), 0);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
@@ -524,6 +564,22 @@ export function DropTech() {
           </div>
         </section>
 
+        <BattleArena
+          battles={battles}
+          boxes={boxes}
+          currentUserId={currentUserId}
+          sequence={battleSequence}
+          setSequence={setBattleSequence}
+          battleCost={battleCost}
+          walletBalance={walletBalance}
+          tr={tr}
+          locale={locale}
+          onCreate={createBattle}
+          onJoin={(id) => joinBattle(id)}
+          onBot={(id) => joinBattle(id, true)}
+          onEmoji={sendBattleEmoji}
+        />
+
         <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-3xl font-medium">{copy.inventory}</h2><p className="mt-2 text-sm text-white/45">{copy.owned}: {formatNumber(Number(state?.total_quantity || 0), locale)} · {copy.collectionValue}: {formatNumber(collectionValue, locale)} TC</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={sellAllItems} disabled={!inventoryItems.length} className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-300/15 disabled:opacity-40"><Coins className="h-4 w-4" /> {copy.sellAll}</button><FilterButton active={filter === "all"} onClick={() => setFilter("all")}>{copy.all}</FilterButton>{rarityOrder.map((rarity) => <FilterButton key={rarity} active={filter === rarity} onClick={() => setFilter(rarity)}>{rarityText[rarity]}</FilterButton>)}</div></div>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">{visibleInventory.map((item) => <div key={item.item_id || item.id} className={`rounded-[1.5rem] border p-4 ${rarityClass[item.rarity]}`}><div className="flex items-start justify-between gap-3"><span className="text-4xl">{item.emoji}</span><span className="rounded-full bg-black/25 px-3 py-1 text-xs">x{formatNumber(Number(item.quantity || 0), locale)}</span></div><h3 className="mt-4 font-semibold">{nameOf(item, tr)}</h3><p className="mt-1 text-xs uppercase tracking-[0.16em] opacity-60">{rarityText[item.rarity]}</p><p className="mt-3 text-sm leading-6 opacity-70">{descOf(item, tr)}</p><div className="mt-4 grid gap-2 text-xs"><ValueRow label={copy.itemValue} value={Number(item.tech_coin_value || 0)} locale={locale} /><ValueRow label={copy.totalValue} value={Number(item.total_tech_coin_value || 0)} locale={locale} /></div><button onClick={() => sellItem(item)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-300/15"><Coins className="h-4 w-4" /> {copy.sell}</button></div>)}{!visibleInventory.length && <div className="col-span-full rounded-[1.5rem] border border-white/10 bg-black/25 p-6 text-white/45">{copy.empty}</div>}</div>
@@ -545,6 +601,43 @@ function ValueRow({ label, value, locale }: { label: string; value: number; loca
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return <button onClick={onClick} className={`rounded-full border px-4 py-2 text-xs font-medium transition ${active ? "border-white/40 bg-white text-black" : "border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.08]"}`}>{children}</button>;
 }
+function BattleArena({ battles, boxes, currentUserId, sequence, setSequence, battleCost, walletBalance, tr, locale, onCreate, onJoin, onBot, onEmoji }: { battles: BattleLobby[]; boxes: DropBox[]; currentUserId: number; sequence: string[]; setSequence: (value: string[]) => void; battleCost: number; walletBalance: number; tr: boolean; locale: string; onCreate: () => void; onJoin: (id: number) => void; onBot: (id: number) => void; onEmoji: (id: number, emoji: string) => void }) {
+  const openBattles = battles.filter((battle) => battle.status === "waiting");
+  const myBattles = battles.filter((battle) => battle.creator_user_id === currentUserId || battle.opponent_user_id === currentUserId).slice(0, 4);
+  const selectedBoxes = sequence.map((id) => boxes.find((box) => box.id === id)).filter(Boolean) as DropBox[];
+  const canCreate = selectedBoxes.length > 0 && walletBalance >= battleCost;
+  return <section className="rounded-[2rem] border border-fuchsia-300/20 bg-fuchsia-300/[0.055] p-5 shadow-2xl shadow-fuchsia-500/10 backdrop-blur-xl sm:p-6">
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div><div className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/20 bg-black/30 px-4 py-2 text-sm text-fuchsia-100"><Swords className="h-4 w-4" /> {tr ? "Kasa Savaşı" : "Case Battle"}</div><h2 className="mt-3 text-3xl font-medium">{tr ? "Lobi kur, kasaları seç, kazanan hepsini alsın" : "Create a lobby, pick cases, winner takes all"}</h2><p className="mt-2 text-sm text-white/50">{tr ? "Son oyuncu veya bot katıldığı anda oyuncular kilitlenir; her round herkes aynı kasayı açar, pointValue skora eklenir." : "Players lock when the second seat joins; every round opens the same case and pointValue is scored."}</p></div>
+      <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-white/65"><p>{tr ? "Toplam giriş" : "Total entry"}</p><p className="mt-1 inline-flex items-center gap-1 text-2xl font-semibold text-white"><CoinIcon small /> {formatNumber(battleCost, locale)} TC</p></div>
+    </div>
+    <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto]">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {sequence.map((boxId, index) => <select key={`${boxId}-${index}`} value={boxId} onChange={(event) => setSequence(sequence.map((entry, inner) => inner === index ? event.target.value : entry))} className="rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-white outline-none">{boxes.map((box) => <option key={box.id} value={box.id}>{box.emoji} {nameOf(box, tr)} · {formatNumber(Number(box.open_cost || 0), locale)} TC</option>)}</select>)}
+      </div>
+      <div className="flex flex-wrap gap-2"><button onClick={() => sequence.length < 8 && setSequence([...sequence, boxes[0]?.id || "standard_cache"])} className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold text-white/70">+ Round</button><button onClick={() => sequence.length > 1 && setSequence(sequence.slice(0, -1))} className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold text-white/70">- Round</button><button onClick={onCreate} disabled={!canCreate} className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2 text-xs font-semibold text-black hover:bg-gray-200 disabled:opacity-40"><Sparkles className="h-4 w-4" /> {tr ? "Lobi oluştur" : "Create lobby"}</button></div>
+    </div>
+    <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      <div><h3 className="text-sm uppercase tracking-[0.18em] text-white/40">{tr ? "Açık lobiler" : "Open lobbies"}</h3><div className="mt-3 grid gap-3">{openBattles.length ? openBattles.map((battle) => <BattleCard key={battle.id} battle={battle} currentUserId={currentUserId} tr={tr} locale={locale} onJoin={onJoin} onBot={onBot} onEmoji={onEmoji} />) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">{tr ? "Henüz açık battle yok." : "No open battles yet."}</p>}</div></div>
+      <div><h3 className="text-sm uppercase tracking-[0.18em] text-white/40">{tr ? "Benim savaşlarım" : "My battles"}</h3><div className="mt-3 grid gap-3">{myBattles.length ? myBattles.map((battle) => <BattleCard key={battle.id} battle={battle} currentUserId={currentUserId} tr={tr} locale={locale} onJoin={onJoin} onBot={onBot} onEmoji={onEmoji} />) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">—</p>}</div></div>
+    </div>
+  </section>;
+}
+
+function BattleCard({ battle, currentUserId, tr, locale, onJoin, onBot, onEmoji }: { battle: BattleLobby; currentUserId: number; tr: boolean; locale: string; onJoin: (id: number) => void; onBot: (id: number) => void; onEmoji: (id: number, emoji: string) => void }) {
+  const isCreator = battle.creator_user_id === currentUserId;
+  const isParticipant = isCreator || battle.opponent_user_id === currentUserId;
+  const winnerText = battle.winner_side === "creator" ? battle.creator_name : battle.winner_user_id ? battle.opponent_name : (tr ? "Bot" : "Bot");
+  return <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/35 p-4">
+    <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-fuchsia-400/20 blur-2xl" />
+    <div className="relative flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.16em] text-white/35">#{battle.id} · {battle.status}</p><h4 className="mt-1 font-semibold">{battle.creator_name} VS {battle.opponent_name || (tr ? "Bekleniyor" : "Waiting")}</h4></div><span className="inline-flex items-center gap-1 rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-xs text-amber-100"><CoinIcon small /> {formatNumber(Number(battle.cost || 0), locale)} TC</span></div>
+    <div className="relative mt-3 flex flex-wrap gap-2">{(battle.boxes || []).map((box, index) => <span key={`${box.id}-${index}`} className="rounded-full bg-white/[0.08] px-3 py-1 text-xs">{box.emoji} {nameOf(box, tr)}</span>)}</div>
+    {battle.rounds?.length ? <div className="relative mt-4 grid gap-2">{battle.rounds.map((round) => <div key={round.round_number} className="grid grid-cols-[32px_1fr_1fr] items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-xs"><span className="text-white/35">R{round.round_number}</span><span className="animate-pulse rounded-xl px-2 py-1">{round.creator_item?.emoji} {nameOf(round.creator_item, tr)} · {round.creator_points}</span><span className="animate-pulse rounded-xl px-2 py-1">{round.opponent_item?.emoji} {nameOf(round.opponent_item, tr)} · {round.opponent_points}</span></div>)}</div> : null}
+    <div className="relative mt-4 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-white/55">{tr ? "Skor" : "Score"}: <b className="text-white">{Number(battle.creator_score || 0)}</b> - <b className="text-white">{Number(battle.opponent_score || 0)}</b>{battle.status === "completed" ? <> · 🏆 {winnerText || "—"}</> : null}</p><div className="flex flex-wrap gap-2">{battle.status === "waiting" && !isCreator && <button onClick={() => onJoin(battle.id)} className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200">{tr ? "Katıl" : "Join"}</button>}{battle.status === "waiting" && isCreator && <button onClick={() => onBot(battle.id)} className="inline-flex items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200"><Bot className="h-4 w-4" /> Bot</button>}{isParticipant && ["🔥", "😂", "😱", "💎", "🤖", "⚡", "🏆", "😭"].map((emoji) => <button key={emoji} onClick={() => onEmoji(battle.id, emoji)} className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-sm hover:bg-white/[0.1]">{emoji}</button>)}</div></div>
+    {battle.emotes?.length ? <div className="relative mt-3 flex flex-wrap gap-2 text-xs text-white/55"><Send className="h-4 w-4" /> {battle.emotes.slice(0, 6).map((emote) => <span key={emote.id} className="rounded-full bg-black/35 px-2 py-1">{emote.emoji} {emote.name}</span>)}</div> : null}
+  </div>;
+}
+
 function TradeCard({ trade, currentUserId, inventoryItems, tr, locale, copy, onAccept, onDecline, onCancel, onUpdateItems, onReady, onConfirm }: { trade: TradeOffer; currentUserId: number; inventoryItems: InventoryItem[]; tr: boolean; locale: string; copy: Record<string, string>; onAccept: () => void; onDecline: () => void; onCancel: () => void; onUpdateItems: (itemId: string, quantity: number) => void; onReady: (ready: boolean) => void; onConfirm: () => void }) {
   const isProposer = Number(trade.proposer_id) === currentUserId;
   const myReady = Boolean(Number(isProposer ? trade.proposer_ready : trade.recipient_ready));
