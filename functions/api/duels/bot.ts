@@ -27,7 +27,7 @@ export async function onRequestPost(context: any) {
 
     const profile = pickBotProfile(lobbyId, auth.user.id);
     const bot = await ensureBotUser(context, profile);
-    if (!bot?.id) return json({ error: "Bot profili hazırlanamadı." }, 500);
+    if (!bot?.id) return json({ error: "Bot profili hazırlanamadı.", detail: "users tablosuna bot satırı oluşturulamadı." }, 500);
 
     const update = await context.env.DB
       .prepare("UPDATE duel_lobbies SET opponent_user_id = ?, reward_amount = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ? AND status = 'open' AND opponent_user_id IS NULL")
@@ -51,21 +51,83 @@ async function ensureBotUser(context: any, profile: any) {
   const existing = await context.env.DB.prepare("SELECT id, name, email FROM users WHERE email = ?").bind(profile.email).first();
   if (existing) return existing;
 
-  const systemValue = `bot-user-${profile.email}`;
-  const attempts = [
-    { sql: "INSERT INTO users (name, email, password_hash, password_salt, role, email_verified, avatar_approved) VALUES (?, ?, ?, ?, 'off', 1, 1)", values: [profile.name, profile.email, systemValue, systemValue] },
-    { sql: "INSERT INTO users (name, email, password_hash, password_salt, role, email_verified) VALUES (?, ?, ?, ?, 'off', 1)", values: [profile.name, profile.email, systemValue, systemValue] },
-    { sql: "INSERT INTO users (name, email, role) VALUES (?, ?, 'off')", values: [profile.name, profile.email] },
-  ];
+  const columns = await getTableColumns(context, "users");
+  if (!columns.length) throw new Error("users tablosu okunamadı.");
 
-  for (const attempt of attempts) {
-    try {
-      await context.env.DB.prepare(attempt.sql).bind(...attempt.values).run();
-      return await context.env.DB.prepare("SELECT id, name, email FROM users WHERE email = ?").bind(profile.email).first();
-    } catch {}
+  const insertColumns: string[] = [];
+  const values: any[] = [];
+
+  for (const column of columns) {
+    const name = String(column.name || "");
+    if (!name) continue;
+
+    const isPrimaryId = Number(column.pk || 0) === 1 && name.toLowerCase() === "id";
+    if (isPrimaryId) continue;
+
+    const value = valueForBotColumn(name, column, profile);
+    const hasDefault = column.dflt_value !== null && column.dflt_value !== undefined;
+    const required = Number(column.notnull || 0) === 1 && !hasDefault;
+
+    if (value.shouldInclude || required) {
+      insertColumns.push(name);
+      values.push(value.value);
+    }
   }
 
-  return null;
+  if (!insertColumns.includes("email")) throw new Error("users.email kolonu bulunamadı.");
+  if (!insertColumns.includes("name")) throw new Error("users.name kolonu bulunamadı.");
+
+  const placeholders = insertColumns.map(() => "?").join(", ");
+  const columnSql = insertColumns.map((name) => `\"${name.replaceAll('"', '""')}\"`).join(", ");
+
+  await context.env.DB
+    .prepare(`INSERT OR IGNORE INTO users (${columnSql}) VALUES (${placeholders})`)
+    .bind(...values)
+    .run();
+
+  const bot = await context.env.DB.prepare("SELECT id, name, email FROM users WHERE email = ?").bind(profile.email).first();
+  if (!bot) throw new Error("Bot kullanıcısı insert sonrası bulunamadı.");
+  return bot;
+}
+
+async function getTableColumns(context: any, table: string) {
+  const result = await context.env.DB.prepare(`PRAGMA table_info(${table})`).all();
+  return (result?.results || []) as any[];
+}
+
+function valueForBotColumn(name: string, column: any, profile: any) {
+  const lower = name.toLowerCase();
+  const systemValue = `bot-user-${profile.email}`;
+  const now = new Date().toISOString();
+
+  if (lower === "name" || lower === "display_name" || lower === "username") return include(profile.name);
+  if (lower === "email") return include(profile.email);
+  if (lower === "role") return include("off");
+  if (lower === "password_hash" || lower === "password") return include(systemValue);
+  if (lower === "password_salt" || lower === "salt") return include(systemValue);
+  if (lower === "email_verified" || lower === "verified" || lower === "is_verified") return include(1);
+  if (lower === "avatar_approved" || lower === "profile_photo_approved") return include(1);
+  if (lower === "avatar_url" || lower === "profile_photo_url") return include("");
+  if (lower === "created_at" || lower === "updated_at") return include(now);
+  if (lower === "last_login_at" || lower === "reviewed_at" || lower === "approved_at") return skip(null);
+  if (lower === "status") return include("active");
+  if (lower === "is_bot" || lower === "bot") return include(1);
+
+  const hasDefault = column.dflt_value !== null && column.dflt_value !== undefined;
+  const required = Number(column.notnull || 0) === 1 && !hasDefault;
+  if (!required) return skip(null);
+
+  const type = String(column.type || "").toUpperCase();
+  if (type.includes("INT") || type.includes("REAL") || type.includes("NUM")) return include(0);
+  return include("");
+}
+
+function include(value: any) {
+  return { shouldInclude: true, value };
+}
+
+function skip(value: any) {
+  return { shouldInclude: false, value };
 }
 
 async function requireUser(context: any) {
