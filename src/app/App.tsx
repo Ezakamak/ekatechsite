@@ -22,6 +22,7 @@ import { CommandMenu } from "./components/CommandMenu";
 import { BackToTop } from "./components/BackToTop";
 import { CookieConsent } from "./components/CookieConsent";
 import { AdminPanel } from "./components/AdminPanel";
+import { AdminOffCredits } from "./components/AdminOffCredits";
 import { ProjectRequestPanel } from "./components/ProjectRequestPanel";
 import { AuthPage } from "./components/AuthPage";
 import { AccountPage } from "./components/AccountPage";
@@ -151,6 +152,7 @@ export default function App() {
             <AdminPanel />
             <div className="bg-black px-4 pb-24 sm:px-6">
               <div className="mx-auto max-w-7xl space-y-6">
+                <AdminOffCredits />
                 <MaintenancePanel />
                 <AdminTodoPanel />
                 <AdminProjectTools />
