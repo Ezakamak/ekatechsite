@@ -52,6 +52,10 @@ function toMs(value?: string | null) {
   return Date.parse(value.includes("T") ? value : value.replace(" ", "T") + "Z");
 }
 
+function isBotIdentity(name?: string | null, email?: string | null) {
+  return String(email || "").toLowerCase().includes(".bot@ekatech.local") || String(name || "").toUpperCase().includes("BOT");
+}
+
 function initials(name?: string | null, email?: string | null) {
   const source = name || email || "P";
   return source.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "P";
@@ -93,6 +97,8 @@ export function CipherBreak() {
     active: "Aktif Cipher lobileri",
     mine: "Cipher maçlarım",
     join: "Join",
+    bot: "Botla Oyna",
+    botNote: "BOT rakip görünür rozetle gelir; ödül daha düşüktür.",
     enter: "Maça gir",
     refresh: "Yenile",
     target: "Hedef kod",
@@ -125,6 +131,8 @@ export function CipherBreak() {
     active: "Active Cipher lobbies",
     mine: "My Cipher matches",
     join: "Join",
+    bot: "Play with Bot",
+    botNote: "BOT opponents are visibly labeled and reward is lower.",
     enter: "Enter match",
     refresh: "Refresh",
     target: "Target code",
@@ -218,6 +226,11 @@ export function CipherBreak() {
 
   const joinLobby = async (id: number) => {
     const d = await post({ action: "join", lobby_id: id });
+    if (d?.lobby) setActiveLobby(d.lobby);
+  };
+
+  const playWithBot = async (id: number) => {
+    const d = await post({ action: "bot", lobby_id: id });
     if (d?.lobby) setActiveLobby(d.lobby);
   };
 
@@ -347,8 +360,8 @@ export function CipherBreak() {
           <button onClick={createLobby} disabled={busy || !user} className="mt-5 w-full rounded-full bg-white px-6 py-3 font-medium text-black hover:bg-gray-200 disabled:opacity-50">{busy ? "..." : c.create}</button>
         </section>
         <section className="space-y-6">
-          <LobbyList title={c.active} empty={c.empty} lobbies={open} user={user} c={c} onJoin={joinLobby} onPlay={enter} />
-          <LobbyList title={c.mine} empty={c.emptyMine} lobbies={mine} user={user} c={c} onJoin={joinLobby} onPlay={enter} />
+          <LobbyList title={c.active} empty={c.empty} lobbies={open} user={user} c={c} onJoin={joinLobby} onBot={playWithBot} onPlay={enter} />
+          <LobbyList title={c.mine} empty={c.emptyMine} lobbies={mine} user={user} c={c} onJoin={joinLobby} onBot={playWithBot} onPlay={enter} />
         </section>
       </div>}
     </div>
@@ -356,9 +369,10 @@ export function CipherBreak() {
 }
 
 function Player({ name, email, avatarUrl, wins, target }: { name?: string | null; email?: string | null; avatarUrl?: string | null; wins: number; target: number }) {
-  return <div className="flex flex-col items-center gap-2 text-center"><Avatar name={name} email={email} url={avatarUrl} /><p className="max-w-28 truncate text-sm text-white">{name}</p><div className="flex gap-1">{Array.from({ length: target || 1 }).map((_, i) => <span key={i} className={`h-2 w-5 rounded-full ${i < wins ? "bg-cyan-200" : "bg-white/15"}`} />)}</div></div>;
+  const bot = isBotIdentity(name, email);
+  return <div className="flex flex-col items-center gap-2 text-center"><div className="relative"><Avatar name={name} email={email} url={avatarUrl} />{bot ? <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full border border-cyan-300/30 bg-black px-2 py-0.5 text-[9px] font-bold text-cyan-100">BOT</span> : null}</div><p className="max-w-28 truncate text-sm text-white">{name}</p><div className="flex gap-1">{Array.from({ length: target || 1 }).map((_, i) => <span key={i} className={`h-2 w-5 rounded-full ${i < wins ? "bg-cyan-200" : "bg-white/15"}`} />)}</div></div>;
 }
 
-function LobbyList({ title, empty, lobbies, user, c, onJoin, onPlay }: { title: string; empty: string; lobbies: Lobby[]; user: User | null; c: any; onJoin: (id: number) => void; onPlay: (lobby: Lobby) => void }) {
-  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><h2 className="text-2xl font-medium text-white">{title}</h2><div className="mt-5 space-y-3">{lobbies.length === 0 && <p className="rounded-2xl border border-white/10 bg-black/35 p-5 text-white/45">{empty}</p>}{lobbies.map((lobby) => { const isCreator = user?.id === lobby.creator_user_id; const isOpponent = user?.id === lobby.opponent_user_id; const canJoin = lobby.status === "open" && !isCreator; const canPlay = lobby.status === "in_progress" && (isCreator || isOpponent); const label = lobby.status === "open" ? "Open" : lobby.status === "in_progress" ? "Live" : lobby.status === "completed" ? "Completed" : lobby.status === "cancelled" || lobby.status === "İptal edildi" ? c.cancelled : lobby.status; return <div key={lobby.id} className="rounded-3xl border border-white/10 bg-black/35 p-4"><div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center"><div className="flex items-center gap-3"><Avatar name={lobby.creator_name} email={lobby.creator_email} url={lobby.creator_avatar_url} /><div className="min-w-0"><p className="truncate font-medium text-white">{lobby.creator_name}</p><p className="text-sm text-white/40">#{lobby.id}</p></div></div><div className="text-center"><p className="text-2xl font-semibold text-white/35">VS</p><p className="mt-1 rounded-full bg-white/[0.06] px-3 py-1 text-xs text-white/45">{label}</p></div><div className="flex items-center gap-3 md:justify-end"><div className="min-w-0 text-right"><p className="truncate font-medium text-white">{lobby.opponent_name || c.player2}</p><p className="text-sm text-white/40">{lobby.opponent_name ? lobby.opponent_email : c.waitingPlayer}</p></div><Avatar name={lobby.opponent_name || c.player2} email={lobby.opponent_email || ""} url={lobby.opponent_avatar_url || ""} /></div></div><div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-white/55"><span className="rounded-full bg-cyan-300/10 px-3 py-1 text-cyan-100">Cipher Break</span><span className="rounded-full bg-emerald-300/10 px-3 py-1 text-emerald-100">{c.reward}: {lobby.reward_amount || 40}</span><span className="rounded-full bg-purple-300/10 px-3 py-1 text-purple-100">Best of {lobby.round_count}</span>{lobby.winner_name && <span className="rounded-full bg-emerald-300/10 px-3 py-1 text-emerald-100">Winner: {lobby.winner_name}</span>}</div><div className="mt-4 flex flex-wrap gap-2">{canJoin && <button type="button" onClick={() => onJoin(lobby.id)} className="rounded-full bg-white px-5 py-2 text-sm font-medium text-black hover:bg-gray-200">{c.join}</button>}{canPlay && <button type="button" onClick={() => onPlay(lobby)} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-300/15">{c.enter}</button>}</div></div>; })}</div></div>;
+function LobbyList({ title, empty, lobbies, user, c, onJoin, onBot, onPlay }: { title: string; empty: string; lobbies: Lobby[]; user: User | null; c: any; onJoin: (id: number) => void; onBot: (id: number) => void; onPlay: (lobby: Lobby) => void }) {
+  return <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"><h2 className="text-2xl font-medium text-white">{title}</h2><div className="mt-5 space-y-3">{lobbies.length === 0 && <p className="rounded-2xl border border-white/10 bg-black/35 p-5 text-white/45">{empty}</p>}{lobbies.map((lobby) => { const isCreator = user?.id === lobby.creator_user_id; const isOpponent = user?.id === lobby.opponent_user_id; const canJoin = lobby.status === "open" && !isCreator; const canBot = lobby.status === "open" && isCreator && !lobby.opponent_user_id; const canPlay = lobby.status === "in_progress" && (isCreator || isOpponent); const label = lobby.status === "open" ? "Open" : lobby.status === "in_progress" ? "Live" : lobby.status === "completed" ? "Completed" : lobby.status === "cancelled" || lobby.status === "İptal edildi" ? c.cancelled : lobby.status; const opponentBot = isBotIdentity(lobby.opponent_name, lobby.opponent_email); return <div key={lobby.id} className="rounded-3xl border border-white/10 bg-black/35 p-4"><div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center"><div className="flex items-center gap-3"><Avatar name={lobby.creator_name} email={lobby.creator_email} url={lobby.creator_avatar_url} /><div className="min-w-0"><p className="truncate font-medium text-white">{lobby.creator_name}</p><p className="text-sm text-white/40">#{lobby.id}</p></div></div><div className="text-center"><p className="text-2xl font-semibold text-white/35">VS</p><p className="mt-1 rounded-full bg-white/[0.06] px-3 py-1 text-xs text-white/45">{label}</p></div><div className="flex items-center gap-3 md:justify-end"><div className="min-w-0 text-right"><p className="truncate font-medium text-white">{lobby.opponent_name || c.player2} {opponentBot ? <span className="ml-1 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-2 py-0.5 text-[10px] text-cyan-100">BOT</span> : null}</p><p className="text-sm text-white/40">{lobby.opponent_name ? lobby.opponent_email : c.waitingPlayer}</p></div><Avatar name={lobby.opponent_name || c.player2} email={lobby.opponent_email || ""} url={lobby.opponent_avatar_url || ""} /></div></div><div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-white/55"><span className="rounded-full bg-cyan-300/10 px-3 py-1 text-cyan-100">Cipher Break</span><span className="rounded-full bg-emerald-300/10 px-3 py-1 text-emerald-100">{c.reward}: {lobby.reward_amount || 40}</span><span className="rounded-full bg-purple-300/10 px-3 py-1 text-purple-100">Best of {lobby.round_count}</span>{canBot && <span className="rounded-full bg-cyan-300/10 px-3 py-1 text-cyan-100">{c.botNote}</span>}{lobby.winner_name && <span className="rounded-full bg-emerald-300/10 px-3 py-1 text-emerald-100">Winner: {lobby.winner_name}</span>}</div><div className="mt-4 flex flex-wrap gap-2">{canJoin && <button type="button" onClick={() => onJoin(lobby.id)} className="rounded-full bg-white px-5 py-2 text-sm font-medium text-black hover:bg-gray-200">{c.join}</button>}{canBot && <button type="button" onClick={() => onBot(lobby.id)} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-300/15">{c.bot}</button>}{canPlay && <button type="button" onClick={() => onPlay(lobby)} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-300/15">{c.enter}</button>}</div></div>; })}</div></div>;
 }
