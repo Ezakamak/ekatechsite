@@ -46,6 +46,12 @@ function InvestSimVisualFixes() {
         animation: none !important;
         transform: none !important;
       }
+
+      .eka-investsim .eka-draw-line {
+        stroke-dasharray: none !important;
+        stroke-dashoffset: 0 !important;
+        animation: none !important;
+      }
     `}</style>
   );
 }
