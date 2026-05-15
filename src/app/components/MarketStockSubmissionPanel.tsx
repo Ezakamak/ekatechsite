@@ -16,6 +16,8 @@ type Submission = {
   created_at?: string;
 };
 
+const MIN_INITIAL_PRICE = 25;
+const MAX_INITIAL_PRICE = 250;
 const sectorsTr = ["Teknoloji", "Finans", "Enerji", "Sağlık", "Perakende", "Ulaşım", "Gıda", "Oyun", "Yapay Zeka", "Savunma", "Eğlence", "Diğer"];
 
 export function MarketStockSubmissionPanel() {
@@ -35,13 +37,14 @@ export function MarketStockSubmissionPanel() {
             descriptionTr: "Açıklama",
             descriptionEn: "İngilizce açıklama (isteğe bağlı)",
             initialPrice: "Başlangıç fiyatı",
+            priceHelp: `Zorunlu aralık: ${MIN_INITIAL_PRICE}-${MAX_INITIAL_PRICE} Tech Coin. Çok ucuz veya abartı pahalı fiyat kabul edilmez.`,
             risk: "Risk seviyesi",
             low: "Düşük",
             medium: "Orta",
             high: "Yüksek",
             submit: "Admin onayına gönder",
             refresh: "Başvurularımı yenile",
-            required: "Zorunlu alanları doldur: sembol, ad, sektör, açıklama, fiyat ve risk.",
+            required: `Zorunlu alanları doldur: sembol, ad, sektör, açıklama, ${MIN_INITIAL_PRICE}-${MAX_INITIAL_PRICE} Tech Coin arası fiyat ve risk.`,
             sent: "Başvuru gönderildi. Admin onaylamadan yayımlanmaz.",
             empty: "Henüz hisse başvurun yok.",
             mySubmissions: "Başvurularım",
@@ -62,13 +65,14 @@ export function MarketStockSubmissionPanel() {
             descriptionTr: "Description",
             descriptionEn: "English description (optional)",
             initialPrice: "Initial price",
+            priceHelp: `Required range: ${MIN_INITIAL_PRICE}-${MAX_INITIAL_PRICE} Tech Coin. Too cheap or extremely expensive prices are not accepted.`,
             risk: "Risk level",
             low: "Low",
             medium: "Medium",
             high: "High",
             submit: "Send for admin approval",
             refresh: "Refresh my submissions",
-            required: "Fill required fields: symbol, name, sector, description, price and risk.",
+            required: `Fill required fields: symbol, name, sector, description, ${MIN_INITIAL_PRICE}-${MAX_INITIAL_PRICE} Tech Coin price and risk.`,
             sent: "Submission sent. It will not be published before admin approval.",
             empty: "You have no stock submissions yet.",
             mySubmissions: "My submissions",
@@ -108,8 +112,8 @@ export function MarketStockSubmissionPanel() {
       form.name.trim().length >= 3 &&
       form.sector.trim().length >= 3 &&
       form.descriptionTr.trim().length >= 20 &&
-      Number(form.initialPrice) >= 5 &&
-      Number(form.initialPrice) <= 10000 &&
+      Number(form.initialPrice) >= MIN_INITIAL_PRICE &&
+      Number(form.initialPrice) <= MAX_INITIAL_PRICE &&
       ["low", "medium", "high"].includes(form.risk)
     );
   }
@@ -218,8 +222,8 @@ export function MarketStockSubmissionPanel() {
                   {sectorsTr.map((sector) => <option key={sector} value={sector}>{sector}</option>)}
                 </select>
               </Field>
-              <Field label={copy.initialPrice}>
-                <input type="number" min="5" max="10000" value={form.initialPrice} onChange={(event) => updateField("initialPrice", event.target.value)} className="field-input" />
+              <Field label={copy.initialPrice} help={copy.priceHelp}>
+                <input type="number" min={MIN_INITIAL_PRICE} max={MAX_INITIAL_PRICE} step="1" value={form.initialPrice} onChange={(event) => updateField("initialPrice", event.target.value)} className="field-input" />
               </Field>
               <Field label={copy.risk}>
                 <select value={form.risk} onChange={(event) => updateField("risk", event.target.value)} className="field-input">
