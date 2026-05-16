@@ -131,7 +131,8 @@ type GameKey =
   | "mines"
   | "towers"
   | "aviator"
-  | "roulette";
+  | "roulette"
+  | "store";
 
 type ShopCatalogItem = {
   slug: string;
@@ -225,7 +226,10 @@ export function OffPage() {
         rewardRule: "Ödül kuralı",
         shopTitle: "Tech Store",
         shopDesc:
-          "OFF Hub’da satın alınabilen racon eşyaları artık Tech Store’da satılır. Saat, çakmak ve özel aksesuarlar Tech Roulette masasında eşya değeri olarak kullanılabilir.",
+          "Saat, çakmak ve özel aksesuarları Tech Coin ile satın al. Tech Store artık vitrin değil; OFF Hub içinden uygulama gibi açılır ve satılan eşyalar içeride görünür.",
+        shopAppDesc:
+          "Saat, çakmak ve özel aksesuarları ayrı Tech Store uygulamasında görüntüle; satın alıp racon envanterine ekle.",
+        shopPanelHeading: "Satılan eşyalar",
         buy: "Satın al",
         inventory: "Racon envanteri",
         onlyRoulette: "Sadece rulette bahis değeri",
@@ -290,7 +294,10 @@ export function OffPage() {
         rewardRule: "Reward rule",
         shopTitle: "Tech Store",
         shopDesc:
-          "Purchasable OFF Hub swagger items are now sold in Tech Store. Watches, lighters and special accessories can be used as item-value stakes on Tech Roulette.",
+          "Buy watches, lighters and special accessories with Tech Coin. Tech Store is no longer an entrance showcase; it opens like an app inside OFF Hub and shows the items for sale inside.",
+        shopAppDesc:
+          "View watches, lighters and special accessories in the separate Tech Store app; buy them and add them to your swagger inventory.",
+        shopPanelHeading: "Items for sale",
         buy: "Buy",
         inventory: "Swagger inventory",
         onlyRoulette: "Roulette stake only",
@@ -499,6 +506,16 @@ export function OffPage() {
           >
             <TechRoulette />
           </GameErrorBoundary>
+        ) : activeGame === "store" ? (
+          <OffShopApp
+            catalog={shopCatalog}
+            inventory={shopInventory}
+            message={shopMessage}
+            buyingSlug={buyingSlug}
+            copy={copy}
+            locale={tr ? "tr-TR" : "en-US"}
+            onBuy={buyShopItem}
+          />
         ) : (
           <MarketAcademy />
         )}
@@ -572,17 +589,19 @@ export function OffPage() {
           </div>
         </section>
 
-        <OffShopPanel
-          catalog={shopCatalog}
-          inventory={shopInventory}
-          message={shopMessage}
-          buyingSlug={buyingSlug}
-          copy={copy}
-          locale={tr ? "tr-TR" : "en-US"}
-          onBuy={buyShopItem}
-        />
-
         <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <GameCard
+            icon={<Store className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.shopTitle}
+            description={copy.shopAppDesc}
+            accent="amber"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("click");
+              setActiveGame("store");
+            }}
+          />
           <GameCard
             icon={<Swords className="h-6 w-6" />}
             status={copy.available}
@@ -721,6 +740,59 @@ export function OffPage() {
   );
 }
 
+function OffShopApp({
+  catalog,
+  inventory,
+  message,
+  buyingSlug,
+  copy,
+  locale,
+  onBuy,
+}: {
+  catalog: ShopCatalogItem[];
+  inventory: ShopInventoryItem[];
+  message: string;
+  buyingSlug: string | null;
+  copy: any;
+  locale: string;
+  onBuy: (slug: string) => void;
+}) {
+  return (
+    <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
+      <div className="absolute left-1/2 top-20 h-96 w-96 -translate-x-1/2 rounded-full bg-amber-500/10 blur-3xl" />
+      <div className="absolute right-0 top-64 h-80 w-80 rounded-full bg-purple-500/10 blur-3xl" />
+      <div className="relative mx-auto max-w-7xl space-y-6">
+        <motion.section
+          initial={{ opacity: 0, y: 22 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+          className="rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.07] p-6 shadow-2xl shadow-amber-500/10 backdrop-blur-xl sm:p-8"
+        >
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/25 bg-amber-200/10 px-4 py-2 text-sm text-amber-100">
+            <Store className="h-4 w-4" /> {copy.shopTitle}
+          </div>
+          <h1 className="mt-5 text-5xl font-medium tracking-tight text-white sm:text-7xl">
+            {copy.shopTitle}
+          </h1>
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-white/55">
+            {copy.shopAppDesc}
+          </p>
+        </motion.section>
+
+        <OffShopPanel
+          catalog={catalog}
+          inventory={inventory}
+          message={message}
+          buyingSlug={buyingSlug}
+          copy={copy}
+          locale={locale}
+          onBuy={onBuy}
+        />
+      </div>
+    </main>
+  );
+}
+
 function OffShopPanel({
   catalog,
   inventory,
@@ -749,7 +821,7 @@ function OffShopPanel({
             <Store className="h-4 w-4" /> {copy.shopTitle}
           </div>
           <h2 className="mt-4 text-3xl font-medium text-white">
-            Tech Store vitrini
+            {copy.shopPanelHeading}
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">
             {copy.shopDesc}
