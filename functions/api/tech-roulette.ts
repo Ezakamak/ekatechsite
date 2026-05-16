@@ -9,6 +9,7 @@ const RED_NUMBERS = new Set([
 const ALLOWED_CHIPS = new Set([10, 50, 100, 500, 1_000, 5_000, 10_000]);
 const BET_LIMITS = { min: 10, max: 10_000 };
 const ROUND_SECONDS = 18;
+const SPIN_COOLDOWN_SECONDS = 16;
 
 const OPEN_ROUND_SELECT = `
   SELECT id, status, betting_started_at, spins_at, winning_number, winning_color, winning_parity, created_at, resolved_at
@@ -64,8 +65,8 @@ export async function onRequestGet(context: any) {
     const [recent, tableBets, myBets, recentNumbers, inventory] =
       await Promise.all([
         loadRecentLogs(context, auth.user.id),
-        loadRoundBets(context, round.id, auth.user.id),
-        loadUserRoundBets(context, round.id, auth.user.id),
+        round ? loadRoundBets(context, round.id, auth.user.id) : [],
+        round ? loadUserRoundBets(context, round.id, auth.user.id) : [],
         loadRecentNumbers(context),
         loadInventory(context, auth.user.id),
       ]);
@@ -77,7 +78,7 @@ export async function onRequestGet(context: any) {
       limits: BET_LIMITS,
       roundSeconds: ROUND_SECONDS,
       serverNow: nowSeconds(),
-      currentRound: serializeRound(round),
+      currentRound: round ? serializeRound(round) : null,
       lastResolvedRound: settledRound ? serializeRound(settledRound) : null,
       tableBets,
       myBets,
@@ -113,6 +114,8 @@ export async function onRequestPost(context: any) {
     await ensureWallet(context, auth.user.id);
     const settledRound = await settleExpiredRound(context);
     const round = await getOrCreateOpenRound(context);
+    if (!round)
+      throw new Error("Top hâlâ dönüyor. Bahisler açılınca sonraki tura gir.");
     if (round.spins_at <= nowSeconds() + 1)
       throw new Error("Bu tur kapanıyor. Yeni tur için bekle.");
 
@@ -398,7 +401,6 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
       .run();
   }
 
-  await createOpenRound(context);
   return {
     ...open,
     status: "resolved",
@@ -409,9 +411,19 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
   };
 }
 
-async function getOrCreateOpenRound(context: any): Promise<RouletteRound> {
+async function getOrCreateOpenRound(
+  context: any,
+): Promise<RouletteRound | null> {
   const open = await context.env.DB.prepare(OPEN_ROUND_SELECT).first();
   if (open) return open;
+
+  const latestResolved = await context.env.DB.prepare(
+    `SELECT MAX(strftime('%s', resolved_at)) AS resolved_at_epoch FROM tech_roulette_rounds WHERE status = 'resolved' AND resolved_at IS NOT NULL`,
+  ).first();
+  const resolvedAt = Number(latestResolved?.resolved_at_epoch || 0);
+  if (resolvedAt > 0 && nowSeconds() - resolvedAt < SPIN_COOLDOWN_SECONDS)
+    return null;
+
   return createOpenRound(context);
 }
 
