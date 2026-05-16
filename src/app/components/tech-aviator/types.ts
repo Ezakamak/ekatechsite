@@ -42,6 +42,7 @@ export interface BetPanelState {
 }
 
 export interface SocketLike {
+  connected?: boolean;
   on: (event: string, handler: (...args: any[]) => void) => void;
   off: (event: string, handler?: (...args: any[]) => void) => void;
   emit: (event: string, payload?: unknown, ack?: (response: any) => void) => void;
