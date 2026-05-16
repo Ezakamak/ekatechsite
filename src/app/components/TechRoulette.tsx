@@ -736,22 +736,6 @@ export function TechRoulette() {
   }, []);
 
   useEffect(() => {
-    let frameId: number | null = null;
-    const tickIdleWheel = (timestamp: number) => {
-      if (!spinning) {
-        const idlePhi = (timestamp / 1000 / WHEEL_IDLE_SPIN_SECONDS) * 360;
-        setWheelPhiDegrees(idlePhi % 360);
-      }
-      frameId = window.requestAnimationFrame(tickIdleWheel);
-    };
-
-    frameId = window.requestAnimationFrame(tickIdleWheel);
-    return () => {
-      if (frameId != null) window.cancelAnimationFrame(frameId);
-    };
-  }, [spinning]);
-
-  useEffect(() => {
     return () => {
       if (animationFrameRef.current != null)
         window.cancelAnimationFrame(animationFrameRef.current);
@@ -951,10 +935,16 @@ export function TechRoulette() {
                     ),
                   }}
                 >
-                  <TechRouletteWheelWebGL
-                    className="absolute inset-0 rounded-full"
-                    phiDegrees={wheelPhiDegrees}
-                    uvOffset={WHEEL_ZERO_REFERENCE_DEGREES / 360}
+                  <div
+                    aria-hidden="true"
+                    className="tech-roulette-wheel-face absolute inset-0 rounded-full"
+                    style={{
+                      animation: spinning
+                        ? "none"
+                        : `tech-roulette-wheel-spin ${WHEEL_IDLE_SPIN_SECONDS}s linear infinite`,
+                      background: wheelGradient,
+                      transform: `rotate(${wheelPhiDegrees}deg)`,
+                    }}
                   />
                   <div className="pointer-events-none absolute inset-[5%] z-10 rounded-full border-4 border-black/50" />
                   {pendingResult ? (

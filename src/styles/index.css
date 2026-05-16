@@ -99,7 +99,10 @@
 .tech-roulette-wheel {
   overflow: hidden;
   transform: translateZ(0);
-  will-change: contents;
+}
+
+.tech-roulette-wheel-face {
+  will-change: transform;
 }
 
 .tech-roulette-idle-ball {
