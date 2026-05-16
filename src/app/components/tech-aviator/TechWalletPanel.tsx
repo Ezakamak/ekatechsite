@@ -12,7 +12,7 @@ const currencyFormatter = new Intl.NumberFormat("tr-TR", {
 });
 
 export function TechWalletPanel({ wallet, connected }: TechWalletPanelProps) {
-  const balance = wallet ? currencyFormatter.format(wallet.techCoinBalance) : "14.550,25";
+  const balance = wallet ? currencyFormatter.format(wallet.techCoinBalance) : "...";
 
   return (
     <aside className="rounded-3xl border border-emerald-400/30 bg-black/80 p-4 shadow-[0_0_38px_rgba(16,185,129,0.25)] backdrop-blur-xl">
@@ -22,7 +22,7 @@ export function TechWalletPanel({ wallet, connected }: TechWalletPanelProps) {
           <span className="absolute -right-1 -top-1 flex h-4 w-4 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.95)]" />
         </div>
         <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-emerald-200/70">Tech Coin Cüzdan</p>
+          <p className="text-xs uppercase tracking-[0.35em] text-emerald-200/70">OFF canlı Tech Coin</p>
           <h2 className="text-lg font-semibold text-white">{wallet?.userName ?? "Tech Pilot"}</h2>
         </div>
       </div>
@@ -40,7 +40,7 @@ export function TechWalletPanel({ wallet, connected }: TechWalletPanelProps) {
 
       <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
         <span className="flex items-center gap-1">
-          <Zap className="h-3.5 w-3.5 text-cyan-300" /> wallet-update senkronizasyonu
+          <Zap className="h-3.5 w-3.5 text-cyan-300" /> OFF Hub canlı senkronizasyonu
         </span>
         <span className={connected ? "text-emerald-300" : "text-red-300"}>{connected ? "ONLINE" : "OFFLINE"}</span>
       </div>
