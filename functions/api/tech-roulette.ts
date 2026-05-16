@@ -9,9 +9,11 @@ const RED_NUMBERS = new Set([
 const ALLOWED_CHIPS = new Set([10, 50, 100, 500, 1_000, 5_000, 10_000]);
 const BET_LIMITS = { min: 10, max: 10_000 };
 const ROUND_SECONDS = 18;
+const SPIN_COOLDOWN_SECONDS = 16;
+const FAIR_RNG_ALGORITHM = "HMAC-SHA512";
 
 const OPEN_ROUND_SELECT = `
-  SELECT id, status, betting_started_at, spins_at, winning_number, winning_color, winning_parity, created_at, resolved_at
+  SELECT id, status, betting_started_at, spins_at, winning_number, winning_color, winning_parity, created_at, resolved_at, fair_algorithm, fair_nonce, fair_digest
   FROM tech_roulette_rounds
   WHERE status = 'betting'
   ORDER BY id DESC
@@ -48,6 +50,9 @@ type RouletteRound = {
   winning_parity?: string | null;
   created_at?: string | null;
   resolved_at?: string | null;
+  fair_algorithm?: string | null;
+  fair_nonce?: string | null;
+  fair_digest?: string | null;
 };
 
 export async function onRequestGet(context: any) {
@@ -64,8 +69,8 @@ export async function onRequestGet(context: any) {
     const [recent, tableBets, myBets, recentNumbers, inventory] =
       await Promise.all([
         loadRecentLogs(context, auth.user.id),
-        loadRoundBets(context, round.id, auth.user.id),
-        loadUserRoundBets(context, round.id, auth.user.id),
+        round ? loadRoundBets(context, round.id, auth.user.id) : [],
+        round ? loadUserRoundBets(context, round.id, auth.user.id) : [],
         loadRecentNumbers(context),
         loadInventory(context, auth.user.id),
       ]);
@@ -77,7 +82,7 @@ export async function onRequestGet(context: any) {
       limits: BET_LIMITS,
       roundSeconds: ROUND_SECONDS,
       serverNow: nowSeconds(),
-      currentRound: serializeRound(round),
+      currentRound: round ? serializeRound(round) : null,
       lastResolvedRound: settledRound ? serializeRound(settledRound) : null,
       tableBets,
       myBets,
@@ -113,6 +118,8 @@ export async function onRequestPost(context: any) {
     await ensureWallet(context, auth.user.id);
     const settledRound = await settleExpiredRound(context);
     const round = await getOrCreateOpenRound(context);
+    if (!round)
+      throw new Error("Top hâlâ dönüyor. Bahisler açılınca sonraki tura gir.");
     if (round.spins_at <= nowSeconds() + 1)
       throw new Error("Bu tur kapanıyor. Yeni tur için bekle.");
 
@@ -313,12 +320,21 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
   const open = await context.env.DB.prepare(OPEN_ROUND_SELECT).first();
   if (!open || Number(open.spins_at) > nowSeconds()) return null;
 
-  const winningNumber = secureRouletteNumber();
+  const rng = await secureRouletteNumber(context, open);
+  const winningNumber = rng.number;
   const outcome = buildOutcome(winningNumber);
   const close = await context.env.DB.prepare(
-    `UPDATE tech_roulette_rounds SET status = 'resolved', winning_number = ?, winning_color = ?, winning_parity = ?, resolved_at = datetime('now') WHERE id = ? AND status = 'betting'`,
+    `UPDATE tech_roulette_rounds SET status = 'resolved', winning_number = ?, winning_color = ?, winning_parity = ?, fair_algorithm = ?, fair_nonce = ?, fair_digest = ?, resolved_at = datetime('now') WHERE id = ? AND status = 'betting'`,
   )
-    .bind(winningNumber, outcome.color, outcome.parity, open.id)
+    .bind(
+      winningNumber,
+      outcome.color,
+      outcome.parity,
+      FAIR_RNG_ALGORITHM,
+      rng.nonce,
+      rng.digest,
+      open.id,
+    )
     .run();
 
   if ((close.meta?.changes || 0) < 1) {
@@ -398,7 +414,6 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
       .run();
   }
 
-  await createOpenRound(context);
   return {
     ...open,
     status: "resolved",
@@ -406,12 +421,25 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
     winning_color: outcome.color,
     winning_parity: outcome.parity,
     resolved_at: new Date().toISOString(),
+    fair_algorithm: FAIR_RNG_ALGORITHM,
+    fair_nonce: rng.nonce,
+    fair_digest: rng.digest,
   };
 }
 
-async function getOrCreateOpenRound(context: any): Promise<RouletteRound> {
+async function getOrCreateOpenRound(
+  context: any,
+): Promise<RouletteRound | null> {
   const open = await context.env.DB.prepare(OPEN_ROUND_SELECT).first();
   if (open) return open;
+
+  const latestResolved = await context.env.DB.prepare(
+    `SELECT MAX(strftime('%s', resolved_at)) AS resolved_at_epoch FROM tech_roulette_rounds WHERE status = 'resolved' AND resolved_at IS NOT NULL`,
+  ).first();
+  const resolvedAt = Number(latestResolved?.resolved_at_epoch || 0);
+  if (resolvedAt > 0 && nowSeconds() - resolvedAt < SPIN_COOLDOWN_SECONDS)
+    return null;
+
   return createOpenRound(context);
 }
 
@@ -449,7 +477,7 @@ function loadRecentLogs(context: any, userId: number) {
 
 function loadRecentNumbers(context: any) {
   return context.env.DB.prepare(
-    `SELECT id, winning_number, winning_color, winning_parity, resolved_at FROM tech_roulette_rounds WHERE status = 'resolved' AND winning_number IS NOT NULL ORDER BY id DESC LIMIT 14`,
+    `SELECT id, winning_number, winning_color, winning_parity, resolved_at, fair_algorithm, fair_nonce, fair_digest FROM tech_roulette_rounds WHERE status = 'resolved' AND winning_number IS NOT NULL ORDER BY id DESC LIMIT 14`,
   ).all();
 }
 
@@ -616,14 +644,52 @@ function buildOutcome(winningNumber: number) {
   return { color, parity };
 }
 
-function secureRouletteNumber() {
+async function secureRouletteNumber(context: any, round: RouletteRound) {
+  const nonce = `${round.id}:${round.betting_started_at}:${round.spins_at}`;
+  const serverSeed = String(
+    context.env?.TECH_ROULETTE_SERVER_SEED ||
+      context.env?.JWT_SECRET ||
+      context.env?.SESSION_SECRET ||
+      OWNER_EMAIL,
+  );
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(serverSeed),
+    { name: "HMAC", hash: "SHA-512" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(nonce),
+  );
+  const digestBytes = new Uint8Array(signature);
   const maxValid =
-    Math.floor(256 / ROULETTE_NUMBERS.length) * ROULETTE_NUMBERS.length;
-  const bytes = new Uint8Array(1);
-  do {
-    crypto.getRandomValues(bytes);
-  } while (bytes[0] >= maxValid);
-  return bytes[0] % ROULETTE_NUMBERS.length;
+    Math.floor(65536 / ROULETTE_NUMBERS.length) * ROULETTE_NUMBERS.length;
+
+  for (let index = 0; index < digestBytes.length - 1; index += 2) {
+    const sample = (digestBytes[index] << 8) | digestBytes[index + 1];
+    if (sample < maxValid) {
+      return {
+        number: sample % ROULETTE_NUMBERS.length,
+        nonce,
+        digest: toHex(digestBytes),
+      };
+    }
+  }
+
+  return {
+    number: digestBytes[digestBytes.length - 1] % ROULETTE_NUMBERS.length,
+    nonce,
+    digest: toHex(digestBytes),
+  };
+}
+
+function toHex(bytes: Uint8Array) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 async function ensureRouletteTables(context: any) {
@@ -639,10 +705,21 @@ async function ensureRouletteTables(context: any) {
       winning_color TEXT,
       winning_parity TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      resolved_at TEXT
+      resolved_at TEXT,
+      fair_algorithm TEXT,
+      fair_nonce TEXT,
+      fair_digest TEXT
     )
   `,
   ).run();
+  await addColumnIfMissing(
+    context,
+    "tech_roulette_rounds",
+    "fair_algorithm",
+    "TEXT",
+  );
+  await addColumnIfMissing(context, "tech_roulette_rounds", "fair_nonce", "TEXT");
+  await addColumnIfMissing(context, "tech_roulette_rounds", "fair_digest", "TEXT");
   await context.env.DB.prepare(
     `
     CREATE TABLE IF NOT EXISTS tech_roulette_bets (

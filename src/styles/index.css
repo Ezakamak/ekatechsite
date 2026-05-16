@@ -49,41 +49,6 @@
   }
 }
 
-@keyframes tech-roulette-ball-orbit {
-  0% {
-    opacity: 1;
-    transform: rotate(0deg);
-  }
-  76% {
-    opacity: 1;
-  }
-  92% {
-    opacity: 0.96;
-    transform: rotate(var(--ball-orbit-end));
-  }
-  100% {
-    opacity: 0;
-    transform: rotate(var(--ball-orbit-end));
-  }
-}
-
-@keyframes tech-roulette-ball-radius {
-  0%,
-  38% {
-    transform: translate(-50%, -50%)
-      translateY(clamp(-12.55rem, -50vw, -9.15rem)) scale(1);
-  }
-  68% {
-    transform: translate(-50%, -50%)
-      translateY(clamp(-11.35rem, -45vw, -8.25rem)) scale(0.96);
-  }
-  92%,
-  100% {
-    transform: translate(-50%, -50%)
-      translateY(clamp(-9.25rem, -38vw, -6.65rem)) scale(0.9);
-  }
-}
-
 @keyframes tech-roulette-ball-hop {
   0%,
   100% {
@@ -94,57 +59,51 @@
   }
 }
 
-@keyframes tech-roulette-pocket-ball-land {
-  0%,
-  84% {
-    opacity: 0;
-    scale: 0.72;
-  }
-  90% {
-    opacity: 1;
-    scale: 1.18;
-  }
-  94% {
-    scale: 0.86;
-  }
-  100% {
-    opacity: 1;
-    scale: 1;
-  }
-}
 
 .tech-roulette-wheel {
   animation: tech-roulette-wheel-spin var(--wheel-spin-seconds, 7s) linear
     infinite;
+  image-rendering: auto;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  contain: layout paint style;
+}
+
+.tech-roulette-pocket-label {
+  transform: translate(-50%, -50%) rotate(var(--pocket-angle, 0deg))
+    translateY(clamp(-10.35rem, -42.5vw, -7.45rem))
+    scale(var(--pocket-manual-scale, 1));
+  transform-origin: center;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  contain: layout paint style;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
 }
 
 .tech-roulette-idle-ball {
   animation: tech-roulette-idle-ball-orbit 3.8s linear infinite;
 }
 
-.tech-roulette-ball-orbit {
-  animation: tech-roulette-ball-orbit var(--ball-spin-seconds, 13s)
-    cubic-bezier(0.08, 0.72, 0.14, 1) forwards;
-}
-
-.tech-roulette-ball-runner {
-  animation:
-    tech-roulette-ball-radius var(--ball-spin-seconds, 13s)
-      cubic-bezier(0.12, 0.82, 0.18, 1) forwards,
-    tech-roulette-ball-hop 0.55s ease-in-out infinite;
-}
-
-.tech-roulette-pocket-ball {
-  animation: tech-roulette-pocket-ball-land 13s ease-out forwards;
+.tech-roulette-physics-orbit {
+  transform: rotate(var(--ball-angle, 0deg));
   transform-origin: center;
+  will-change: transform;
+}
+
+.tech-roulette-physics-runner {
+  transform: translate(-50%, -50%)
+    translateY(var(--ball-radius, clamp(-12.55rem, -50vw, -9.15rem)))
+    scale(var(--ball-scale, 1));
+  transform-origin: center;
+  will-change: transform, filter;
+  animation: tech-roulette-ball-hop 0.55s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tech-roulette-wheel,
   .tech-roulette-idle-ball,
-  .tech-roulette-ball-orbit,
-  .tech-roulette-ball-runner,
-  .tech-roulette-pocket-ball {
+  .tech-roulette-physics-runner {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
   }

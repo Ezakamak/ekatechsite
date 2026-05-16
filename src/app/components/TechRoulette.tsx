@@ -22,6 +22,17 @@ import {
 import { useLanguage } from "../i18n";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
+import {
+  buildInverseRouletteTrajectory,
+  sampleInverseRouletteTrajectory,
+} from "./tech-rouletteTrajectory";
+import {
+  ROULETTE_ANISOTROPIC_FILTERING_LEVEL,
+  ROULETTE_TEXEL_DENSITY,
+  buildLockedPocketGradient,
+  buildRouletteUvMap,
+  pocketCenterForNumber,
+} from "./tech-rouletteUvMap";
 
 type BetType =
   | "straight"
@@ -40,6 +51,9 @@ type RouletteResult = {
   winning_color: "green" | "red" | "black";
   winning_parity?: "none" | "odd" | "even";
   resolved_at?: string;
+  fair_algorithm?: string;
+  fair_nonce?: string;
+  fair_digest?: string;
 };
 
 type RouletteLog = {
@@ -128,9 +142,15 @@ const ROULETTE_WHEEL = [
   16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26,
 ];
 const WHEEL_SECTOR_DEGREES = 360 / ROULETTE_WHEEL.length;
-const SPIN_ANIMATION_SECONDS = 13;
-const WHEEL_IDLE_SPIN_SECONDS = 7;
-const BALL_ORBIT_TURNS = 5.35;
+const WHEEL_UV_TEXTURE_OFFSET_DEGREES = 0;
+const ROULETTE_UV_POCKETS = buildRouletteUvMap(
+  ROULETTE_WHEEL,
+  WHEEL_SECTOR_DEGREES,
+  WHEEL_UV_TEXTURE_OFFSET_DEGREES,
+);
+const SPIN_ANIMATION_SECONDS = 16;
+const WHEEL_IDLE_SPIN_SECONDS = 8;
+const BALL_ORBIT_TURNS = 7;
 const RED_NUMBERS = new Set([
   1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36,
 ]);
@@ -155,18 +175,20 @@ function numberColor(number: number) {
   return RED_NUMBERS.has(number) ? "red" : "black";
 }
 
+function pocketColor(number: number) {
+  return numberColor(number) === "green"
+    ? "#16a34a"
+    : numberColor(number) === "red"
+      ? "#dc2626"
+      : "#111827";
+}
+
 function buildWheelGradient() {
-  return `conic-gradient(from 0deg, ${ROULETTE_WHEEL.map((number, index) => {
-    const color =
-      numberColor(number) === "green"
-        ? "#16a34a"
-        : numberColor(number) === "red"
-          ? "#dc2626"
-          : "#111827";
-    const start = (index * WHEEL_SECTOR_DEGREES).toFixed(3);
-    const end = ((index + 1) * WHEEL_SECTOR_DEGREES).toFixed(3);
-    return `${color} ${start}deg ${end}deg`;
-  }).join(", ")})`;
+  return buildLockedPocketGradient({
+    pockets: ROULETTE_UV_POCKETS,
+    sectorDegrees: WHEEL_SECTOR_DEGREES,
+    colorForNumber: pocketColor,
+  });
 }
 
 function tableBetKey(type: string, value?: number | string | null) {
@@ -186,14 +208,15 @@ function describeBet(type: BetType, value?: number) {
 }
 
 function wheelSectorCenterForNumber(winningNumber: number) {
-  const wheelIndex = ROULETTE_WHEEL.indexOf(winningNumber);
-  if (wheelIndex < 0) return 0;
-
-  return wheelIndex * WHEEL_SECTOR_DEGREES + WHEEL_SECTOR_DEGREES / 2;
+  return pocketCenterForNumber(ROULETTE_UV_POCKETS, winningNumber);
 }
 
-function ballOrbitEndForNumber(winningNumber: number) {
-  return -(360 * BALL_ORBIT_TURNS + wheelSectorCenterForNumber(winningNumber));
+function buildBallTrajectoryPlan(winningNumber: number) {
+  return buildInverseRouletteTrajectory({
+    targetPocketCenterDeg: wheelSectorCenterForNumber(winningNumber),
+    orbitTurns: BALL_ORBIT_TURNS,
+    durationMs: SPIN_ANIMATION_SECONDS * 1000,
+  });
 }
 
 
@@ -224,6 +247,8 @@ export function TechRoulette() {
   const [inventory, setInventory] = useState<RouletteInventoryItem[]>([]);
   const [stakeMode, setStakeMode] = useState<"coin" | "item">("coin");
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+  const ballOrbitRef = useRef<HTMLDivElement | null>(null);
+  const ballRunnerRef = useRef<HTMLSpanElement | null>(null);
 
   const selectedItem =
     inventory.find(
@@ -254,6 +279,7 @@ export function TechRoulette() {
   }, [betType, column, dozen, straightNumber]);
 
   const selectedBetLabel = describeBet(betType, betValue);
+  const bettingOpen = !spinning && !!currentRound && secondsLeft > 1;
 
   const selectBet = (bet: BoardBet) => {
     setBetType(bet.type);
@@ -323,6 +349,47 @@ export function TechRoulette() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!pendingResult || !ballOrbitRef.current || !ballRunnerRef.current)
+      return;
+
+    const plan = buildBallTrajectoryPlan(pendingResult.winning_number);
+    const orbit = ballOrbitRef.current;
+    const runner = ballRunnerRef.current;
+    let animationFrame = 0;
+    let previousTime = performance.now();
+    let elapsedMs = 0;
+    let accumulatorMs = 0;
+
+    const renderFrame = () => {
+      const frame = sampleInverseRouletteTrajectory(plan, elapsedMs);
+      orbit.style.setProperty("--ball-angle", `${frame.angleDeg}deg`);
+      runner.style.setProperty("--ball-radius", frame.radiusCss);
+      runner.style.setProperty("--ball-scale", String(frame.scale));
+    };
+
+    const tick = (timestamp: number) => {
+      accumulatorMs += Math.min(80, timestamp - previousTime);
+      previousTime = timestamp;
+      let steps = 0;
+
+      while (accumulatorMs >= plan.fixedStepMs && steps < plan.subSteps) {
+        elapsedMs = Math.min(plan.durationMs, elapsedMs + plan.fixedStepMs);
+        accumulatorMs -= plan.fixedStepMs;
+        steps += 1;
+      }
+
+      renderFrame();
+      if (elapsedMs < plan.durationMs)
+        animationFrame = window.requestAnimationFrame(tick);
+    };
+
+    renderFrame();
+    animationFrame = window.requestAnimationFrame(tick);
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [pendingResult, spinSequence]);
+
   const animateWheelTo = (resolvedRound: RouletteResult) => {
     setSpinSequence((current) => current + 1);
     setSpinning(true);
@@ -337,7 +404,7 @@ export function TechRoulette() {
   };
 
   const playRound = async () => {
-    if (spinning || !betAmountValid || secondsLeft <= 1) return;
+    if (!bettingOpen || !betAmountValid) return;
     setMessage(
       "Bahis SQL masasına yazılıyor ve tüm kullanıcılara senkronlanıyor...",
     );
@@ -380,7 +447,7 @@ export function TechRoulette() {
 
   const cancelBet = async (chip?: TableBet) => {
     const ownBetId = Number(String(chip?.my_bet_ids || "").split(",")[0] || 0);
-    if (!ownBetId || spinning || secondsLeft <= 1) return;
+    if (!ownBetId || !bettingOpen) return;
     setMessage("Çip geri çekiliyor ve bahis bakiyesi iade ediliyor...");
     playOffSound("click");
 
@@ -462,52 +529,45 @@ export function TechRoulette() {
                   style={{
                     background: wheelGradient,
                     ["--wheel-spin-seconds" as string]: `${WHEEL_IDLE_SPIN_SECONDS}s`,
+                    ["--wheel-uv-offset" as string]: `${WHEEL_UV_TEXTURE_OFFSET_DEGREES}deg`,
+                    ["--wheel-anisotropy" as string]: ROULETTE_ANISOTROPIC_FILTERING_LEVEL,
+                    ["--wheel-texel-density" as string]: ROULETTE_TEXEL_DENSITY,
                   }}
+                  data-anisotropy={`${ROULETTE_ANISOTROPIC_FILTERING_LEVEL}x`}
                 >
                   <div className="absolute inset-[5%] rounded-full border-4 border-black/50" />
-                  {ROULETTE_WHEEL.map((number, index) => {
-                    const angle =
-                      index * WHEEL_SECTOR_DEGREES + WHEEL_SECTOR_DEGREES / 2;
-                    return (
-                      <span
-                        key={number}
-                        className="absolute left-1/2 top-1/2 z-10 flex h-6 w-6 origin-center -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-[0.58rem] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
-                        style={{
-                          transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(clamp(-10.35rem, -42.5vw, -7.45rem)) rotate(${-angle}deg)`,
-                          transformOrigin: "center",
-                        }}
-                      >
-                        {number}
-                      </span>
-                    );
-                  })}
-                  {pendingResult ? (
+                  {ROULETTE_UV_POCKETS.map((pocket) => (
                     <span
-                      key={`pocket-ball-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
-                      className="tech-roulette-pocket-ball absolute left-1/2 top-1/2 z-20 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                      key={pocket.number}
+                      className="tech-roulette-pocket-label absolute left-1/2 top-1/2 z-10 flex h-6 w-6 origin-center items-center justify-center rounded-full text-[0.58rem] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
                       style={{
-                        transform: `translate(-50%, -50%) rotate(${wheelSectorCenterForNumber(pendingResult.winning_number)}deg) translateY(clamp(-9.25rem, -38vw, -6.65rem))`,
-                        animationDuration: `${SPIN_ANIMATION_SECONDS}s`,
+                        ["--pocket-angle" as string]: `${pocket.centerDeg + pocket.uvOffsetDeg}deg`,
+                        ["--pocket-manual-scale" as string]: pocket.manualScale,
                       }}
-                    />
+                      data-pocket-index={pocket.index}
+                      data-pocket-number={pocket.number}
+                    >
+                      {pocket.number}
+                    </span>
+                  ))}
+                  {pendingResult ? (
+                    <div
+                      ref={ballOrbitRef}
+                      key={`orbit-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
+                      className="tech-roulette-physics-orbit pointer-events-none absolute inset-0 z-20 rounded-full"
+                    >
+                      <span
+                        ref={ballRunnerRef}
+                        className="tech-roulette-physics-runner absolute left-1/2 top-1/2 h-4 w-4 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                      />
+                    </div>
                   ) : null}
                 </div>
-                {pendingResult ? (
-                  <div
-                    key={`orbit-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
-                    className="tech-roulette-ball-orbit pointer-events-none absolute aspect-square w-[96%] max-w-[25rem] rounded-full"
-                    style={{
-                      ["--ball-orbit-end" as string]: `${ballOrbitEndForNumber(pendingResult.winning_number)}deg`,
-                      ["--ball-spin-seconds" as string]: `${SPIN_ANIMATION_SECONDS}s`,
-                    }}
-                  >
-                    <span className="tech-roulette-ball-runner absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]" />
-                  </div>
-                ) : (
+                {!pendingResult ? (
                   <div className="pointer-events-none absolute aspect-square w-[96%] max-w-[25rem] rounded-full">
                     <span className="tech-roulette-idle-ball absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 shadow-[0_0_14px_rgba(255,255,255,0.75),inset_-3px_-4px_5px_rgba(0,0,0,0.3)]" />
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="grid gap-4">
@@ -532,17 +592,18 @@ export function TechRoulette() {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.22em] text-cyan-50/55">
-                        Ortak tur #{currentRound?.id || "..."}
+                        {currentRound ? `Ortak tur #${currentRound.id}` : "Bahisler kapalı"}
                       </p>
                       <p className="mt-2 text-sm text-white/60">
-                        Kimse bahis koymasa bile sayaç bitince SQL turu kapatır
-                        ve çark döner.
+                        {currentRound
+                          ? "Bahis süresi sadece masa açıkken işler; sayaç bitince bahisler kapanır ve top döner."
+                          : "Top kazanan cebe akarken yeni bahis sayacı başlamaz; sonraki tur açılınca tam sayaç görünür."}
                       </p>
                     </div>
                     <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-full border border-cyan-100/30 bg-black/30">
                       <Clock3 className="h-5 w-5 text-cyan-100" />
-                      <span className="mt-1 font-mono text-2xl font-black text-white">
-                        {secondsLeft}s
+                      <span className="mt-1 text-center font-mono text-xl font-black text-white">
+                        {bettingOpen ? `${secondsLeft}s` : spinning ? "Dönüyor" : "Bekle"}
                       </span>
                     </div>
                   </div>
@@ -554,10 +615,10 @@ export function TechRoulette() {
                       Sonuç gizli
                     </p>
                     <p className="mt-3 text-lg font-semibold text-amber-50">
-                      Top çerçeveden ters yönde dönüyor, yavaşça içeri girip {SPIN_ANIMATION_SECONDS}. saniyede kazanan kutucuğa oturacak.
+                      HMAC sonucu animasyon başlamadan belli; UV kilitli motor ters yörünge hesabıyla {SPIN_ANIMATION_SECONDS}. saniyede hedef cebe akacak.
                     </p>
                     <p className="mt-2 text-sm text-white/55">
-                      Rulet kendi etrafında hiç durmadan dönmeye devam eder; top iç kutucuğa yerleşince sonuç açıklanır.
+                      0 cebi 0° referansına sabit; texture offset, manual scale ve 16x anisotropic profil aynı pocket haritasını kullanır.
                     </p>
                   </div>
                 ) : result && (
@@ -577,6 +638,11 @@ export function TechRoulette() {
                           Tüm kullanıcılar aynı round, aynı geri sayım ve aynı
                           kazanan sayıyı görür.
                         </p>
+                        {result.fair_algorithm && result.fair_digest ? (
+                          <p className="mt-1 max-w-md break-all font-mono text-[0.65rem] text-amber-50/45">
+                            {result.fair_algorithm} · nonce {result.fair_nonce} · {result.fair_digest.slice(0, 24)}…
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -716,16 +782,18 @@ export function TechRoulette() {
 
               <button
                 type="button"
-                disabled={spinning || !betAmountValid || secondsLeft <= 1}
+                disabled={!bettingOpen || !betAmountValid}
                 onClick={playRound}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-4 font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Play className="h-5 w-5" />{" "}
                 {spinning
                   ? "Çark dönüyor..."
-                  : secondsLeft <= 1
-                    ? "Tur kapanıyor..."
-                    : "Çipi Koy"}
+                  : !currentRound
+                    ? "Sonraki tur bekleniyor..."
+                    : secondsLeft <= 1
+                      ? "Tur kapanıyor..."
+                      : "Çipi Koy"}
               </button>
             </div>
           </aside>
