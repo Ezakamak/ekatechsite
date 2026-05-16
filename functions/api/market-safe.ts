@@ -3,6 +3,15 @@ const MARKET_TICK_MS = 300_000;
 
 type Risk = "low" | "medium" | "high";
 
+type NewsPack = {
+  driverTr: string[];
+  outcomeTr: string[];
+  driverEn: string[];
+  outcomeEn: string[];
+  lessonTr: string[];
+  lessonEn: string[];
+};
+
 const FALLBACK_STOCKS = [
   { symbol: "EKA", name: "EKA Yazılım", sector: "Teknoloji", description_tr: "Bulut yazılım ve otomasyon çözümleri üreten kurgu şirket.", description_en: "A fictional cloud software and automation company.", price: 124, previous_price: 124, volatility: 0.055, risk: "medium" as Risk },
   { symbol: "MGROS", name: "Migros", sector: "Perakende", description_tr: "OFF simülasyon varlığıdır; gerçek şirket/hisse verisi değildir.", description_en: "OFF simulation asset; not real company/stock data.", price: 82, previous_price: 82, volatility: 0.04, risk: "low" as Risk },
@@ -10,6 +19,196 @@ const FALLBACK_STOCKS = [
   { symbol: "ASELS", name: "Aselsan", sector: "Savunma", description_tr: "OFF simülasyon varlığıdır; gerçek şirket/hisse verisi değildir.", description_en: "OFF simulation asset; not real company/stock data.", price: 96, previous_price: 96, volatility: 0.062, risk: "medium" as Risk },
   { symbol: "AKSEN", name: "Aksa Enerji", sector: "Enerji", description_tr: "OFF simülasyon varlığıdır; gerçek şirket/hisse verisi değildir.", description_en: "OFF simulation asset; not real company/stock data.", price: 54, previous_price: 54, volatility: 0.057, risk: "medium" as Risk },
 ];
+
+const POSITIVE_NEWS: NewsPack = {
+  driverTr: [
+    "yeni sipariş beklentisiyle",
+    "beklentilerin üzerindeki satış sinyaliyle",
+    "maliyet kontrolü haberleriyle",
+    "operasyonel verimlilik artışıyla",
+    "ihracat kanalı güçlenirken",
+    "yeni ürün lansmanı sonrası",
+    "stratejik ortaklık söylentisiyle",
+    "sektör talebindeki canlanmayla",
+    "güçlü nakit akışı beklentisiyle",
+    "marj iyileşmesi beklentisiyle",
+    "yatırımcı sunumundaki iyimser tonla",
+    "yönetimden gelen pozitif mesajlarla",
+    "yeni pazar açılımı haberleriyle",
+    "kapasite kullanımındaki artışla",
+    "tedarik sürecindeki rahatlamayla",
+    "analist hedef fiyat artışıyla",
+    "temettü beklentisinin güçlenmesiyle",
+    "dijital dönüşüm hamlesiyle",
+    "büyük müşteri kazanımı iddiasıyla",
+    "sektör ortalamasından güçlü performansla"
+  ],
+  outcomeTr: [
+    "alım ilgisi gördü",
+    "piyasada öne çıktı",
+    "pozitif ayrıştı",
+    "kısa vadeli ivme kazandı",
+    "yatırımcı ilgisini artırdı",
+    "günün güçlü adayları arasına girdi",
+    "hacimli tepki verdi",
+    "risk iştahından destek aldı",
+    "teknik görünümünü toparladı",
+    "simülasyon tahtasında güç topladı"
+  ],
+  driverEn: [
+    "on new order expectations",
+    "after stronger-than-expected sales signals",
+    "with cost-control headlines",
+    "as operational efficiency improved",
+    "while export channels strengthened",
+    "after a new product launch",
+    "on strategic partnership rumors",
+    "as sector demand recovered",
+    "on stronger cash-flow expectations",
+    "with margin improvement signals",
+    "after an optimistic investor presentation",
+    "on positive management guidance",
+    "with new market expansion news",
+    "as capacity utilization rose",
+    "with supply-chain relief",
+    "after analyst target upgrades",
+    "as dividend expectations improved",
+    "with a digital transformation push",
+    "on a major customer win rumor",
+    "after outperforming the sector average"
+  ],
+  outcomeEn: [
+    "attracted buying interest",
+    "stood out in the market",
+    "outperformed positively",
+    "gained short-term momentum",
+    "increased investor attention",
+    "joined the stronger names of the day",
+    "reacted with higher volume",
+    "benefited from risk appetite",
+    "improved its technical setup",
+    "built strength on the simulation board"
+  ],
+  lessonTr: [
+    "Olumlu haberler fiyatı destekleyebilir ama tek başına garanti değildir.",
+    "Beklenti satın alınabilir; gerçekleşme anında kâr satışı gelebilir.",
+    "Güçlü haberlerde hacim artışı hareketi daha inandırıcı yapar.",
+    "Sektörel destek varsa haber etkisi daha kalıcı olabilir.",
+    "Pozitif haber sonrası acele alım yerine destek seviyesi takip edilebilir.",
+    "İyi haber fiyatlandıysa yükseliş sınırlı kalabilir.",
+    "Şirket özelindeki olumlu gelişme aynı sektörü de hafif etkileyebilir.",
+    "Düşük riskli hisselerde haber etkisi daha yavaş yayılabilir.",
+    "Yüksek volatil hisselerde pozitif haber daha sert fiyatlanabilir.",
+    "Haber sonrası ilk tepki değil, kapanış davranışı daha öğreticidir."
+  ],
+  lessonEn: [
+    "Positive news can support price, but it is not a guarantee.",
+    "Expectations may be bought before the event; profit-taking can follow.",
+    "Volume makes a positive reaction more convincing.",
+    "Sector support can make the move more persistent.",
+    "After positive news, support levels may matter more than chasing.",
+    "If good news is already priced in, upside can stay limited.",
+    "Company-specific news can slightly affect the same sector.",
+    "Low-risk stocks may react more slowly to news.",
+    "High-volatility stocks can price positive news sharply.",
+    "The close after the news is often more useful than the first reaction."
+  ]
+};
+
+const NEGATIVE_NEWS: NewsPack = {
+  driverTr: [
+    "maliyet baskısı nedeniyle",
+    "zayıf talep sinyaliyle",
+    "beklentilerin altındaki satış haberleriyle",
+    "sektörel yavaşlama endişesiyle",
+    "kur baskısı tartışmalarıyla",
+    "tedarik zinciri aksamasıyla",
+    "regülasyon belirsizliğiyle",
+    "rekabet baskısının artmasıyla",
+    "kâr marjı endişesiyle",
+    "finansman maliyeti baskısıyla",
+    "yatırımcı sunumundaki temkinli tonla",
+    "hedef fiyat indirimi sonrası",
+    "geciken proje haberleriyle",
+    "stok maliyeti artışıyla",
+    "sipariş iptali söylentisiyle",
+    "pazar payı kaybı endişesiyle",
+    "zayıf bilanço beklentisiyle",
+    "küresel risk iştahındaki bozulmayla",
+    "sektör haber akışındaki negatif tonla",
+    "beklenmedik bakım/duruş haberleriyle"
+  ],
+  outcomeTr: [
+    "satış baskısı yaşadı",
+    "negatif ayrıştı",
+    "kısa vadeli ivme kaybetti",
+    "yatırımcı iştahını zayıflattı",
+    "günün zayıf adayları arasına girdi",
+    "hacimli geri çekildi",
+    "destek seviyesini test etti",
+    "riskten kaçıştan etkilendi",
+    "teknik görünümde zayıfladı",
+    "simülasyon tahtasında güç kaybetti"
+  ],
+  driverEn: [
+    "due to cost pressure",
+    "on weak demand signals",
+    "after weaker-than-expected sales headlines",
+    "with sector slowdown concerns",
+    "amid currency-pressure discussions",
+    "after a supply-chain disruption",
+    "with regulatory uncertainty",
+    "as competitive pressure increased",
+    "on margin concerns",
+    "with financing-cost pressure",
+    "after cautious investor guidance",
+    "following a target-price cut",
+    "with delayed project news",
+    "as inventory costs rose",
+    "on order cancellation rumors",
+    "with market-share loss concerns",
+    "on weak earnings expectations",
+    "as global risk appetite weakened",
+    "with negative sector headlines",
+    "after unexpected maintenance/downtime news"
+  ],
+  outcomeEn: [
+    "faced selling pressure",
+    "underperformed negatively",
+    "lost short-term momentum",
+    "weakened investor appetite",
+    "joined the weaker names of the day",
+    "pulled back with higher volume",
+    "tested a support level",
+    "was affected by risk-off sentiment",
+    "weakened technically",
+    "lost strength on the simulation board"
+  ],
+  lessonTr: [
+    "Olumsuz haber fiyatı aşağı çekebilir; panik satış her zaman doğru değildir.",
+    "Kötü haber sonrası destek seviyesi ve hacim birlikte izlenmelidir.",
+    "Negatif haber güçlü trendde kısa süreli düzeltme de olabilir.",
+    "Haber etkisi sektöre yayılıyorsa risk daha büyüktür.",
+    "Zarar kes seviyesi yoksa sert haber akışı tehlikeli olabilir.",
+    "Yüksek volatil hisselerde kötü haber düşüşü büyütebilir.",
+    "Düşüşte tepki alımı için önce zayıflığın durması beklenebilir.",
+    "Sadece başlığa değil, etkinin büyüklüğüne bakmak gerekir.",
+    "Şirket özelindeki kötü haber aynı sektöre de baskı yapabilir.",
+    "Haber sonrası ilk mum yanıltıcı olabilir; devam hareketi önemlidir."
+  ],
+  lessonEn: [
+    "Negative news can pull price lower; panic selling is not always correct.",
+    "After bad news, support and volume should be read together.",
+    "In a strong trend, negative news may only create a short correction.",
+    "If the impact spreads to the sector, risk is larger.",
+    "Without a stop level, sharp news flow can be dangerous.",
+    "High-volatility stocks can amplify bad news.",
+    "For a bounce, weakness may need to slow first.",
+    "Do not read only the headline; estimate the impact size.",
+    "Company-specific bad news can pressure the same sector.",
+    "The first candle after news can mislead; follow-through matters."
+  ]
+};
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
@@ -120,17 +319,25 @@ async function tickMarketIfNeeded(context: any) {
 
 function buildNews(stock: any) {
   const positive = Math.random() >= 0.5;
-  const impact = Number(((positive ? 1 : -1) * (0.012 + Math.random() * 0.025)).toFixed(4));
+  const pack = positive ? POSITIVE_NEWS : NEGATIVE_NEWS;
+  const riskBoost = stock.risk === "high" ? 0.01 : stock.risk === "medium" ? 0.005 : 0;
+  const impact = Number(((positive ? 1 : -1) * (0.008 + riskBoost + Math.random() * 0.027)).toFixed(4));
   const name = String(stock.name || stock.symbol);
+  const titleTr = `${name} ${pick(pack.driverTr)} ${pick(pack.outcomeTr)}.`;
+  const titleEn = `${name} ${pick(pack.driverEn)} ${pick(pack.outcomeEn)}.`;
   return {
     target: stock.symbol,
     impact,
     tone: positive ? "positive" : "negative",
-    titleTr: positive ? `${name} için olumlu beklenti oluştu.` : `${name} için baskı yaratan gelişme görüldü.`,
-    titleEn: positive ? `${name} gained positive expectations.` : `${name} faced a pressure-building event.`,
-    lessonTr: positive ? "Olumlu haber fiyatı destekleyebilir." : "Olumsuz haber düşüş yaratabilir.",
-    lessonEn: positive ? "Positive news can support price." : "Negative news can create downside.",
+    titleTr,
+    titleEn,
+    lessonTr: pick(pack.lessonTr),
+    lessonEn: pick(pack.lessonEn),
   };
+}
+
+function pick<T>(items: T[]) {
+  return items[Math.floor(Math.random() * items.length)] || items[0];
 }
 
 async function trimHistory(context: any) {
