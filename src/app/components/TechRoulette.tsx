@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { CircleDollarSign, Clock3, Database, Dice5, History, LockKeyhole, Play, ShieldCheck, Touchpad } from "lucide-react";
+import { CircleDollarSign, Clock3, Database, Dice5, History, LockKeyhole, MessageCircle, Play, Send, ShieldCheck, Touchpad } from "lucide-react";
 import { useLanguage } from "../i18n";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
@@ -50,6 +50,25 @@ type TableBet = {
   chip_count: number;
   total_amount: number;
   users?: string | null;
+  item_labels?: string | null;
+};
+
+type RouletteInventoryItem = {
+  id: number;
+  item_name: string;
+  emoji: string;
+  roulette_value: number;
+  status: string;
+};
+
+type RouletteChatMessage = {
+  id: number;
+  user_id: number;
+  user_name: string;
+  user_avatar_url?: string;
+  user_role?: string;
+  message: string;
+  created_at?: string;
 };
 
 const QUICK_BETS = [
@@ -130,10 +149,14 @@ export function TechRoulette() {
   const [wheelRotation, setWheelRotation] = useState(0);
   const [lastAnimatedRoundId, setLastAnimatedRoundId] = useState<number | null>(null);
   const [message, setMessage] = useState("SQL ekatechwallet bakiyesi yükleniyor...");
+  const [inventory, setInventory] = useState<RouletteInventoryItem[]>([]);
+  const [stakeMode, setStakeMode] = useState<"coin" | "item">("coin");
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
 
-  const betAmount = parseBetInput(betInput);
+  const selectedItem = inventory.find((item) => item.id === selectedItemId && item.status === "available") || null;
+  const betAmount = stakeMode === "item" ? Number(selectedItem?.roulette_value || 0) : parseBetInput(betInput);
   const wheelGradient = useMemo(buildWheelGradient, []);
-  const betAmountValid = betAmount >= MIN_BET && betAmount <= MAX_BET;
+  const betAmountValid = stakeMode === "item" ? !!selectedItem : betAmount >= MIN_BET && betAmount <= MAX_BET;
   const betChips = useMemo(() => {
     const chips: Record<string, TableBet> = {};
     tableBets.forEach((bet) => {
@@ -174,6 +197,7 @@ export function TechRoulette() {
         if (numbers[0]) setResult(numbers[0]);
         setCurrentRound(data?.currentRound || null);
         setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
+        setInventory(Array.isArray(data?.inventory) ? data.inventory : []);
         setSecondsLeft(Math.max(0, Number(data?.currentRound?.secondsLeft || 0)));
         if (data?.lastResolvedRound?.winning_number != null && data.lastResolvedRound.id !== lastAnimatedRoundId) {
           setResult(data.lastResolvedRound);
@@ -199,8 +223,8 @@ export function TechRoulette() {
   const animateWheelTo = (winningNumber: number) => {
     const wheelIndex = Math.max(0, ROULETTE_WHEEL.indexOf(winningNumber));
     const sector = 360 / ROULETTE_WHEEL.length;
-    const targetRotation = 360 * 5 + (360 - wheelIndex * sector) + sector / 2;
-    setWheelRotation((current) => current + targetRotation);
+    const sectorCenter = wheelIndex * sector + sector / 2;
+    setWheelRotation((current) => Math.ceil(current / 360) * 360 + 360 * 5 - sectorCenter);
     setSpinning(true);
     window.setTimeout(() => setSpinning(false), 3200);
     playOffSound("reel");
@@ -216,7 +240,7 @@ export function TechRoulette() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: betType, value: betValue, amount: betAmount }),
+        body: JSON.stringify(stakeMode === "item" ? { type: betType, value: betValue, stakeItemId: selectedItemId } : { type: betType, value: betValue, amount: betAmount }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Rulet bahsi tamamlanamadı.");
@@ -225,7 +249,8 @@ export function TechRoulette() {
       setCurrentRound(data?.currentRound || currentRound);
       setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
       setSecondsLeft(Math.max(0, Number(data?.currentRound?.secondsLeft || secondsLeft)));
-      setMessage(`${selectedBetLabel} üzerine ${formatTc(betAmount, locale)} TC çip koyuldu. Çipler ortak SQL masasından herkese görünür.`);
+      setMessage(`${selectedBetLabel} üzerine ${stakeMode === "item" && selectedItem ? `${selectedItem.emoji} ${selectedItem.item_name}` : `${formatTc(betAmount, locale)} TC`} koyuldu. Çipler ortak SQL masasından herkese görünür.`);
+      if (stakeMode === "item") setSelectedItemId(null);
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
       window.setTimeout(loadState, 500);
     } catch (error) {
@@ -276,7 +301,7 @@ export function TechRoulette() {
                 >
                   <div className="absolute inset-[5%] rounded-full border-4 border-black/50" />
                   {ROULETTE_WHEEL.map((number, index) => {
-                    const angle = (index * 360) / ROULETTE_WHEEL.length;
+                    const angle = ((index + 0.5) * 360) / ROULETTE_WHEEL.length;
                     return (
                       <span
                         key={number}
@@ -304,7 +329,7 @@ export function TechRoulette() {
               <div className="grid gap-4">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <StatCard icon={<CircleDollarSign className="h-4 w-4" />} label="ekatechwallet" value={`${formatTc(wallet, locale)} TC`} />
-                  <StatCard icon={<Dice5 className="h-4 w-4" />} label="Bahis" value={`${formatTc(betAmount, locale)} TC`} />
+                  <StatCard icon={<Dice5 className="h-4 w-4" />} label="Bahis" value={stakeMode === "item" && selectedItem ? `${selectedItem.emoji} ${formatTc(selectedItem.roulette_value, locale)} TC` : `${formatTc(betAmount, locale)} TC`} />
                   <StatCard icon={<Database className="h-4 w-4" />} label="SQL durum" value={spinning ? "Çevriliyor" : "Hazır"} />
                 </div>
 
@@ -371,7 +396,28 @@ export function TechRoulette() {
                 <span className={`mt-2 block text-xs ${betAmountValid ? "text-emerald-100/60" : "text-amber-200"}`}>Limit: {formatTc(MIN_BET, locale)} - {formatTc(MAX_BET, locale)} TC</span>
               </label>
 
-              <div>
+              <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-sm font-semibold">
+                <button type="button" onClick={() => setStakeMode("coin")} className={`rounded-xl px-3 py-2 ${stakeMode === "coin" ? "bg-amber-200 text-black" : "text-white/70 hover:bg-white/10"}`}>TC ile koy</button>
+                <button type="button" onClick={() => setStakeMode("item")} className={`rounded-xl px-3 py-2 ${stakeMode === "item" ? "bg-amber-200 text-black" : "text-white/70 hover:bg-white/10"}`}>Racon eşyası</button>
+              </div>
+
+              {stakeMode === "item" && (
+                <div>
+                  <p className="mb-3 text-xs uppercase tracking-[0.18em] text-white/45">Rulet eşyası</p>
+                  <div className="grid gap-2">
+                    {inventory.filter((item) => item.status === "available").length === 0 ? (
+                      <p className="rounded-2xl border border-amber-200/20 bg-amber-200/10 p-3 text-sm text-amber-100">OFF Hub mağazasından tesbih, çakı veya racon eşyası al; burada para yerine masaya koy.</p>
+                    ) : inventory.filter((item) => item.status === "available").map((item) => (
+                      <button key={item.id} type="button" onClick={() => setSelectedItemId(item.id)} className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${selectedItemId === item.id ? "border-amber-200 bg-amber-200 text-black" : "border-white/10 bg-white/10 text-white hover:bg-white/15"}`}>
+                        <span><span className="mr-2 text-xl">{item.emoji}</span>{item.item_name}</span>
+                        <strong>{formatTc(item.roulette_value, locale)} TC</strong>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {stakeMode === "coin" && <div>
                 <p className="mb-3 text-xs uppercase tracking-[0.18em] text-white/45">Hızlı miktar</p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-3 2xl:grid-cols-5">
                   {QUICK_BETS.map((chip) => (
@@ -380,7 +426,7 @@ export function TechRoulette() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
 
               <button type="button" disabled={spinning || !betAmountValid || secondsLeft <= 1} onClick={playRound} className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-4 font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-45">
                 <Play className="h-5 w-5" /> {spinning ? "Çark dönüyor..." : secondsLeft <= 1 ? "Tur kapanıyor..." : "Çipi Koy"}
@@ -388,6 +434,8 @@ export function TechRoulette() {
             </div>
           </aside>
         </section>
+
+        <RouletteLiveChat />
 
         <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-7">
           <div className="mb-4 flex items-center gap-2 text-white/80"><History className="h-5 w-5" /> Son SQL logları</div>
@@ -408,6 +456,98 @@ export function TechRoulette() {
         </section>
       </div>
     </main>
+  );
+}
+
+
+function RouletteLiveChat() {
+  const [messages, setMessages] = useState<RouletteChatMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  const loadMessages = async () => {
+    try {
+      const response = await fetch("/api/tech-roulette-chat?limit=45", { credentials: "same-origin", cache: "no-store" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Rulet sohbeti yüklenemedi.");
+      setMessages(Array.isArray(data?.messages) ? data.messages : []);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Rulet sohbeti yüklenemedi.");
+    }
+  };
+
+  const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextMessage = draft.trim();
+    if (!nextMessage) return;
+    setSending(true);
+    setError("");
+    try {
+      const response = await fetch("/api/tech-roulette-chat", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: nextMessage }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Mesaj gönderilemedi.");
+      setDraft("");
+      await loadMessages();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Mesaj gönderilemedi.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMessages();
+    const timer = window.setInterval(loadMessages, 3500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!listRef.current) return;
+    listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [messages.length]);
+
+  return (
+    <section className="overflow-hidden rounded-[2rem] border border-cyan-200/15 bg-[linear-gradient(135deg,rgba(8,47,73,0.62),rgba(5,8,6,0.92))] backdrop-blur-xl">
+      <div className="flex flex-col gap-3 border-b border-white/10 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div>
+          <h2 className="flex items-center gap-2 text-2xl font-semibold text-white"><MessageCircle className="h-5 w-5 text-cyan-100" /> Rulet canlı sohbet</h2>
+          <p className="mt-2 text-sm text-white/50">Admin chat mantığındaki canlı yenileme burada rulet masasına özel çalışır; OFF oyuncuları aynı masada konuşur.</p>
+        </div>
+        <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-semibold text-emerald-100">Canlı</span>
+      </div>
+      {error && <div className="mx-5 mt-4 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm text-red-100 sm:mx-6">{error}</div>}
+      <div ref={listRef} className="max-h-72 space-y-3 overflow-y-auto bg-black/25 p-4 sm:p-5">
+        {messages.length === 0 ? <p className="py-6 text-center text-sm text-white/40">Henüz rulet sohbeti yok. Masaya ilk lafı sen bırak.</p> : messages.map((item) => (
+          <div key={item.id} className="rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3">
+            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-white/38">
+              <span className="font-semibold text-cyan-100/80">{item.user_name}</span>
+              <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{item.user_role || "off"}</span>
+              <span>{item.created_at ? new Date(item.created_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+            </div>
+            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-white/82">{item.message}</p>
+          </div>
+        ))}
+      </div>
+      <form onSubmit={sendMessage} className="flex flex-col gap-3 border-t border-white/10 bg-black/35 p-4 sm:flex-row sm:p-5">
+        <input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value.slice(0, 600))}
+          placeholder="Rulet masasına mesaj yaz..."
+          className="min-w-0 flex-1 rounded-full border border-white/10 bg-black/45 px-4 py-3 text-sm text-white outline-none placeholder:text-white/28 focus:border-cyan-200/40"
+        />
+        <button type="submit" disabled={sending || !draft.trim()} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50">
+          <Send className="h-4 w-4" /> {sending ? "Gönderiliyor..." : "Gönder"}
+        </button>
+      </form>
+    </section>
   );
 }
 
