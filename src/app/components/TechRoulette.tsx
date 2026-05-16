@@ -144,8 +144,8 @@ const WHEEL_UV_EDGE_GUARD = 0.028;
 const WHEEL_MANUAL_RADIAL_SCALE = 0.965;
 const WHEEL_TEXEL_DENSITY_RINGS = 10;
 const WHEEL_ANISOTROPY_TARGET = 16;
-// Keep this aligned with functions/api/tech-roulette.ts SPIN_COOLDOWN_SECONDS so
-// the next betting round does not open while the client is still showing the ball settle.
+// Minimum visible spin duration. After this window the animation still continues
+// frame-by-frame until the ball reaches the winning pocket; no timeout snap is used.
 const SPIN_ANIMATION_SECONDS = 22;
 const WHEEL_IDLE_SPIN_SECONDS = 8;
 const BALL_ORBIT_TURNS = 7;
@@ -626,7 +626,6 @@ export function TechRoulette() {
     useState<RouletteTrajectoryFrame>(() => initialTrajectoryFrame());
   const [wheelPhiDegrees, setWheelPhiDegrees] = useState(WHEEL_ZERO_REFERENCE_DEGREES);
   const animationFrameRef = useRef<number | null>(null);
-  const spinTimeoutRef = useRef<number | null>(null);
   const spinningRef = useRef(false);
   const lastAnimatedRoundIdRef = useRef<number | null>(null);
   const [spinSequence, setSpinSequence] = useState(0);
@@ -758,15 +757,12 @@ export function TechRoulette() {
     return () => {
       if (animationFrameRef.current != null)
         window.cancelAnimationFrame(animationFrameRef.current);
-      if (spinTimeoutRef.current != null) window.clearTimeout(spinTimeoutRef.current);
     };
   }, []);
 
   const animateWheelTo = (resolvedRound: RouletteResult) => {
     if (animationFrameRef.current != null)
       window.cancelAnimationFrame(animationFrameRef.current);
-    if (spinTimeoutRef.current != null) window.clearTimeout(spinTimeoutRef.current);
-
     const plan = createRouletteTrajectoryPlan(
       resolvedRound.winning_number,
       SPIN_ANIMATION_SECONDS,
@@ -812,26 +808,6 @@ export function TechRoulette() {
     };
 
     animationFrameRef.current = window.requestAnimationFrame(tick);
-    spinTimeoutRef.current = window.setTimeout(() => {
-      if (animationFrameRef.current == null) return;
-      window.cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-      setTrajectoryFrame({
-        angle: plan.targetAngle,
-        radius: 0.78,
-        progress: 1,
-        done: true,
-      });
-      setWheelPhiDegrees(
-        (WHEEL_ZERO_REFERENCE_DEGREES + plan.pocketCenterAngle) % 360,
-      );
-      spinningRef.current = false;
-      setSpinning(false);
-      setPendingResult(null);
-      setResult(resolvedRound);
-      playOffSound("win");
-      window.setTimeout(loadState, 150);
-    }, (SPIN_ANIMATION_SECONDS + 0.25) * 1000);
     playOffSound("reel");
   };
 
@@ -1086,10 +1062,10 @@ export function TechRoulette() {
                       Sonuç gizli
                     </p>
                     <p className="mt-3 text-lg font-semibold text-amber-50">
-                      Top aynı katmanda kesintisiz dönüyor; yavaşlama fazı uzatıldı ve top tamamen cebe oturunca sonuç açılacak.
+                      Top en az belirlenen süre boyunca döner; süre dolsa bile kazanan cebe doğal şekilde varana kadar durmaz.
                     </p>
                     <p className="mt-2 text-sm text-white/55">
-                      Rulet motoru dönerken top artık ayrı bir hedefe ışınlanmaz; son turda aynı pocket hizasını takip eder.
+                      Zamanlayıcıyla zorla bitirme yok; top aynı yörüngede pocket hizasını takip ederek sonuç verir.
                     </p>
                   </div>
                 ) : result && (
