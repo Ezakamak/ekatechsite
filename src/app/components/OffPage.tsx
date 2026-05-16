@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { BarChart3, Building2, Gamepad2, Gift, Lock, Pickaxe, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
+import { BarChart3, Building2, Gamepad2, Gift, Lock, Pickaxe, Plane, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSyncFixed";
@@ -12,6 +12,7 @@ import { TechCoinMiner } from "./TechCoinMiner";
 import { DropTech } from "./DropTech";
 import { TechCoinMines } from "./TechCoinMines";
 import { EkaTowers } from "./EkaTowers";
+import { TechAviator } from "./tech-aviator/TechAviator";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
 
@@ -31,7 +32,7 @@ type Wallet = {
   updated_at?: string | null;
 };
 
-type GameKey = "hub" | "duel" | "cipher" | "raid" | "market" | "miner" | "droptech" | "mines" | "towers";
+type GameKey = "hub" | "duel" | "cipher" | "raid" | "market" | "miner" | "droptech" | "mines" | "towers" | "aviator";
 
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
@@ -79,6 +80,8 @@ export function OffPage() {
         minesDesc: "Gerçek para tamamen OFF. 25 karoda mayınlardan kaç, kombinasyon tabanlı %99 RTP çarpanıyla canlı Tech Coin cüzdan bakiyeni yönet.",
         towersTitle: "Eka Towers",
         towersDesc: "Canlı OFF Tech Coin cüzdanıyla 9 katlı kuleye tırman. Sabit bahis yok; istediğin TC miktarını gir, zorluk matrisi ve dinamik cashout çarpanlarıyla oyna.",
+        aviatorTitle: "Tech Aviator",
+        aviatorDesc: "Tech Coin ile uçuş rounduna katıl, çarpan yükselirken zamanında cashout yap ve provably-fair hash/salt bilgisini takip et.",
         minesRemoved: "EkaMines yerine gerçek para OFF, ana Tech Coin cüzdanına bağlı TechMines aktif.",
         walletTitle: "Tech Coin cüzdanı",
         lifetime: "Toplam kazanılan",
@@ -117,6 +120,8 @@ export function OffPage() {
         minesDesc: "Real money is fully OFF. Dodge mines on 25 tiles and manage your live Tech Coin wallet balance with combination-based 99% RTP multipliers.",
         towersTitle: "Eka Towers",
         towersDesc: "Climb a 9-level tower with the live OFF Tech Coin wallet. Fixed bets are removed; enter any TC amount and play difficulty matrices with dynamic cashout multipliers.",
+        aviatorTitle: "Tech Aviator",
+        aviatorDesc: "Join flight rounds with Tech Coin, cash out while the multiplier climbs, and follow the provably-fair hash/salt data.",
         minesRemoved: "TechMines is active with real money OFF and the main Tech Coin wallet connected.",
         walletTitle: "Tech Coin wallet",
         lifetime: "Lifetime earned",
@@ -234,7 +239,7 @@ export function OffPage() {
             <TechDuelSync />
             <TechDuelBotAssist />
           </>
-        ) : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : activeGame === "miner" ? <TechCoinMiner /> : activeGame === "droptech" ? <DropTech /> : activeGame === "mines" ? <TechCoinMines /> : activeGame === "towers" ? <EkaTowers /> : <MarketAcademy />}
+        ) : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : activeGame === "miner" ? <TechCoinMiner /> : activeGame === "droptech" ? <DropTech /> : activeGame === "mines" ? <TechCoinMines /> : activeGame === "towers" ? <EkaTowers /> : activeGame === "aviator" ? <TechAviator /> : <MarketAcademy />}
       </>
     );
   }
@@ -280,6 +285,7 @@ export function OffPage() {
           <GameCard icon={<Gift className="h-6 w-6" />} status={copy.available} title={copy.droptechTitle} description={copy.droptechDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("reel"); setActiveGame("droptech"); }} />
           <GameCard icon={<Shield className="h-6 w-6" />} status={copy.available} title={copy.minesTitle} description={copy.minesDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("bet"); setActiveGame("mines"); }} />
           <GameCard icon={<Building2 className="h-6 w-6" />} status={copy.available} title={copy.towersTitle} description={copy.towersDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("bet"); setActiveGame("towers"); }} />
+          <GameCard icon={<Plane className="h-6 w-6" />} status={copy.available} title={copy.aviatorTitle} description={copy.aviatorDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("bet"); setActiveGame("aviator"); }} />
           <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.available} title={copy.raidTitle} description={copy.raidDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("raid"); setActiveGame("raid"); }} />
           <GameCard icon={<BarChart3 className="h-6 w-6" />} status={copy.available} title={copy.marketTitle} description={copy.marketDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("market"); setActiveGame("market"); }} />
           <GameCard icon={<Pickaxe className="h-6 w-6" />} status={copy.available} title={copy.minerTitle} description={copy.minerDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("server"); setActiveGame("miner"); }} />
