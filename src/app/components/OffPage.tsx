@@ -1,6 +1,23 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { BarChart3, Building2, CircleDot, Gamepad2, Gift, Lock, Pickaxe, Plane, Shield, ShoppingBag, Sparkles, Store, Swords, Trophy, Zap } from "lucide-react";
+import {
+  Award,
+  BarChart3,
+  Building2,
+  CircleDot,
+  Gamepad2,
+  Gift,
+  Lock,
+  Pickaxe,
+  Plane,
+  Shield,
+  ShoppingBag,
+  Sparkles,
+  Store,
+  Swords,
+  Trophy,
+  Zap,
+} from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSyncFixed";
@@ -31,12 +48,48 @@ type Wallet = {
   balance: number;
   lifetime_earned: number;
   updated_at?: string | null;
+  level?: LevelProgress;
 };
 
-type GameKey = "hub" | "duel" | "cipher" | "raid" | "market" | "miner" | "droptech" | "mines" | "towers" | "aviator" | "roulette";
+type LevelProgress = {
+  level: number;
+  exp: number;
+  currentLevelExp: number;
+  nextLevelExp: number;
+  expIntoLevel: number;
+  expNeededForNext: number;
+  verified: boolean;
+};
 
-type ShopCatalogItem = { slug: string; name: string; emoji: string; description: string; price: number; roulette_value: number; rarity: string };
-type ShopInventoryItem = { id: number; item_name: string; emoji: string; roulette_value: number; status: string };
+type GameKey =
+  | "hub"
+  | "duel"
+  | "cipher"
+  | "raid"
+  | "market"
+  | "miner"
+  | "droptech"
+  | "mines"
+  | "towers"
+  | "aviator"
+  | "roulette";
+
+type ShopCatalogItem = {
+  slug: string;
+  name: string;
+  emoji: string;
+  description: string;
+  price: number;
+  roulette_value: number;
+  rarity: string;
+};
+type ShopInventoryItem = {
+  id: number;
+  item_name: string;
+  emoji: string;
+  roulette_value: number;
+  status: string;
+};
 
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
@@ -65,91 +118,126 @@ export function OffPage() {
         home: "Ana sayfa",
         eyebrow: "OFF özel oyun alanı",
         title: "EkaTech OFF Hub",
-        subtitle: "OFF rolü arkadaşlarla takılmak, Tech Duel oynamak ve coin puanı biriktirmek için özel ara rol.",
+        subtitle:
+          "OFF rolü arkadaşlarla takılmak, Tech Duel oynamak ve coin puanı biriktirmek için özel ara rol.",
         available: "Aktif oyun",
         comingSoon: "Yakında",
         open: "Aç",
         backHub: "OFF Hub'a dön",
         duelTitle: "Tech Duel",
-        duelDesc: "Aynı anda başlayan roundlar, tur kazananı gösterimi, Best of 3/5/7 ve güvenli sabit ödül sistemi.",
+        duelDesc:
+          "Aynı anda başlayan roundlar, tur kazananı gösterimi, Best of 3/5/7 ve güvenli sabit ödül sistemi.",
         cipherTitle: "Cipher Break",
-        cipherDesc: "2 kişilik premium kod kilitleme düellosu. Hedef kodu takip et, doğru kod hizaya geldiğinde ilk kilitleyen round'u alır.",
+        cipherDesc:
+          "2 kişilik premium kod kilitleme düellosu. Hedef kodu takip et, doğru kod hizaya geldiğinde ilk kilitleyen round'u alır.",
         clashTitle: "Core Clash",
-        clashDesc: "2 kişilik stratejik kart düellosu. 3 kartla başla, harita boostlarını kullan, 20 saniyede en iyi counter hamleyi seç.",
+        clashDesc:
+          "2 kişilik stratejik kart düellosu. 3 kartla başla, harita boostlarını kullan, 20 saniyede en iyi counter hamleyi seç.",
         raidTitle: "Core Raid",
-        raidDesc: "Community boss event. Glitch Titan sayfayı bozuyor; görev yap, hasar ver, core'u birlikte restore et.",
+        raidDesc:
+          "Community boss event. Glitch Titan sayfayı bozuyor; görev yap, hasar ver, core'u birlikte restore et.",
         marketTitle: "Eka InvestSim",
-        marketDesc: "Gerçek para ve gerçek hisse kullanmadan portföy, risk, haber etkisi ve sanal al-sat mantığını öğreten borsa simülasyonu.",
+        marketDesc:
+          "Gerçek para ve gerçek hisse kullanmadan portföy, risk, haber etkisi ve sanal al-sat mantığını öğreten borsa simülasyonu.",
         minerTitle: "TechCoin Miner",
-        minerDesc: "3 miner serverdan birine bağlan. Aynı anda sadece 1 server kullan, dakikada 1 Tech Coin üret, 1 saatin sonunda server otomatik boşalsın.",
+        minerDesc:
+          "3 miner serverdan birine bağlan. Aynı anda sadece 1 server kullan, dakikada 1 Tech Coin üret, 1 saatin sonunda server otomatik boşalsın.",
         droptechTitle: "DropTech",
-        droptechDesc: "Kutu aç, ışıklı şeritte item yakala ve OFF'a özel emoji koleksiyonunu tamamla. Eşyalar kullanılmaz; sadece envanterde görünür.",
+        droptechDesc:
+          "Kutu aç, ışıklı şeritte item yakala ve OFF'a özel emoji koleksiyonunu tamamla. Eşyalar kullanılmaz; sadece envanterde görünür.",
         minesTitle: "TechMines",
-        minesDesc: "Gerçek para tamamen OFF. 25 karoda mayınlardan kaç, kombinasyon tabanlı %99 RTP çarpanıyla canlı Tech Coin cüzdan bakiyeni yönet.",
+        minesDesc:
+          "Gerçek para tamamen OFF. 25 karoda mayınlardan kaç, kombinasyon tabanlı %99 RTP çarpanıyla canlı Tech Coin cüzdan bakiyeni yönet.",
         towersTitle: "Eka Towers",
-        towersDesc: "Canlı OFF Tech Coin cüzdanıyla 9 katlı kuleye tırman. Sabit bahis yok; istediğin TC miktarını gir, zorluk matrisi ve dinamik cashout çarpanlarıyla oyna.",
+        towersDesc:
+          "Canlı OFF Tech Coin cüzdanıyla 9 katlı kuleye tırman. Sabit bahis yok; istediğin TC miktarını gir, zorluk matrisi ve dinamik cashout çarpanlarıyla oyna.",
         aviatorTitle: "Tech Aviator",
-        aviatorDesc: "Tech Coin ile uçuş rounduna katıl, çarpan yükselirken zamanında cashout yap ve provably-fair hash/salt bilgisini takip et.",
+        aviatorDesc:
+          "Tech Coin ile uçuş rounduna katıl, çarpan yükselirken zamanında cashout yap ve provably-fair hash/salt bilgisini takip et.",
         rouletteTitle: "Tech Roulette",
-        rouletteDesc: "OFF Hub cüzdanına bağlı Avrupa ruleti. Halıdan sayı/dış bahis seç, kendi TC miktarını yaz; SQL ekatechwallet kilidi, backend RNG ve log tablosu sonucu korur.",
-        minesRemoved: "EkaMines yerine gerçek para OFF, ana Tech Coin cüzdanına bağlı TechMines aktif.",
+        rouletteDesc:
+          "OFF Hub cüzdanına bağlı Avrupa ruleti. Halıdan sayı/dış bahis seç, kendi TC miktarını yaz; SQL ekatechwallet kilidi, backend RNG ve log tablosu sonucu korur.",
+        minesRemoved:
+          "EkaMines yerine gerçek para OFF, ana Tech Coin cüzdanına bağlı TechMines aktif.",
         walletTitle: "Tech Coin cüzdanı",
         lifetime: "Toplam kazanılan",
         currency: "Para birimi",
         fixedRewardLabel: "Oyun ödülleri",
         rewardRule: "Ödül kuralı",
-        shopTitle: "OFF Mağaza",
-        shopDesc: "Şimdilik pahalı tesbih, çakı ve racon aksesuarları var. Bu eşyalar sadece Tech Roulette masasına para yerine koymak için kullanılabilir.",
+        shopTitle: "Tech Store",
+        shopDesc:
+          "OFF Hub’da satın alınabilen racon eşyaları artık Tech Store’da satılır. Saat, çakmak ve özel aksesuarlar Tech Roulette masasında eşya değeri olarak kullanılabilir.",
         buy: "Satın al",
         inventory: "Racon envanteri",
         onlyRoulette: "Sadece rulette bahis değeri",
+        levelTitle: "OFF Level",
+        expToNext: "sonraki levele",
+        verifiedName: "Level 5+ mavi tik",
       }
     : {
         loading: "Checking OFF access...",
         accessDeniedTitle: "OFF access required",
-        accessDeniedDesc: "This page is available to OFF, admin and owner accounts.",
+        accessDeniedDesc:
+          "This page is available to OFF, admin and owner accounts.",
         signIn: "Sign in",
         home: "Home",
         eyebrow: "OFF private game area",
         title: "EkaTech OFF Hub",
-        subtitle: "The OFF role is a middle role for hanging out, playing games and collecting score coins.",
+        subtitle:
+          "The OFF role is a middle role for hanging out, playing games and collecting score coins.",
         available: "Available game",
         comingSoon: "Coming soon",
         open: "Open",
         backHub: "Back to OFF Hub",
         duelTitle: "Tech Duel",
-        duelDesc: "Synchronized rounds, per-round winner reveal, Best of 3/5/7, and safe fixed reward logic.",
+        duelDesc:
+          "Synchronized rounds, per-round winner reveal, Best of 3/5/7, and safe fixed reward logic.",
         cipherTitle: "Cipher Break",
-        cipherDesc: "A premium 1v1 code-lock duel. Track the target code and lock first when the matching code aligns.",
+        cipherDesc:
+          "A premium 1v1 code-lock duel. Track the target code and lock first when the matching code aligns.",
         clashTitle: "Core Clash",
-        clashDesc: "A 2-player strategic card duel. Start with 3 cards, use map boosts, and pick the best counter move in 20 seconds.",
+        clashDesc:
+          "A 2-player strategic card duel. Start with 3 cards, use map boosts, and pick the best counter move in 20 seconds.",
         raidTitle: "Core Raid",
-        raidDesc: "A community boss event. Glitch Titan corrupts the page; complete tasks, deal damage, and restore the core together.",
+        raidDesc:
+          "A community boss event. Glitch Titan corrupts the page; complete tasks, deal damage, and restore the core together.",
         marketTitle: "Eka InvestSim",
-        marketDesc: "A stock market simulator that teaches portfolio, risk, news impact and virtual buy/sell logic without real money or real stocks.",
+        marketDesc:
+          "A stock market simulator that teaches portfolio, risk, news impact and virtual buy/sell logic without real money or real stocks.",
         minerTitle: "TechCoin Miner",
-        minerDesc: "Connect to one of 3 miner servers. Use only 1 server at a time, earn 1 Tech Coin per minute, and automatically release the server after 1 hour.",
+        minerDesc:
+          "Connect to one of 3 miner servers. Use only 1 server at a time, earn 1 Tech Coin per minute, and automatically release the server after 1 hour.",
         droptechTitle: "DropTech",
-        droptechDesc: "Open boxes, catch an item on the glowing strip, and complete your OFF-only emoji collection. Items are not usable; they only appear in inventory.",
+        droptechDesc:
+          "Open boxes, catch an item on the glowing strip, and complete your OFF-only emoji collection. Items are not usable; they only appear in inventory.",
         minesTitle: "TechMines",
-        minesDesc: "Real money is fully OFF. Dodge mines on 25 tiles and manage your live Tech Coin wallet balance with combination-based 99% RTP multipliers.",
+        minesDesc:
+          "Real money is fully OFF. Dodge mines on 25 tiles and manage your live Tech Coin wallet balance with combination-based 99% RTP multipliers.",
         towersTitle: "Eka Towers",
-        towersDesc: "Climb a 9-level tower with the live OFF Tech Coin wallet. Fixed bets are removed; enter any TC amount and play difficulty matrices with dynamic cashout multipliers.",
+        towersDesc:
+          "Climb a 9-level tower with the live OFF Tech Coin wallet. Fixed bets are removed; enter any TC amount and play difficulty matrices with dynamic cashout multipliers.",
         aviatorTitle: "Tech Aviator",
-        aviatorDesc: "Join flight rounds with Tech Coin, cash out while the multiplier climbs, and follow the provably-fair hash/salt data.",
+        aviatorDesc:
+          "Join flight rounds with Tech Coin, cash out while the multiplier climbs, and follow the provably-fair hash/salt data.",
         rouletteTitle: "Tech Roulette",
-        rouletteDesc: "European roulette connected to the OFF Hub wallet. Tap the table for number/outside bets, enter your own TC amount, and let SQL locking, backend RNG and logs protect every round.",
-        minesRemoved: "TechMines is active with real money OFF and the main Tech Coin wallet connected.",
+        rouletteDesc:
+          "European roulette connected to the OFF Hub wallet. Tap the table for number/outside bets, enter your own TC amount, and let SQL locking, backend RNG and logs protect every round.",
+        minesRemoved:
+          "TechMines is active with real money OFF and the main Tech Coin wallet connected.",
         walletTitle: "Tech Coin wallet",
         lifetime: "Lifetime earned",
         currency: "Currency",
         fixedRewardLabel: "Game rewards",
         rewardRule: "Reward rule",
-        shopTitle: "OFF Shop",
-        shopDesc: "For now it sells expensive prayer beads, knives and swagger tools. These items can only be used as Tech Roulette table stakes instead of money.",
+        shopTitle: "Tech Store",
+        shopDesc:
+          "Purchasable OFF Hub swagger items are now sold in Tech Store. Watches, lighters and special accessories can be used as item-value stakes on Tech Roulette.",
         buy: "Buy",
         inventory: "Swagger inventory",
         onlyRoulette: "Roulette stake only",
+        levelTitle: "OFF Level",
+        expToNext: "to next level",
+        verifiedName: "Level 5+ blue check",
       };
 
   useEffect(() => {
@@ -186,10 +274,17 @@ export function OffPage() {
             balance: Number(data.balance || 0),
             lifetime_earned: Number(data.lifetime_earned || 0),
             updated_at: data.updated_at || null,
+            level: data.level,
           });
         })
         .catch(() => {
-          if (active) setWallet({ currency: "Tech Coin", symbol: "TC", balance: 0, lifetime_earned: 0 });
+          if (active)
+            setWallet({
+              currency: "Tech Coin",
+              symbol: "TC",
+              balance: 0,
+              lifetime_earned: 0,
+            });
         });
     };
 
@@ -245,14 +340,17 @@ export function OffPage() {
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
       playOffSound("coin");
     } catch (error) {
-      setShopMessage(error instanceof Error ? error.message : "Ürün alınamadı.");
+      setShopMessage(
+        error instanceof Error ? error.message : "Ürün alınamadı.",
+      );
       playOffSound("error");
     } finally {
       setBuyingSlug(null);
     }
   };
 
-  const canAccess = user?.role === "off" || user?.role === "admin" || user?.role === "owner";
+  const canAccess =
+    user?.role === "off" || user?.role === "admin" || user?.role === "owner";
 
   if (loading) {
     return (
@@ -272,13 +370,25 @@ export function OffPage() {
           <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full border border-purple-200/20 bg-purple-200/10 text-purple-100">
             <Shield className="h-6 w-6" />
           </div>
-          <h1 className="text-4xl font-medium tracking-tight text-white">{copy.accessDeniedTitle}</h1>
-          <p className="mt-4 leading-7 text-white/55">{copy.accessDeniedDesc}</p>
+          <h1 className="text-4xl font-medium tracking-tight text-white">
+            {copy.accessDeniedTitle}
+          </h1>
+          <p className="mt-4 leading-7 text-white/55">
+            {copy.accessDeniedDesc}
+          </p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <button type="button" onClick={() => navigateTo("/signin?authorized=1")} className="rounded-full bg-white px-5 py-3 font-medium text-black transition-all hover:bg-gray-200">
+            <button
+              type="button"
+              onClick={() => navigateTo("/signin?authorized=1")}
+              className="rounded-full bg-white px-5 py-3 font-medium text-black transition-all hover:bg-gray-200"
+            >
               {copy.signIn}
             </button>
-            <button type="button" onClick={() => navigateTo("/")} className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 font-medium text-white/80 transition-all hover:bg-white/[0.1]">
+            <button
+              type="button"
+              onClick={() => navigateTo("/")}
+              className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 font-medium text-white/80 transition-all hover:bg-white/[0.1]"
+            >
               {copy.home}
             </button>
           </div>
@@ -309,7 +419,25 @@ export function OffPage() {
             <TechDuelSync />
             <TechDuelBotAssist />
           </>
-        ) : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : activeGame === "miner" ? <TechCoinMiner /> : activeGame === "droptech" ? <DropTech /> : activeGame === "mines" ? <TechCoinMines /> : activeGame === "towers" ? <EkaTowers /> : activeGame === "aviator" ? <TechAviator /> : activeGame === "roulette" ? <TechRoulette /> : <MarketAcademy />}
+        ) : activeGame === "cipher" ? (
+          <CipherBreak />
+        ) : activeGame === "raid" ? (
+          <CoreRaid />
+        ) : activeGame === "miner" ? (
+          <TechCoinMiner />
+        ) : activeGame === "droptech" ? (
+          <DropTech />
+        ) : activeGame === "mines" ? (
+          <TechCoinMines />
+        ) : activeGame === "towers" ? (
+          <EkaTowers />
+        ) : activeGame === "aviator" ? (
+          <TechAviator />
+        ) : activeGame === "roulette" ? (
+          <TechRoulette />
+        ) : (
+          <MarketAcademy />
+        )}
       </>
     );
   }
@@ -319,14 +447,23 @@ export function OffPage() {
       <div className="absolute left-1/2 top-20 h-96 w-96 -translate-x-1/2 rounded-full bg-purple-500/10 blur-3xl" />
       <div className="absolute right-0 top-64 h-80 w-80 rounded-full bg-cyan-500/10 blur-3xl" />
       <div className="relative mx-auto max-w-7xl space-y-8">
-        <motion.section initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 shadow-2xl shadow-purple-500/10 backdrop-blur-xl sm:p-8">
+        <motion.section
+          initial={{ opacity: 0, y: 22 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 shadow-2xl shadow-purple-500/10 backdrop-blur-xl sm:p-8"
+        >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-purple-100/80">
                 <Gamepad2 className="h-4 w-4" /> {copy.eyebrow}
               </div>
-              <h1 className="mt-5 text-5xl font-medium tracking-tight text-white sm:text-7xl">{copy.title}</h1>
-              <p className="mt-5 max-w-3xl text-lg leading-8 text-white/55">{copy.subtitle}</p>
+              <h1 className="mt-5 text-5xl font-medium tracking-tight text-white sm:text-7xl">
+                {copy.title}
+              </h1>
+              <p className="mt-5 max-w-3xl text-lg leading-8 text-white/55">
+                {copy.subtitle}
+              </p>
             </div>
             <div className="rounded-3xl border border-emerald-300/20 bg-emerald-300/10 px-5 py-4 text-sm leading-6 text-emerald-100">
               {copy.minesRemoved}
@@ -335,42 +472,211 @@ export function OffPage() {
         </motion.section>
 
         <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-          <CoinWalletCard wallet={wallet} copy={copy} locale={tr ? "tr-TR" : "en-US"} />
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
-            <p className="text-sm text-white/40">{copy.rewardRule}</p>
-            <h2 className="mt-2 flex flex-wrap items-center gap-2 text-2xl font-medium text-white">
-              <span>{copy.fixedRewardLabel}:</span>
-              <CoinAmount amount={50} locale={tr ? "tr-TR" : "en-US"} size="md" tone="cyan" />
-              <span className="text-white/35">/</span>
-              <CoinAmount amount={40} locale={tr ? "tr-TR" : "en-US"} size="md" tone="amber" />
-            </h2>
-            <p className="mt-4 text-sm leading-6 text-white/50">{copy.minesRemoved}</p>
+          <CoinWalletCard
+            wallet={wallet}
+            copy={copy}
+            locale={tr ? "tr-TR" : "en-US"}
+          />
+          <div className="space-y-5">
+            <LevelCard
+              level={wallet?.level}
+              copy={copy}
+              locale={tr ? "tr-TR" : "en-US"}
+            />
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
+              <p className="text-sm text-white/40">{copy.rewardRule}</p>
+              <h2 className="mt-2 flex flex-wrap items-center gap-2 text-2xl font-medium text-white">
+                <span>{copy.fixedRewardLabel}:</span>
+                <CoinAmount
+                  amount={50}
+                  locale={tr ? "tr-TR" : "en-US"}
+                  size="md"
+                  tone="cyan"
+                />
+                <span className="text-white/35">/</span>
+                <CoinAmount
+                  amount={40}
+                  locale={tr ? "tr-TR" : "en-US"}
+                  size="md"
+                  tone="amber"
+                />
+              </h2>
+              <p className="mt-4 text-sm leading-6 text-white/50">
+                {copy.minesRemoved}
+              </p>
+            </div>
           </div>
         </section>
 
-        <OffShopPanel catalog={shopCatalog} inventory={shopInventory} message={shopMessage} buyingSlug={buyingSlug} copy={copy} locale={tr ? "tr-TR" : "en-US"} onBuy={buyShopItem} />
+        <OffShopPanel
+          catalog={shopCatalog}
+          inventory={shopInventory}
+          message={shopMessage}
+          buyingSlug={buyingSlug}
+          copy={copy}
+          locale={tr ? "tr-TR" : "en-US"}
+          onBuy={buyShopItem}
+        />
 
         <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("join"); setActiveGame("duel"); }} />
-          <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("code"); setActiveGame("cipher"); }} />
-          <GameCard icon={<Gamepad2 className="h-6 w-6" />} status={copy.available} title={copy.clashTitle} description={copy.clashDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("card"); navigateTo("/core-clash"); }} />
-          <GameCard icon={<Gift className="h-6 w-6" />} status={copy.available} title={copy.droptechTitle} description={copy.droptechDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("reel"); setActiveGame("droptech"); }} />
-          <GameCard icon={<Shield className="h-6 w-6" />} status={copy.available} title={copy.minesTitle} description={copy.minesDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("bet"); setActiveGame("mines"); }} />
-          <GameCard icon={<Building2 className="h-6 w-6" />} status={copy.available} title={copy.towersTitle} description={copy.towersDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("bet"); setActiveGame("towers"); }} />
-          <GameCard icon={<Plane className="h-6 w-6" />} status={copy.available} title={copy.aviatorTitle} description={copy.aviatorDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("bet"); setActiveGame("aviator"); }} />
-          <GameCard icon={<CircleDot className="h-6 w-6" />} status={copy.available} title={copy.rouletteTitle} description={copy.rouletteDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("bet"); setActiveGame("roulette"); }} />
-          <GameCard icon={<Trophy className="h-6 w-6" />} status={copy.available} title={copy.raidTitle} description={copy.raidDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("raid"); setActiveGame("raid"); }} />
-          <GameCard icon={<BarChart3 className="h-6 w-6" />} status={copy.available} title={copy.marketTitle} description={copy.marketDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("market"); setActiveGame("market"); }} />
-          <GameCard icon={<Pickaxe className="h-6 w-6" />} status={copy.available} title={copy.minerTitle} description={copy.minerDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("server"); setActiveGame("miner"); }} />
+          <GameCard
+            icon={<Swords className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.duelTitle}
+            description={copy.duelDesc}
+            accent="cyan"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("join");
+              setActiveGame("duel");
+            }}
+          />
+          <GameCard
+            icon={<Zap className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.cipherTitle}
+            description={copy.cipherDesc}
+            accent="purple"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("code");
+              setActiveGame("cipher");
+            }}
+          />
+          <GameCard
+            icon={<Gamepad2 className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.clashTitle}
+            description={copy.clashDesc}
+            accent="cyan"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("card");
+              navigateTo("/core-clash");
+            }}
+          />
+          <GameCard
+            icon={<Gift className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.droptechTitle}
+            description={copy.droptechDesc}
+            accent="purple"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("reel");
+              setActiveGame("droptech");
+            }}
+          />
+          <GameCard
+            icon={<Shield className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.minesTitle}
+            description={copy.minesDesc}
+            accent="cyan"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("bet");
+              setActiveGame("mines");
+            }}
+          />
+          <GameCard
+            icon={<Building2 className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.towersTitle}
+            description={copy.towersDesc}
+            accent="cyan"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("bet");
+              setActiveGame("towers");
+            }}
+          />
+          <GameCard
+            icon={<Plane className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.aviatorTitle}
+            description={copy.aviatorDesc}
+            accent="amber"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("bet");
+              setActiveGame("aviator");
+            }}
+          />
+          <GameCard
+            icon={<CircleDot className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.rouletteTitle}
+            description={copy.rouletteDesc}
+            accent="amber"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("bet");
+              setActiveGame("roulette");
+            }}
+          />
+          <GameCard
+            icon={<Trophy className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.raidTitle}
+            description={copy.raidDesc}
+            accent="amber"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("raid");
+              setActiveGame("raid");
+            }}
+          />
+          <GameCard
+            icon={<BarChart3 className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.marketTitle}
+            description={copy.marketDesc}
+            accent="purple"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("market");
+              setActiveGame("market");
+            }}
+          />
+          <GameCard
+            icon={<Pickaxe className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.minerTitle}
+            description={copy.minerDesc}
+            accent="amber"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("server");
+              setActiveGame("miner");
+            }}
+          />
         </section>
       </div>
     </main>
   );
 }
 
-
-function OffShopPanel({ catalog, inventory, message, buyingSlug, copy, locale, onBuy }: { catalog: ShopCatalogItem[]; inventory: ShopInventoryItem[]; message: string; buyingSlug: string | null; copy: any; locale: string; onBuy: (slug: string) => void }) {
-  const availableInventory = inventory.filter((item) => item.status === "available");
+function OffShopPanel({
+  catalog,
+  inventory,
+  message,
+  buyingSlug,
+  copy,
+  locale,
+  onBuy,
+}: {
+  catalog: ShopCatalogItem[];
+  inventory: ShopInventoryItem[];
+  message: string;
+  buyingSlug: string | null;
+  copy: any;
+  locale: string;
+  onBuy: (slug: string) => void;
+}) {
+  const availableInventory = inventory.filter(
+    (item) => item.status === "available",
+  );
   return (
     <section className="rounded-[2rem] border border-amber-300/20 bg-[linear-gradient(135deg,rgba(146,64,14,0.24),rgba(0,0,0,0.42))] p-5 backdrop-blur-xl sm:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -378,30 +684,71 @@ function OffShopPanel({ catalog, inventory, message, buyingSlug, copy, locale, o
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/25 bg-amber-200/10 px-4 py-2 text-sm text-amber-100">
             <Store className="h-4 w-4" /> {copy.shopTitle}
           </div>
-          <h2 className="mt-4 text-3xl font-medium text-white">Racon aletleri vitrini</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">{copy.shopDesc}</p>
-          {message && <p className="mt-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-amber-100">{message}</p>}
+          <h2 className="mt-4 text-3xl font-medium text-white">
+            Tech Store vitrini
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">
+            {copy.shopDesc}
+          </p>
+          {message && (
+            <p className="mt-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-amber-100">
+              {message}
+            </p>
+          )}
         </div>
         <div className="rounded-3xl border border-white/10 bg-black/25 p-4 text-sm text-white/60">
-          <div className="flex items-center gap-2 font-medium text-white"><ShoppingBag className="h-4 w-4 text-amber-100" /> {copy.inventory}</div>
-          <p className="mt-2">{availableInventory.length ? availableInventory.map((item) => `${item.emoji} ${item.item_name}`).join(" · ") : "Envanter boş"}</p>
+          <div className="flex items-center gap-2 font-medium text-white">
+            <ShoppingBag className="h-4 w-4 text-amber-100" /> {copy.inventory}
+          </div>
+          <p className="mt-2">
+            {availableInventory.length
+              ? availableInventory
+                  .map((item) => `${item.emoji} ${item.item_name}`)
+                  .join(" · ")
+              : "Envanter boş"}
+          </p>
         </div>
       </div>
-      <div className="mt-5 grid gap-4 md:grid-cols-3">
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {catalog.map((item) => (
-          <div key={item.slug} className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4">
+          <div
+            key={item.slug}
+            className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4"
+          >
             <div className="flex items-start justify-between gap-3">
               <span className="text-4xl">{item.emoji}</span>
-              <span className="rounded-full border border-amber-200/20 bg-amber-200/10 px-3 py-1 text-xs text-amber-100">{item.rarity}</span>
+              <span className="rounded-full border border-amber-200/20 bg-amber-200/10 px-3 py-1 text-xs text-amber-100">
+                {item.rarity}
+              </span>
             </div>
-            <h3 className="mt-4 text-xl font-semibold text-white">{item.name}</h3>
-            <p className="mt-2 min-h-20 text-sm leading-6 text-white/48">{item.description}</p>
+            <h3 className="mt-4 text-xl font-semibold text-white">
+              {item.name}
+            </h3>
+            <p className="mt-2 min-h-20 text-sm leading-6 text-white/48">
+              {item.description}
+            </p>
             <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm">
-              <div className="flex justify-between gap-3 text-white/60"><span>Fiyat</span><strong className="text-white">{new Intl.NumberFormat(locale).format(item.price)} TC</strong></div>
-              <div className="flex justify-between gap-3 text-amber-100/80"><span>{copy.onlyRoulette}</span><strong>{new Intl.NumberFormat(locale).format(item.roulette_value)} TC</strong></div>
+              <div className="flex justify-between gap-3 text-white/60">
+                <span>Fiyat</span>
+                <strong className="text-white">
+                  {new Intl.NumberFormat(locale).format(item.price)} TC
+                </strong>
+              </div>
+              <div className="flex justify-between gap-3 text-amber-100/80">
+                <span>{copy.onlyRoulette}</span>
+                <strong>
+                  {new Intl.NumberFormat(locale).format(item.roulette_value)} TC
+                </strong>
+              </div>
             </div>
-            <button type="button" disabled={buyingSlug === item.slug} onClick={() => onBuy(item.slug)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50">
-              <ShoppingBag className="h-4 w-4" /> {buyingSlug === item.slug ? "..." : copy.buy}
+            <button
+              type="button"
+              disabled={buyingSlug === item.slug}
+              onClick={() => onBuy(item.slug)}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ShoppingBag className="h-4 w-4" />{" "}
+              {buyingSlug === item.slug ? "..." : copy.buy}
             </button>
           </div>
         ))}
@@ -410,7 +757,71 @@ function OffShopPanel({ catalog, inventory, message, buyingSlug, copy, locale, o
   );
 }
 
-function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy: any; locale: string }) {
+function LevelCard({
+  level,
+  copy,
+  locale,
+}: {
+  level?: LevelProgress;
+  copy: any;
+  locale: string;
+}) {
+  const progress = level || {
+    level: 1,
+    exp: 0,
+    currentLevelExp: 0,
+    nextLevelExp: 135,
+    expIntoLevel: 0,
+    expNeededForNext: 135,
+    verified: false,
+  };
+  const span = Math.max(
+    1,
+    Number(progress.nextLevelExp || 0) - Number(progress.currentLevelExp || 0),
+  );
+  const percent = Math.max(
+    0,
+    Math.min(100, (Number(progress.expIntoLevel || 0) / span) * 100),
+  );
+  return (
+    <div className="rounded-[2rem] border border-cyan-300/20 bg-cyan-300/[0.07] p-5 backdrop-blur-xl sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-cyan-100/65">{copy.levelTitle}</p>
+        {progress.verified ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-300/30 bg-blue-400/15 px-3 py-1 text-xs font-semibold text-blue-100">
+            ✓ {copy.verifiedName}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-3 flex items-end gap-3">
+        <Award className="mb-1 h-8 w-8 text-cyan-100" />
+        <strong className="text-4xl text-white">
+          Lv. {new Intl.NumberFormat(locale).format(progress.level)}
+        </strong>
+      </div>
+      <div className="mt-5 h-3 overflow-hidden rounded-full bg-black/35 ring-1 ring-white/10">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-blue-400"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="mt-3 text-sm text-white/50">
+        {new Intl.NumberFormat(locale).format(progress.expNeededForNext)} EXP{" "}
+        {copy.expToNext}
+      </p>
+    </div>
+  );
+}
+
+function CoinWalletCard({
+  wallet,
+  copy,
+  locale,
+}: {
+  wallet: Wallet | null;
+  copy: any;
+  locale: string;
+}) {
   const balance = Number(wallet?.balance || 0);
   const lifetime = Number(wallet?.lifetime_earned || 0);
   const currency = wallet?.currency || "Tech Coin";
@@ -419,7 +830,9 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
     <div className="relative overflow-hidden rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.08] p-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl sm:p-6">
       <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-amber-300/10 blur-3xl" />
       <div className="relative">
-        <p className="text-sm uppercase tracking-[0.2em] text-amber-100/60">{copy.walletTitle}</p>
+        <p className="text-sm uppercase tracking-[0.2em] text-amber-100/60">
+          {copy.walletTitle}
+        </p>
         <div className="mt-3">
           <CoinAmount amount={balance} locale={locale} size="xl" tone="amber" />
         </div>
@@ -427,13 +840,22 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
       </div>
       <div className="relative mt-6 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-white/35">{copy.currency}</p>
+          <p className="text-xs uppercase tracking-[0.16em] text-white/35">
+            {copy.currency}
+          </p>
           <p className="mt-2 text-lg font-medium text-white">{currency}</p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-white/35">{copy.lifetime}</p>
+          <p className="text-xs uppercase tracking-[0.16em] text-white/35">
+            {copy.lifetime}
+          </p>
           <div className="mt-2">
-            <CoinAmount amount={lifetime} locale={locale} size="sm" tone="amber" />
+            <CoinAmount
+              amount={lifetime}
+              locale={locale}
+              size="sm"
+              tone="amber"
+            />
           </div>
         </div>
       </div>
@@ -441,33 +863,62 @@ function CoinWalletCard({ wallet, copy, locale }: { wallet: Wallet | null; copy:
   );
 }
 
-function CoinAmount({ amount, locale, size, tone }: { amount: number; locale: string; size: "sm" | "md" | "xl"; tone: "cyan" | "amber" }) {
+function CoinAmount({
+  amount,
+  locale,
+  size,
+  tone,
+}: {
+  amount: number;
+  locale: string;
+  size: "sm" | "md" | "xl";
+  tone: "cyan" | "amber";
+}) {
   const formatted = new Intl.NumberFormat(locale).format(amount || 0);
-  const textSize = size === "xl" ? "text-5xl" : size === "md" ? "text-2xl" : "text-lg";
+  const textSize =
+    size === "xl" ? "text-5xl" : size === "md" ? "text-2xl" : "text-lg";
   const iconSize = size === "xl" ? "sm" : "xs";
 
   return (
-    <span className={`inline-flex items-center gap-2 font-semibold tracking-tight text-white ${textSize}`}>
+    <span
+      className={`inline-flex items-center gap-2 font-semibold tracking-tight text-white ${textSize}`}
+    >
       <span>{formatted}</span>
       <CoinIcon size={iconSize} tone={tone} />
     </span>
   );
 }
 
-function CoinIcon({ size, tone }: { size: "xs" | "sm" | "md" | "lg"; tone: "cyan" | "amber" }) {
+function CoinIcon({
+  size,
+  tone,
+}: {
+  size: "xs" | "sm" | "md" | "lg";
+  tone: "cyan" | "amber";
+}) {
   const wrapperSize =
-    size === "lg" ? "h-14 w-14" :
-    size === "md" ? "h-11 w-11" :
-    size === "sm" ? "h-8 w-8" :
-    "h-5 w-5";
+    size === "lg"
+      ? "h-14 w-14"
+      : size === "md"
+        ? "h-11 w-11"
+        : size === "sm"
+          ? "h-8 w-8"
+          : "h-5 w-5";
   const glow = tone === "amber" ? "shadow-amber-500/20" : "shadow-cyan-500/20";
   const ring = tone === "amber" ? "border-amber-300/30" : "border-cyan-300/30";
   const bg = tone === "amber" ? "bg-amber-100/5" : "bg-cyan-100/5";
 
   return (
-    <span className={`inline-flex ${wrapperSize} shrink-0 items-center justify-center overflow-hidden rounded-full border ${ring} ${bg} p-[2px] shadow-xl ${glow}`}>
+    <span
+      className={`inline-flex ${wrapperSize} shrink-0 items-center justify-center overflow-hidden rounded-full border ${ring} ${bg} p-[2px] shadow-xl ${glow}`}
+    >
       <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-black/60">
-        <img src={coinIcon} alt="Tech Coin" className="block h-full w-full rounded-full object-cover" style={{ clipPath: "circle(50% at 50% 50%)" }} />
+        <img
+          src={coinIcon}
+          alt="Tech Coin"
+          className="block h-full w-full rounded-full object-cover"
+          style={{ clipPath: "circle(50% at 50% 50%)" }}
+        />
       </span>
     </span>
   );
@@ -499,19 +950,48 @@ function GameCard({
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45 }}
+      className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6"
+    >
       <div className="flex items-start justify-between gap-4">
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${accentClasses[accent]}`}>{icon}</div>
-        <span className={`rounded-full border px-3 py-1 text-xs ${locked ? "border-white/10 bg-white/[0.04] text-white/40" : accentClasses[accent]}`}>
-          {locked ? <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> {status}</span> : status}
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${accentClasses[accent]}`}
+        >
+          {icon}
+        </div>
+        <span
+          className={`rounded-full border px-3 py-1 text-xs ${locked ? "border-white/10 bg-white/[0.04] text-white/40" : accentClasses[accent]}`}
+        >
+          {locked ? (
+            <span className="inline-flex items-center gap-1">
+              <Lock className="h-3 w-3" /> {status}
+            </span>
+          ) : (
+            status
+          )}
         </span>
       </div>
       <h2 className="mt-5 text-2xl font-medium text-white">{title}</h2>
-      <p className="mt-3 min-h-24 text-sm leading-6 text-white/50">{description}</p>
+      <p className="mt-3 min-h-24 text-sm leading-6 text-white/50">
+        {description}
+      </p>
       {locked ? (
-        <button type="button" disabled className="mt-5 w-full rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-medium text-white/35">{status}</button>
+        <button
+          type="button"
+          disabled
+          className="mt-5 w-full rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-medium text-white/35"
+        >
+          {status}
+        </button>
       ) : (
-        <button type="button" onClick={onClick} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200">
+        <button
+          type="button"
+          onClick={onClick}
+          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all hover:bg-gray-200"
+        >
           <Sparkles className="h-4 w-4" /> {buttonLabel}
         </button>
       )}
