@@ -10,10 +10,63 @@ const INACTIVE_MATCH_TIMEOUT_MINUTES = 5;
 export const TURN_SECONDS = 20;
 
 type CardType = "attack" | "defense" | "utility" | "trap" | "overload";
-type Card = { id: string; name: string; type: CardType; cost: number; tags?: string[] };
+type Card = { id: string; name: string; type: CardType; cost: number; tags?: string[]; description?: string };
 type PlayerState = { id: number; user_id: number; side: "creator" | "opponent"; hp: number; energy: number; heat: number; deck_json: string; hand_json: string; discard_json: string; energy_delta_next?: number; draw_block_next?: number; entered_at?: string | null };
 
-export const CARDS: Record<string, Card> = {
+const CARD_DESCRIPTIONS: Record<string, string> = {
+  glitch_strike: "7 hasar verir.",
+  packet_burst: "10 hasar verir. Rakip defense oynarsa hasarı 6'ya düşer.",
+  pierce_injection: "8 delici hasar verir. Core Shield, Firewall, Nano Barrier ve Admin Override savunmalarını deler; False Firewall tarafından durdurulur.",
+  double_ping: "8 hasar verir. Static Field oynayan rakibe karşı yansıma riski taşır.",
+  core_spike: "12 hasar verir ve 1 Heat kazandırır.",
+  ping_snipe: "4 hasar verir. Düşük maliyetli hızlı saldırıdır.",
+  buffer_barrage: "9 hasar verir. Rakip trap oynarsa hasarı 6'ya düşer; Static Field'a yakalanabilir.",
+  cache_bomb: "9 hasar verir ve rakibin gelecek tur enerjisini 1 azaltır.",
+  kernel_lance: "11 delici hasar verir ve 1 Heat kazandırır. Core Shield, Firewall, Nano Barrier ve Admin Override savunmalarını deler; False Firewall tarafından durdurulur.",
+  exploit_chain: "Rakip utility veya trap oynarsa 12 hasar, aksi halde 7 hasar verir.",
+
+  firewall: "Gelen delici olmayan hasarı yarıya indirir.",
+  core_shield: "Gelen delici olmayan hasarı tamamen bloklar.",
+  emergency_patch: "6 HP yeniler.",
+  static_field: "Rakip Double Ping veya Buffer Barrage oynarsa 5 yansıma hasarı verir.",
+  nano_barrier: "Gelen delici olmayan hasarı 4 azaltır.",
+  repair_drone: "8 HP yeniler ve gelecek tur +1 enerji sağlar.",
+  shield_bash: "3 HP yeniler. Rakip attack veya overload oynarsa ayrıca 5 hasar verir.",
+  quarantine_wall: "3 HP yeniler. Rakip utility veya trap oynarsa rakibin sonraki kart çekimini engeller.",
+  reboot_protocol: "14 HP yeniler, Heat değerini 2 azaltır fakat gelecek tur enerjiyi 1 düşürür.",
+
+  system_scan: "Gelecek tur ekstra kart çekmeni sağlar.",
+  data_drain: "Rakibin gelecek tur enerjisini 2 azaltır.",
+  battery_backup: "Gelecek tur +2 enerji sağlar.",
+  hand_jam: "Rakip utility oynarsa kart çekimini engeller ve gelecek tur enerjisini 1 azaltır; aksi halde 3 hasar verir.",
+  decoy_packet: "Rakip trap oynarsa yansıma etkisini sıfırlar.",
+  quick_compile: "Gelecek tur ekstra kart çekmeni sağlar.",
+  energy_surge: "Gelecek tur +3 enerji sağlar.",
+  packet_duplication: "Gelecek tur ekstra kart çekmeni ve +1 enerji kazanmanı sağlar.",
+  cooldown_flush: "Heat değerini 3 azaltır ve en az 2 HP yeniler.",
+  signal_boost: "Gelecek tur ekstra kart çekmeni ve +1 enerji kazanmanı sağlar.",
+
+  mirror_bug: "Rakip attack veya overload oynarsa gelen hasarın yarısını rakibe yansıtır.",
+  packet_trap: "Rakip maliyeti 4 veya daha yüksek kart oynarsa yansıma hasarı verir; trap haritasında güçlenir.",
+  false_firewall: "Delici saldırıları tamamen bloklar.",
+  logic_bomb: "Rakip maliyeti 5 veya daha yüksek kart oynarsa 10 yansıma hasarı verir.",
+  redirect_loop: "Rakip attack oynarsa gelen hasarın yaklaşık %45'ini rakibe yansıtır.",
+  honeypot: "Rakip utility oynarsa 4 yansıma hasarı verir ve rakibin gelecek tur enerjisini 1 azaltır.",
+  checksum_snare: "Rakip maliyeti 2 veya daha düşük kart oynarsa 3 yansıma hasarı verir ve sana gelecek tur +1 enerji sağlar.",
+
+  core_overload: "15 hasar verir ve 2 Heat kazandırır.",
+  blackout: "Rakibin gelecek tur kart çekimini engeller, enerjisini 1 azaltır ve sana 1 Heat kazandırır.",
+  full_restore: "15 HP yeniler ve 2 Heat kazandırır.",
+  meltdown: "18 hasar verir, 3 Heat kazandırır ve sana 4 geri tepme hasarı verir.",
+  singularity_push: "8 hasar verir, rakibin gelecek tur enerjisini 2 azaltır, kart çekimini engeller ve 2 Heat kazandırır.",
+  admin_override: "Rakip attack veya overload oynarsa saldırıyı bloklar, 6 HP yeniler ve 2 Heat kazandırır."
+};
+
+function withDescriptions<T extends Record<string, Card>>(cards: T): T {
+  return Object.fromEntries(Object.entries(cards).map(([id, card]) => [id, { ...card, description: CARD_DESCRIPTIONS[id] }])) as T;
+}
+
+export const CARDS: Record<string, Card> = withDescriptions({
   glitch_strike: { id: "glitch_strike", name: "Glitch Strike", type: "attack", cost: 2 },
   packet_burst: { id: "packet_burst", name: "Packet Burst", type: "attack", cost: 3 },
   pierce_injection: { id: "pierce_injection", name: "Pierce Injection", type: "attack", cost: 4, tags: ["pierce"] },
@@ -60,7 +113,7 @@ export const CARDS: Record<string, Card> = {
   meltdown: { id: "meltdown", name: "Meltdown", type: "overload", cost: 8, tags: ["heavy", "heat"] },
   singularity_push: { id: "singularity_push", name: "Singularity Push", type: "overload", cost: 7, tags: ["control", "heat"] },
   admin_override: { id: "admin_override", name: "Admin Override", type: "overload", cost: 8, tags: ["block", "heat"] },
-};
+});
 const BASE_DECK = [
   "ping_snipe", "glitch_strike", "glitch_strike", "packet_burst", "packet_burst", "double_ping", "buffer_barrage", "pierce_injection", "cache_bomb", "exploit_chain", "core_spike", "kernel_lance",
   "nano_barrier", "firewall", "firewall", "core_shield", "emergency_patch", "repair_drone", "static_field", "shield_bash", "quarantine_wall", "reboot_protocol",
@@ -220,7 +273,7 @@ export async function buildState(context: any, lobbyId: number, userId: number) 
     opponent,
     players: {
       creator: { id: latestLobby.creator_user_id, name: latestLobby.creator_name, email: latestLobby.creator_email, avatar_url: latestLobby.creator_avatar_url },
-      opponent: { id: latestLobby.opponent_user_id, name: latestLobby.opponent_name, email: latestLobby.opponent_email, avatar_url: latestLobby.opponent_avatar_url },
+      opponent: { id: latestLobby.opponent_user_id, name: latestLobby.opponent_name, email: latestLobby.opponent_email, avatar_url: latestLobby.avatar_url },
     },
     hp: { creator: Number(sideRows.creator?.hp || 0), opponent: Number(sideRows.opponent?.hp || 0) },
     energy: { creator: Number(sideRows.creator?.energy || 0), opponent: Number(sideRows.opponent?.energy || 0) },
