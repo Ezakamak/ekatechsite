@@ -99,6 +99,7 @@
 .tech-roulette-wheel {
   animation: tech-roulette-wheel-spin var(--wheel-spin-seconds, 7s) linear
     infinite;
+  background-position: calc(var(--wheel-uv-offset, 0) * 100%) 50%;
 }
 
 .tech-roulette-idle-ball {
@@ -106,15 +107,12 @@
 }
 
 .tech-roulette-ball-orbit {
-  animation: tech-roulette-ball-orbit var(--ball-spin-seconds, 16s)
-    cubic-bezier(0.12, 0.74, 0.2, 1) forwards;
+  will-change: transform;
 }
 
 .tech-roulette-ball-runner {
-  animation:
-    tech-roulette-ball-radius var(--ball-spin-seconds, 16s)
-      cubic-bezier(0.16, 0.76, 0.18, 1) forwards,
-    tech-roulette-ball-hop 0.55s ease-in-out infinite;
+  animation: tech-roulette-ball-hop 0.55s ease-in-out infinite;
+  will-change: transform, filter;
 }
 
 @media (prefers-reduced-motion: reduce) {
