@@ -32,6 +32,22 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
 
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('/@radix-ui/')) return 'radix-vendor'
+          if (id.includes('/@mui/') || id.includes('/@emotion/')) return 'mui-vendor'
+          if (id.includes('/recharts/') || id.includes('/d3-') || id.includes('/victory-vendor/')) return 'charts-vendor'
+          if (id.includes('/motion/') || id.includes('/framer-motion/')) return 'motion-vendor'
+          if (id.includes('/socket.io-client/') || id.includes('/engine.io-client/')) return 'realtime-vendor'
+          return 'vendor'
+        },
+      },
+    },
+  },
+
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })

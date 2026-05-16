@@ -71,6 +71,9 @@ export function Loader({ show }: LoaderProps) {
   useEffect(() => {
     if (!show) return;
 
+    setImpact(0);
+    setBurst(false);
+
     boxControls.set({
       y: 0,
       scale: 1,
