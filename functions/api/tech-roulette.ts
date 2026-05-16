@@ -9,7 +9,9 @@ const RED_NUMBERS = new Set([
 const ALLOWED_CHIPS = new Set([10, 50, 100, 500, 1_000, 5_000, 10_000]);
 const BET_LIMITS = { min: 10, max: 10_000 };
 const ROUND_SECONDS = 18;
-const SPIN_COOLDOWN_SECONDS = 16;
+// Keep this aligned with the client spin animation so a hidden next round is not
+// created before the ball visibly settles for players.
+const SPIN_COOLDOWN_SECONDS = 22;
 
 const OPEN_ROUND_SELECT = `
   SELECT id, status, betting_started_at, spins_at, winning_number, winning_color, winning_parity,
