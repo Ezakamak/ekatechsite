@@ -45,6 +45,7 @@ import { AutoEnterLobbies } from "./components/AutoEnterLobbies";
 import { GamePresenceManager } from "./components/GamePresenceManager";
 import { OffSoundEngine } from "./components/OffSoundEngine";
 import { TechCoinWalletBadge } from "./components/TechCoinWalletBadge";
+import { TechAviator } from "./components/tech-aviator/TechAviator";
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -131,6 +132,7 @@ export default function App() {
   const isAccount = path === "/account";
   const isOff = path === "/off";
   const isCoreClash = path === "/core-clash";
+  const isTechAviator = path === "/tech-aviator";
 
   return (
     <LanguageProvider>
@@ -179,6 +181,8 @@ export default function App() {
           <OffPage />
         ) : isCoreClash ? (
           <CoreClash />
+        ) : isTechAviator ? (
+          <TechAviator />
         ) : (
           <>
             <Hero />
