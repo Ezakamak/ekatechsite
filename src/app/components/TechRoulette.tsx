@@ -908,6 +908,7 @@ export function TechRoulette() {
   const visibleRecentNumbers = pendingResult
     ? recentNumbers.filter((item) => item.id !== pendingResult.id)
     : recentNumbers;
+  const settledResult = pendingResult ? null : result;
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#050806] px-4 pb-24 pt-28 text-white sm:px-6">
@@ -974,6 +975,7 @@ export function TechRoulette() {
                         : `tech-roulette-wheel-spin ${WHEEL_IDLE_SPIN_SECONDS}s linear infinite`,
                       background: wheelGradient,
                       transform: `rotate(${wheelPhiDegrees}deg)`,
+                      ["--wheel-settle-angle" as string]: `${wheelPhiDegrees}deg`,
                     }}
                   >
                     {ROULETTE_WHEEL.map((number, index) => {
@@ -993,6 +995,23 @@ export function TechRoulette() {
                     })}
                     <div className="pointer-events-none absolute inset-[3.5%] rounded-full border-[3px] border-yellow-100/60 shadow-[inset_0_0_18px_rgba(253,224,71,0.35)]" />
                     <div className="pointer-events-none absolute inset-[22%] rounded-full border-[10px] border-amber-900/80 bg-[radial-gradient(circle,#3a210f_0_36%,#120a05_37%_60%,transparent_61%)] shadow-[inset_0_0_24px_rgba(0,0,0,0.9),0_0_18px_rgba(245,158,11,0.25)]" />
+                    {settledResult ? (
+                      <div
+                        aria-hidden="true"
+                        className="tech-roulette-settled-ball-orbit pointer-events-none absolute inset-0 z-30 rounded-full"
+                        style={{
+                          transform: `rotate(${wheelSectorCenterForNumber(settledResult.winning_number)}deg)`,
+                        }}
+                      >
+                        <span
+                          className="tech-roulette-settled-ball absolute left-1/2 top-1/2 h-4 w-4 rounded-full border border-white bg-white shadow-[inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                          style={{
+                            transform:
+                              "translate(-50%, -50%) translateY(clamp(-8.7rem, -36vw, -6.3rem))",
+                          }}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                   <div className="pointer-events-none absolute inset-[5%] z-10 rounded-full border-4 border-black/50" />
                   <div className="pointer-events-none absolute inset-[15%] z-10 rounded-full border border-white/10" />
@@ -1015,7 +1034,7 @@ export function TechRoulette() {
                     </div>
                   ) : null}
                 </div>
-                {!pendingResult ? (
+                {!pendingResult && !settledResult ? (
                   <div className="pointer-events-none absolute aspect-square w-[96%] max-w-[25rem] rounded-full">
                     <span className="tech-roulette-idle-ball absolute left-1/2 top-1/2 z-50 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-white shadow-[0_0_16px_rgba(255,255,255,0.9),inset_-3px_-4px_5px_rgba(0,0,0,0.3)]" />
                   </div>
