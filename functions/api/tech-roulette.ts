@@ -9,9 +9,9 @@ const RED_NUMBERS = new Set([
 const ALLOWED_CHIPS = new Set([10, 50, 100, 500, 1_000, 5_000, 10_000]);
 const BET_LIMITS = { min: 10, max: 10_000 };
 const ROUND_SECONDS = 18;
-// Keep this aligned with the client spin animation so a hidden next round is not
-// created before the ball visibly settles for players.
-const SPIN_COOLDOWN_SECONDS = 30;
+// Minimum result reveal window. The client can keep animating past this if the
+// ball still has not physically reached the winning pocket.
+const RESULT_REVEAL_MIN_SECONDS = 22;
 
 const OPEN_ROUND_SELECT = `
   SELECT id, status, betting_started_at, spins_at, winning_number, winning_color, winning_parity,
@@ -430,7 +430,7 @@ async function getOrCreateOpenRound(
     `SELECT MAX(strftime('%s', resolved_at)) AS resolved_at_epoch FROM tech_roulette_rounds WHERE status = 'resolved' AND resolved_at IS NOT NULL`,
   ).first();
   const resolvedAt = Number(latestResolved?.resolved_at_epoch || 0);
-  if (resolvedAt > 0 && nowSeconds() - resolvedAt < SPIN_COOLDOWN_SECONDS)
+  if (resolvedAt > 0 && nowSeconds() - resolvedAt < RESULT_REVEAL_MIN_SECONDS)
     return null;
 
   return createOpenRound(context);
