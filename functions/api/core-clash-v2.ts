@@ -273,7 +273,7 @@ export async function buildState(context: any, lobbyId: number, userId: number) 
     opponent,
     players: {
       creator: { id: latestLobby.creator_user_id, name: latestLobby.creator_name, email: latestLobby.creator_email, avatar_url: latestLobby.creator_avatar_url },
-      opponent: { id: latestLobby.opponent_user_id, name: latestLobby.opponent_name, email: latestLobby.opponent_email, avatar_url: latestLobby.avatar_url },
+      opponent: { id: latestLobby.opponent_user_id, name: latestLobby.opponent_name, email: latestLobby.opponent_email, avatar_url: latestLobby.opponent_avatar_url },
     },
     hp: { creator: Number(sideRows.creator?.hp || 0), opponent: Number(sideRows.opponent?.hp || 0) },
     energy: { creator: Number(sideRows.creator?.energy || 0), opponent: Number(sideRows.opponent?.energy || 0) },
