@@ -84,6 +84,8 @@ const QUICK_BETS = [
 const MIN_BET = 10;
 const MAX_BET = 10_000;
 const ROULETTE_WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
+const WHEEL_SECTOR_DEGREES = 360 / ROULETTE_WHEEL.length;
+const BALL_ROTATION_MULTIPLIER = 1.22;
 const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const TABLE_ROWS = [
   [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36],
@@ -105,11 +107,10 @@ function numberColor(number: number) {
 }
 
 function buildWheelGradient() {
-  const sector = 360 / ROULETTE_WHEEL.length;
-  return `conic-gradient(${ROULETTE_WHEEL.map((number, index) => {
+  return `conic-gradient(from 0deg, ${ROULETTE_WHEEL.map((number, index) => {
     const color = numberColor(number) === "green" ? "#16a34a" : numberColor(number) === "red" ? "#dc2626" : "#111827";
-    const start = (index * sector).toFixed(3);
-    const end = ((index + 1) * sector).toFixed(3);
+    const start = (index * WHEEL_SECTOR_DEGREES).toFixed(3);
+    const end = ((index + 1) * WHEEL_SECTOR_DEGREES).toFixed(3);
     return `${color} ${start}deg ${end}deg`;
   }).join(", ")})`;
 }
@@ -128,6 +129,22 @@ function describeBet(type: BetType, value?: number) {
   if (type === "high") return "19-36";
   if (type === "column") return `${value}. Sütun`;
   return `${value}. 12'li`;
+}
+
+function wheelRotationForWinningNumber(winningNumber: number, currentRotation: number) {
+  const wheelIndex = ROULETTE_WHEEL.indexOf(winningNumber);
+  if (wheelIndex < 0) return currentRotation;
+
+  const sectorCenter = wheelIndex * WHEEL_SECTOR_DEGREES + WHEEL_SECTOR_DEGREES / 2;
+  // Keep the existing ball multiplier/animation, but solve the final wheel rotation so
+  // the ball center and the resolved number sector center land on the same radial line.
+  const combinedRotation = 1 + BALL_ROTATION_MULTIPLIER;
+  const matchingRotationStep = 360 / combinedRotation;
+  const baseMatchingRotation = -sectorCenter / combinedRotation;
+  const minimumSpinTarget = currentRotation + 360 * 5;
+  const matchingStepCount = Math.ceil((minimumSpinTarget - baseMatchingRotation) / matchingRotationStep);
+
+  return baseMatchingRotation + matchingStepCount * matchingRotationStep;
 }
 
 export function TechRoulette() {
@@ -221,10 +238,7 @@ export function TechRoulette() {
   }, []);
 
   const animateWheelTo = (winningNumber: number) => {
-    const wheelIndex = Math.max(0, ROULETTE_WHEEL.indexOf(winningNumber));
-    const sector = 360 / ROULETTE_WHEEL.length;
-    const sectorCenter = wheelIndex * sector + sector / 2;
-    setWheelRotation((current) => Math.ceil(current / 360) * 360 + 360 * 5 - sectorCenter);
+    setWheelRotation((current) => wheelRotationForWinningNumber(winningNumber, current));
     setSpinning(true);
     window.setTimeout(() => setSpinning(false), 3200);
     playOffSound("reel");
@@ -301,7 +315,7 @@ export function TechRoulette() {
                 >
                   <div className="absolute inset-[5%] rounded-full border-4 border-black/50" />
                   {ROULETTE_WHEEL.map((number, index) => {
-                    const angle = ((index + 0.5) * 360) / ROULETTE_WHEEL.length;
+                    const angle = index * WHEEL_SECTOR_DEGREES + WHEEL_SECTOR_DEGREES / 2;
                     return (
                       <span
                         key={number}
@@ -314,7 +328,7 @@ export function TechRoulette() {
                   })}
                 </motion.div>
                 <motion.div
-                  animate={{ rotate: -wheelRotation * 1.22 }}
+                  animate={{ rotate: -wheelRotation * BALL_ROTATION_MULTIPLIER }}
                   transition={{ duration: 3.1, ease: [0.08, 0.72, 0.14, 1] }}
                   className="pointer-events-none absolute aspect-square w-[78%] max-w-[19rem] rounded-full"
                 >
