@@ -6,7 +6,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { motion } from "motion/react";
 import {
   BadgeCheck,
   Clock3,
@@ -129,8 +128,9 @@ const ROULETTE_WHEEL = [
   16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26,
 ];
 const WHEEL_SECTOR_DEGREES = 360 / ROULETTE_WHEEL.length;
-const BALL_ROTATION_MULTIPLIER = 1.22;
 const SPIN_ANIMATION_SECONDS = 13;
+const WHEEL_IDLE_SPIN_SECONDS = 7;
+const BALL_ORBIT_TURNS = 5.35;
 const RED_NUMBERS = new Set([
   1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36,
 ]);
@@ -185,27 +185,17 @@ function describeBet(type: BetType, value?: number) {
   return `${value}. 12'li`;
 }
 
-function wheelRotationForWinningNumber(
-  winningNumber: number,
-  currentRotation: number,
-) {
+function wheelSectorCenterForNumber(winningNumber: number) {
   const wheelIndex = ROULETTE_WHEEL.indexOf(winningNumber);
-  if (wheelIndex < 0) return currentRotation;
+  if (wheelIndex < 0) return 0;
 
-  const sectorCenter =
-    wheelIndex * WHEEL_SECTOR_DEGREES + WHEEL_SECTOR_DEGREES / 2;
-  // Keep the existing ball multiplier/animation, but solve the final wheel rotation so
-  // the ball center and the resolved number sector center land on the same radial line.
-  const combinedRotation = 1 + BALL_ROTATION_MULTIPLIER;
-  const matchingRotationStep = 360 / combinedRotation;
-  const baseMatchingRotation = -sectorCenter / combinedRotation;
-  const minimumSpinTarget = currentRotation + 360 * 5;
-  const matchingStepCount = Math.ceil(
-    (minimumSpinTarget - baseMatchingRotation) / matchingRotationStep,
-  );
-
-  return baseMatchingRotation + matchingStepCount * matchingRotationStep;
+  return wheelIndex * WHEEL_SECTOR_DEGREES + WHEEL_SECTOR_DEGREES / 2;
 }
+
+function ballOrbitEndForNumber(winningNumber: number) {
+  return -(360 * BALL_ORBIT_TURNS + wheelSectorCenterForNumber(winningNumber));
+}
+
 
 export function TechRoulette() {
   const { language } = useLanguage();
@@ -224,7 +214,7 @@ export function TechRoulette() {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [pendingResult, setPendingResult] = useState<RouletteResult | null>(null);
-  const [wheelRotation, setWheelRotation] = useState(0);
+  const [spinSequence, setSpinSequence] = useState(0);
   const [lastAnimatedRoundId, setLastAnimatedRoundId] = useState<number | null>(
     null,
   );
@@ -334,9 +324,7 @@ export function TechRoulette() {
   }, []);
 
   const animateWheelTo = (resolvedRound: RouletteResult) => {
-    setWheelRotation((current) =>
-      wheelRotationForWinningNumber(resolvedRound.winning_number, current),
-    );
+    setSpinSequence((current) => current + 1);
     setSpinning(true);
     setPendingResult(resolvedRound);
     window.setTimeout(() => {
@@ -469,14 +457,12 @@ export function TechRoulette() {
             <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(18rem,27rem)_1fr]">
               <div className="relative flex min-h-[26rem] items-center justify-center overflow-hidden rounded-[2rem] border border-amber-200/20 bg-[radial-gradient(circle_at_center,rgba(250,204,21,0.12),rgba(0,0,0,0.82)_62%)] p-5">
                 <div className="absolute top-4 z-20 h-0 w-0 border-x-[13px] border-t-[24px] border-x-transparent border-t-amber-200 drop-shadow-[0_0_12px_rgba(251,191,36,0.9)]" />
-                <motion.div
-                  animate={{ rotate: wheelRotation }}
-                  transition={{
-                    duration: SPIN_ANIMATION_SECONDS,
-                    ease: [0.12, 0.82, 0.18, 1],
+                <div
+                  className="tech-roulette-wheel relative aspect-square w-full max-w-[24rem] rounded-full border-[12px] border-amber-300 bg-zinc-950 shadow-2xl shadow-black before:absolute before:inset-[12%] before:rounded-full before:border before:border-white/15 before:bg-[radial-gradient(circle,#202020_0_38%,transparent_39%)] after:absolute after:inset-[43%] after:rounded-full after:bg-amber-100 after:shadow-[0_0_24px_rgba(251,191,36,0.8)]"
+                  style={{
+                    background: wheelGradient,
+                    ["--wheel-spin-seconds" as string]: `${WHEEL_IDLE_SPIN_SECONDS}s`,
                   }}
-                  className="relative aspect-square w-full max-w-[24rem] rounded-full border-[12px] border-amber-300 bg-zinc-950 shadow-2xl shadow-black before:absolute before:inset-[12%] before:rounded-full before:border before:border-white/15 before:bg-[radial-gradient(circle,#202020_0_38%,transparent_39%)] after:absolute after:inset-[43%] after:rounded-full after:bg-amber-100 after:shadow-[0_0_24px_rgba(251,191,36,0.8)]"
-                  style={{ background: wheelGradient }}
                 >
                   <div className="absolute inset-[5%] rounded-full border-4 border-black/50" />
                   {ROULETTE_WHEEL.map((number, index) => {
@@ -495,34 +481,33 @@ export function TechRoulette() {
                       </span>
                     );
                   })}
-                </motion.div>
-                <motion.div
-                  animate={{
-                    rotate: -wheelRotation * BALL_ROTATION_MULTIPLIER,
-                  }}
-                  transition={{
-                    duration: SPIN_ANIMATION_SECONDS,
-                    ease: [0.08, 0.72, 0.14, 1],
-                  }}
-                  className="pointer-events-none absolute aspect-square w-[78%] max-w-[19rem] rounded-full"
-                >
-                  <motion.span
-                    animate={
-                      spinning
-                        ? {
-                            scale: [1, 0.86, 1.08, 0.94, 1],
-                            y: [0, 7, -5, 3, 0],
-                          }
-                        : { scale: 1, y: 0 }
-                    }
-                    transition={{
-                      duration: 0.65,
-                      repeat: spinning ? Infinity : 0,
-                      ease: "easeInOut",
+                  {pendingResult ? (
+                    <span
+                      key={`pocket-ball-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
+                      className="tech-roulette-pocket-ball absolute left-1/2 top-1/2 z-20 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                      style={{
+                        transform: `translate(-50%, -50%) rotate(${wheelSectorCenterForNumber(pendingResult.winning_number)}deg) translateY(clamp(-9.25rem, -38vw, -6.65rem))`,
+                        animationDuration: `${SPIN_ANIMATION_SECONDS}s`,
+                      }}
+                    />
+                  ) : null}
+                </div>
+                {pendingResult ? (
+                  <div
+                    key={`orbit-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
+                    className="tech-roulette-ball-orbit pointer-events-none absolute aspect-square w-[96%] max-w-[25rem] rounded-full"
+                    style={{
+                      ["--ball-orbit-end" as string]: `${ballOrbitEndForNumber(pendingResult.winning_number)}deg`,
+                      ["--ball-spin-seconds" as string]: `${SPIN_ANIMATION_SECONDS}s`,
                     }}
-                    className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
-                  />
-                </motion.div>
+                  >
+                    <span className="tech-roulette-ball-runner absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]" />
+                  </div>
+                ) : (
+                  <div className="pointer-events-none absolute aspect-square w-[96%] max-w-[25rem] rounded-full">
+                    <span className="tech-roulette-idle-ball absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 shadow-[0_0_14px_rgba(255,255,255,0.75),inset_-3px_-4px_5px_rgba(0,0,0,0.3)]" />
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-4">
@@ -569,10 +554,10 @@ export function TechRoulette() {
                       Sonuç gizli
                     </p>
                     <p className="mt-3 text-lg font-semibold text-amber-50">
-                      Top {SPIN_ANIMATION_SECONDS} saniyelik turunu bitirince sayı açıklanacak.
+                      Top çerçeveden ters yönde dönüyor, yavaşça içeri girip {SPIN_ANIMATION_SECONDS}. saniyede kazanan kutucuğa oturacak.
                     </p>
                     <p className="mt-2 text-sm text-white/55">
-                      Kazanan numara top durmadan ekranda veya son sayılar şeridinde gösterilmez.
+                      Rulet kendi etrafında hiç durmadan dönmeye devam eder; top iç kutucuğa yerleşince sonuç açıklanır.
                     </p>
                   </div>
                 ) : result && (
