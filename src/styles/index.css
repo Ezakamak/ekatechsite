@@ -97,9 +97,9 @@
 
 
 .tech-roulette-wheel {
-  animation: tech-roulette-wheel-spin var(--wheel-spin-seconds, 7s) linear
-    infinite;
-  background-position: calc(var(--wheel-uv-offset, 0) * 100%) 50%;
+  overflow: hidden;
+  transform: translateZ(0);
+  will-change: contents;
 }
 
 .tech-roulette-idle-ball {
