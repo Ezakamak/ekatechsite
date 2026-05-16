@@ -90,6 +90,17 @@ const TABLE_ROWS = [
   [2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35],
   [1, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34],
 ];
+const WHEEL_SPIN_MS = 4_200;
+const BALL_REST_POSITION = { x: 0, y: -134 };
+
+type BallPhysicsPath = {
+  id: string;
+  x: number[];
+  y: number[];
+  scale: number[];
+  opacity: number[];
+  times: number[];
+};
 
 function formatTc(value: number, locale: string) {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -112,6 +123,74 @@ function buildWheelGradient() {
     const end = ((index + 1) * sector).toFixed(3);
     return `${color} ${start}deg ${end}deg`;
   }).join(", ")})`;
+}
+
+function seededRandom(seed: number) {
+  let value = seed >>> 0;
+  return () => {
+    value += 0x6d2b79f5;
+    let next = value;
+    next = Math.imul(next ^ (next >>> 15), next | 1);
+    next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
+    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function ballPoint(angleDegrees: number, radius: number) {
+  const radians = (angleDegrees * Math.PI) / 180;
+  return {
+    x: Math.sin(radians) * radius,
+    y: -Math.cos(radians) * radius,
+  };
+}
+
+function buildBallPhysicsPath(winningNumber: number, roundId?: number): BallPhysicsPath {
+  const sector = 360 / ROULETTE_WHEEL.length;
+  const wheelIndex = Math.max(0, ROULETTE_WHEEL.indexOf(winningNumber));
+  const random = seededRandom((Number(roundId || 0) + 1) * 4099 + winningNumber * 97);
+  const startAngle = 35 + random() * 320;
+  const revolutions = 4.15 + random() * 1.35;
+  const direction = random() > 0.5 ? 1 : -1;
+  const settleJitter = (random() - 0.5) * sector * 0.28;
+  const x: number[] = [];
+  const y: number[] = [];
+  const scale: number[] = [];
+  const opacity: number[] = [];
+  const times: number[] = [];
+
+  for (let index = 0; index <= 14; index += 1) {
+    const t = index / 14;
+    const easing = 1 - Math.pow(1 - t, 2.35);
+    const chatter = Math.sin(t * Math.PI * (6 + random() * 4)) * sector * (1 - t) * 0.22;
+    const radius = 139 - 18 * Math.pow(t, 1.7) + Math.sin(t * Math.PI * 9) * (1 - t) * 8;
+    const angle = startAngle + direction * (revolutions * 360 * easing + chatter);
+    const point = ballPoint(angle, radius);
+    x.push(point.x);
+    y.push(point.y);
+    scale.push(0.92 + Math.sin(t * Math.PI * 8) * 0.07);
+    opacity.push(1);
+    times.push(t * 0.74);
+  }
+
+  const bounceAngles = [direction * sector * 0.82, direction * -sector * 0.48, direction * sector * 0.3, settleJitter, 0];
+  const bounceRadii = [125, 137, 129, 134, 134];
+  bounceAngles.forEach((angle, index) => {
+    const point = ballPoint(angle, bounceRadii[index]);
+    x.push(point.x);
+    y.push(point.y);
+    scale.push(index % 2 === 0 ? 1.08 : 0.91);
+    opacity.push(1);
+    times.push([0.8, 0.87, 0.93, 0.975, 1][index]);
+  });
+
+  return {
+    id: `${roundId || "local"}-${winningNumber}-${wheelIndex}`,
+    x,
+    y,
+    scale,
+    opacity,
+    times,
+  };
 }
 
 function tableBetKey(type: string, value?: number | string | null) {
@@ -147,7 +226,9 @@ export function TechRoulette() {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [wheelRotation, setWheelRotation] = useState(0);
-  const [lastAnimatedRoundId, setLastAnimatedRoundId] = useState<number | null>(null);
+  const [ballPath, setBallPath] = useState<BallPhysicsPath | null>(null);
+  const lastAnimatedRoundIdRef = useRef<number | null>(null);
+  const spinTimeoutRef = useRef<number | null>(null);
   const [message, setMessage] = useState("SQL ekatechwallet bakiyesi yükleniyor...");
   const [inventory, setInventory] = useState<RouletteInventoryItem[]>([]);
   const [stakeMode, setStakeMode] = useState<"coin" | "item">("coin");
@@ -199,10 +280,10 @@ export function TechRoulette() {
         setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
         setInventory(Array.isArray(data?.inventory) ? data.inventory : []);
         setSecondsLeft(Math.max(0, Number(data?.currentRound?.secondsLeft || 0)));
-        if (data?.lastResolvedRound?.winning_number != null && data.lastResolvedRound.id !== lastAnimatedRoundId) {
+        if (data?.lastResolvedRound?.winning_number != null && data.lastResolvedRound.id !== lastAnimatedRoundIdRef.current) {
           setResult(data.lastResolvedRound);
-          setLastAnimatedRoundId(data.lastResolvedRound.id);
-          animateWheelTo(Number(data.lastResolvedRound.winning_number));
+          lastAnimatedRoundIdRef.current = data.lastResolvedRound.id;
+          animateWheelTo(Number(data.lastResolvedRound.winning_number), Number(data.lastResolvedRound.id || 0));
         }
         setMessage("SQL senkronlu masa, geri sayım ve ortak çipler hazır.");
       })
@@ -212,21 +293,29 @@ export function TechRoulette() {
   useEffect(() => {
     loadState();
     const poll = window.setInterval(loadState, 2500);
-    return () => window.clearInterval(poll);
-  }, [lastAnimatedRoundId]);
+    return () => {
+      window.clearInterval(poll);
+      if (spinTimeoutRef.current) window.clearTimeout(spinTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setSecondsLeft((current) => Math.max(0, current - 1)), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const animateWheelTo = (winningNumber: number) => {
+  const animateWheelTo = (winningNumber: number, roundId?: number) => {
     const wheelIndex = Math.max(0, ROULETTE_WHEEL.indexOf(winningNumber));
     const sector = 360 / ROULETTE_WHEEL.length;
-    const sectorCenter = wheelIndex * sector + sector / 2;
-    setWheelRotation((current) => Math.ceil(current / 360) * 360 + 360 * 5 - sectorCenter);
+    const pocketCenter = (wheelIndex + 0.5) * sector;
+    setBallPath(buildBallPhysicsPath(winningNumber, roundId));
+    setWheelRotation((current) => Math.ceil(current / 360) * 360 + 360 * 6 - pocketCenter);
     setSpinning(true);
-    window.setTimeout(() => setSpinning(false), 3200);
+    if (spinTimeoutRef.current) window.clearTimeout(spinTimeoutRef.current);
+    spinTimeoutRef.current = window.setTimeout(() => {
+      setSpinning(false);
+      setBallPath(null);
+    }, WHEEL_SPIN_MS);
     playOffSound("reel");
   };
 
@@ -295,7 +384,7 @@ export function TechRoulette() {
                 <div className="absolute top-4 z-20 h-0 w-0 border-x-[13px] border-t-[24px] border-x-transparent border-t-amber-200 drop-shadow-[0_0_12px_rgba(251,191,36,0.9)]" />
                 <motion.div
                   animate={{ rotate: wheelRotation }}
-                  transition={{ duration: 2.4, ease: [0.2, 0.85, 0.2, 1] }}
+                  transition={{ duration: WHEEL_SPIN_MS / 1000, ease: [0.12, 0.86, 0.18, 1] }}
                   className="relative aspect-square w-full max-w-[24rem] rounded-full border-[12px] border-amber-300 bg-zinc-950 shadow-2xl shadow-black before:absolute before:inset-[12%] before:rounded-full before:border before:border-white/15 before:bg-[radial-gradient(circle,#202020_0_38%,transparent_39%)] after:absolute after:inset-[43%] after:rounded-full after:bg-amber-100 after:shadow-[0_0_24px_rgba(251,191,36,0.8)]"
                   style={{ background: wheelGradient }}
                 >
@@ -313,17 +402,15 @@ export function TechRoulette() {
                     );
                   })}
                 </motion.div>
-                <motion.div
-                  animate={{ rotate: -wheelRotation * 1.22 }}
-                  transition={{ duration: 3.1, ease: [0.08, 0.72, 0.14, 1] }}
-                  className="pointer-events-none absolute aspect-square w-[78%] max-w-[19rem] rounded-full"
-                >
+                <div className="pointer-events-none absolute aspect-square w-[78%] max-w-[19rem] rounded-full">
                   <motion.span
-                    animate={spinning ? { scale: [1, 0.86, 1.08, 0.94, 1], y: [0, 7, -5, 3, 0] } : { scale: 1, y: 0 }}
-                    transition={{ duration: 0.65, repeat: spinning ? Infinity : 0, ease: "easeInOut" }}
-                    className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                    key={ballPath?.id || "resting-ball"}
+                    initial={false}
+                    animate={ballPath ? { x: ballPath.x, y: ballPath.y, scale: ballPath.scale, opacity: ballPath.opacity } : { x: BALL_REST_POSITION.x, y: BALL_REST_POSITION.y, scale: 1, opacity: 1 }}
+                    transition={ballPath ? { duration: WHEEL_SPIN_MS / 1000, times: ballPath.times, ease: "easeOut" } : { duration: 0.28, ease: "easeOut" }}
+                    className="absolute left-1/2 top-1/2 z-30 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_18px_rgba(255,255,255,0.98),inset_-3px_-4px_5px_rgba(0,0,0,0.35)] ring-2 ring-black/20"
                   />
-                </motion.div>
+                </div>
               </div>
 
               <div className="grid gap-4">
@@ -406,7 +493,7 @@ export function TechRoulette() {
                   <p className="mb-3 text-xs uppercase tracking-[0.18em] text-white/45">Rulet eşyası</p>
                   <div className="grid gap-2">
                     {inventory.filter((item) => item.status === "available").length === 0 ? (
-                      <p className="rounded-2xl border border-amber-200/20 bg-amber-200/10 p-3 text-sm text-amber-100">OFF Hub mağazasından tesbih, çakı veya racon eşyası al; burada para yerine masaya koy.</p>
+                      <p className="rounded-2xl border border-amber-200/20 bg-amber-200/10 p-3 text-sm text-amber-100">OFF Hub Mağaza'dan tesbih, çakı veya racon eşyası al; burada para yerine masaya koy.</p>
                     ) : inventory.filter((item) => item.status === "available").map((item) => (
                       <button key={item.id} type="button" onClick={() => setSelectedItemId(item.id)} className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${selectedItemId === item.id ? "border-amber-200 bg-amber-200 text-black" : "border-white/10 bg-white/10 text-white hover:bg-white/15"}`}>
                         <span><span className="mr-2 text-xl">{item.emoji}</span>{item.item_name}</span>
@@ -414,6 +501,7 @@ export function TechRoulette() {
                       </button>
                     ))}
                   </div>
+                  <p className="mt-3 rounded-2xl border border-emerald-200/20 bg-emerald-200/10 p-3 text-xs leading-5 text-emerald-50/75">Racon eşyası kazanırsa değeri kadar TC cüzdanına eklenir ve eşya envanterde kalır; kaybederse eşya gider, TC kazanılmaz.</p>
                 </div>
               )}
 
