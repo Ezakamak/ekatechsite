@@ -92,13 +92,21 @@ function integrateNonLinearDrag(
   return { angle, velocity };
 }
 
+function signedSafeAngle(angle: number, fallbackSign: number) {
+  // Ball travel is counter-clockwise (negative degrees), so preserve the sign
+  // while guarding tiny values. Otherwise the fitting loop flips velocity to
+  // a massive positive number and the visual spin never decelerates.
+  const sign = Math.sign(angle) || Math.sign(fallbackSign) || 1;
+  return sign * Math.max(1, Math.abs(angle));
+}
+
 function fitInverseTrajectory(distance: number, seconds: number, seed: number) {
   let drag = 0.1 + (seed % 17) * 0.003;
   let velocity = solveVelocityForLinearDrag(distance, drag, seconds);
 
   for (let pass = 0; pass < 5; pass += 1) {
     const simulated = integrateNonLinearDrag(velocity, drag, seconds, Math.abs(velocity));
-    const correction = distance / Math.max(1, simulated.angle);
+    const correction = distance / signedSafeAngle(simulated.angle, distance);
     velocity *= correction;
     drag = Math.max(0.045, Math.min(0.18, drag * (1 + (1 - correction) * 0.08)));
   }
