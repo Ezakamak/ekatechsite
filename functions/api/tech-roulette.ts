@@ -5,7 +5,7 @@ const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 
 const ALLOWED_CHIPS = new Set([1_000_000, 10_000_000, 100_000_000, 1_000_000_000]);
 const BET_LIMITS = { min: 1_000_000, max: 10_000_000_000 };
 
-type RouletteBetType = "straight" | "red" | "black" | "odd" | "even" | "column" | "dozen";
+type RouletteBetType = "straight" | "red" | "black" | "odd" | "even" | "low" | "high" | "column" | "dozen";
 
 type RouletteBet = {
   type: RouletteBetType;
@@ -118,7 +118,7 @@ export async function onRequestPost(context: any) {
 function parseBet(body: any): RouletteBet {
   const rawType = String(body?.type || body?.betType || "").toLowerCase();
   const type = rawType as RouletteBetType;
-  if (!["straight", "red", "black", "odd", "even", "column", "dozen"].includes(type)) throw new Error("Geçersiz rulet bahis türü.");
+  if (!["straight", "red", "black", "odd", "even", "low", "high", "column", "dozen"].includes(type)) throw new Error("Geçersiz rulet bahis türü.");
 
   const chipAmount = Math.floor(Number(body?.chipAmount || body?.chip || 0));
   const chipCount = Math.max(1, Math.min(10, Math.floor(Number(body?.chipCount || 1))));
@@ -170,6 +170,8 @@ function isWinningBet(bet: RouletteBet, winningNumber: number) {
   if (bet.type === "black") return !RED_NUMBERS.has(winningNumber);
   if (bet.type === "odd") return winningNumber % 2 === 1;
   if (bet.type === "even") return winningNumber % 2 === 0;
+  if (bet.type === "low") return winningNumber >= 1 && winningNumber <= 18;
+  if (bet.type === "high") return winningNumber >= 19 && winningNumber <= 36;
   if (bet.type === "column") return ((winningNumber - 1) % 3) + 1 === Number(bet.value);
   if (bet.type === "dozen") return Math.ceil(winningNumber / 12) === Number(bet.value);
   return false;
