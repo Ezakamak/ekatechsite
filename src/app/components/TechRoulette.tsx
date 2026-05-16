@@ -945,12 +945,31 @@ export function TechRoulette() {
                       background: wheelGradient,
                       transform: `rotate(${wheelPhiDegrees}deg)`,
                     }}
-                  />
+                  >
+                    {ROULETTE_WHEEL.map((number, index) => {
+                      const sectorCenter =
+                        index * WHEEL_SECTOR_DEGREES + WHEEL_SECTOR_DEGREES / 2;
+                      return (
+                        <span
+                          key={number}
+                          className="tech-roulette-pocket-label absolute inset-0 flex justify-center text-[0.62rem] font-black leading-none tracking-tight text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.95)] sm:text-xs"
+                          style={{ transform: `rotate(${sectorCenter}deg)` }}
+                        >
+                          <span className="mt-[6.5%] inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-white/25 bg-black/35 px-1 shadow-[inset_0_0_8px_rgba(255,255,255,0.12)] [transform:rotate(90deg)]">
+                            {number}
+                          </span>
+                        </span>
+                      );
+                    })}
+                    <div className="pointer-events-none absolute inset-[3.5%] rounded-full border-[3px] border-yellow-100/60 shadow-[inset_0_0_18px_rgba(253,224,71,0.35)]" />
+                    <div className="pointer-events-none absolute inset-[22%] rounded-full border-[10px] border-amber-900/80 bg-[radial-gradient(circle,#3a210f_0_36%,#120a05_37%_60%,transparent_61%)] shadow-[inset_0_0_24px_rgba(0,0,0,0.9),0_0_18px_rgba(245,158,11,0.25)]" />
+                  </div>
                   <div className="pointer-events-none absolute inset-[5%] z-10 rounded-full border-4 border-black/50" />
+                  <div className="pointer-events-none absolute inset-[15%] z-10 rounded-full border border-white/10" />
                   {pendingResult ? (
                     <div
                       key={`orbit-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
-                      className="tech-roulette-ball-orbit pointer-events-none absolute inset-0 z-20 rounded-full"
+                      className="tech-roulette-ball-orbit pointer-events-none absolute inset-0 z-40 rounded-full"
                       style={{
                         transform: `rotate(${trajectoryFrame.angle}deg)`,
                         ["--ball-orbit-end" as string]: `${trajectoryPlan?.targetAngle ?? ballOrbitEndForNumber(pendingResult.winning_number)}deg`,
@@ -958,9 +977,9 @@ export function TechRoulette() {
                       }}
                     >
                       <span
-                        className="tech-roulette-ball-runner absolute left-1/2 top-1/2 h-4 w-4 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                        className="tech-roulette-ball-runner absolute left-1/2 top-1/2 z-50 h-4 w-4 rounded-full border border-white bg-white shadow-[0_0_18px_rgba(255,255,255,1),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
                         style={{
-                          transform: `translate(-50%, -50%) translateY(clamp(-${(12.55 * trajectoryFrame.radius).toFixed(2)}rem, -${(50 * trajectoryFrame.radius).toFixed(2)}vw, -${(9.15 * trajectoryFrame.radius).toFixed(2)}rem)) scale(${(0.92 + trajectoryFrame.radius * 0.08).toFixed(3)})`,
+                          transform: `translate(-50%, -50%) translateY(clamp(-${(11.05 * trajectoryFrame.radius).toFixed(2)}rem, -${(45 * trajectoryFrame.radius).toFixed(2)}vw, -${(8.25 * trajectoryFrame.radius).toFixed(2)}rem)) scale(${(0.92 + trajectoryFrame.radius * 0.08).toFixed(3)})`,
                         }}
                       />
                     </div>
@@ -968,7 +987,7 @@ export function TechRoulette() {
                 </div>
                 {!pendingResult ? (
                   <div className="pointer-events-none absolute aspect-square w-[96%] max-w-[25rem] rounded-full">
-                    <span className="tech-roulette-idle-ball absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 shadow-[0_0_14px_rgba(255,255,255,0.75),inset_-3px_-4px_5px_rgba(0,0,0,0.3)]" />
+                    <span className="tech-roulette-idle-ball absolute left-1/2 top-1/2 z-50 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-white shadow-[0_0_16px_rgba(255,255,255,0.9),inset_-3px_-4px_5px_rgba(0,0,0,0.3)]" />
                   </div>
                 ) : null}
               </div>
