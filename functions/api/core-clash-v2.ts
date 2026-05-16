@@ -10,7 +10,7 @@ const INACTIVE_MATCH_TIMEOUT_MINUTES = 5;
 export const TURN_SECONDS = 20;
 
 type CardType = "attack" | "defense" | "utility" | "trap" | "overload";
-type Card = { id: string; name: string; type: CardType; cost: number; tags?: string[]; description?: string };
+type Card = { id: string; name: string; type: CardType; cost: number; tags?: string[]; description?: string; text?: string };
 type PlayerState = { id: number; user_id: number; side: "creator" | "opponent"; hp: number; energy: number; heat: number; deck_json: string; hand_json: string; discard_json: string; energy_delta_next?: number; draw_block_next?: number; entered_at?: string | null };
 
 const CARD_DESCRIPTIONS: Record<string, string> = {
@@ -63,7 +63,7 @@ const CARD_DESCRIPTIONS: Record<string, string> = {
 };
 
 function withDescriptions<T extends Record<string, Card>>(cards: T): T {
-  return Object.fromEntries(Object.entries(cards).map(([id, card]) => [id, { ...card, description: CARD_DESCRIPTIONS[id] }])) as T;
+  return Object.fromEntries(Object.entries(cards).map(([id, card]) => [id, { ...card, description: CARD_DESCRIPTIONS[id], text: CARD_DESCRIPTIONS[id] }])) as T;
 }
 
 export const CARDS: Record<string, Card> = withDescriptions({
