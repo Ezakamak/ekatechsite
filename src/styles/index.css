@@ -4,6 +4,7 @@
 @import './off-games-mobile.css';
 @import './core-clash-effects.css';
 @import './market-academy.css';
+@import './tech-roulette.css';
 @keyframes chip-pop {
   0% {
     opacity: 0;
@@ -26,85 +27,5 @@
   }
   50% {
     transform: translateY(-2px) rotate(1deg);
-  }
-}
-
-@keyframes tech-roulette-wheel-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes tech-roulette-idle-ball-orbit {
-  from {
-    transform: translate(-50%, -50%) rotate(0deg)
-      translateY(clamp(-12.25rem, -49vw, -8.9rem));
-  }
-  to {
-    transform: translate(-50%, -50%) rotate(-360deg)
-      translateY(clamp(-12.25rem, -49vw, -8.9rem));
-  }
-}
-
-@keyframes tech-roulette-ball-hop {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.65));
-  }
-  50% {
-    filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.95));
-  }
-}
-
-
-.tech-roulette-wheel {
-  animation: tech-roulette-wheel-spin var(--wheel-spin-seconds, 7s) linear
-    infinite;
-  image-rendering: auto;
-  transform-style: preserve-3d;
-  backface-visibility: hidden;
-  contain: layout paint style;
-}
-
-.tech-roulette-pocket-label {
-  transform: translate(-50%, -50%) rotate(var(--pocket-angle, 0deg))
-    translateY(clamp(-10.35rem, -42.5vw, -7.45rem))
-    scale(var(--pocket-manual-scale, 1));
-  transform-origin: center;
-  transform-style: preserve-3d;
-  backface-visibility: hidden;
-  contain: layout paint style;
-  text-rendering: geometricPrecision;
-  -webkit-font-smoothing: antialiased;
-}
-
-.tech-roulette-idle-ball {
-  animation: tech-roulette-idle-ball-orbit 3.8s linear infinite;
-}
-
-.tech-roulette-physics-orbit {
-  transform: rotate(var(--ball-angle, 0deg));
-  transform-origin: center;
-  will-change: transform;
-}
-
-.tech-roulette-physics-runner {
-  transform: translate(-50%, -50%)
-    translateY(var(--ball-radius, clamp(-12.55rem, -50vw, -9.15rem)))
-    scale(var(--ball-scale, 1));
-  transform-origin: center;
-  will-change: transform, filter;
-  animation: tech-roulette-ball-hop 0.55s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tech-roulette-wheel,
-  .tech-roulette-idle-ball,
-  .tech-roulette-physics-runner {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
   }
 }
