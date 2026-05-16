@@ -625,6 +625,8 @@ export function TechRoulette() {
   const [wheelPhiDegrees, setWheelPhiDegrees] = useState(WHEEL_ZERO_REFERENCE_DEGREES);
   const animationFrameRef = useRef<number | null>(null);
   const spinTimeoutRef = useRef<number | null>(null);
+  const spinningRef = useRef(false);
+  const lastAnimatedRoundIdRef = useRef<number | null>(null);
   const [spinSequence, setSpinSequence] = useState(0);
   const [lastAnimatedRoundId, setLastAnimatedRoundId] = useState<number | null>(
     null,
@@ -665,6 +667,14 @@ export function TechRoulette() {
   }, [betType, column, dozen, straightNumber]);
 
   const selectedBetLabel = describeBet(betType, betValue);
+  useEffect(() => {
+    spinningRef.current = spinning;
+  }, [spinning]);
+
+  useEffect(() => {
+    lastAnimatedRoundIdRef.current = lastAnimatedRoundId;
+  }, [lastAnimatedRoundId]);
+
   const bettingOpen = !spinning && !!currentRound && secondsLeft > 1;
 
   const selectBet = (bet: BoardBet) => {
@@ -697,19 +707,26 @@ export function TechRoulette() {
         setRecentNumbers(numbers);
         const hasNewResolvedRound =
           data?.lastResolvedRound?.winning_number != null &&
-          data.lastResolvedRound.id !== lastAnimatedRoundId;
-        if (numbers[0] && !hasNewResolvedRound && !pendingResult)
+          data.lastResolvedRound.id !== lastAnimatedRoundIdRef.current;
+        const spinLocked = spinningRef.current || hasNewResolvedRound;
+        if (numbers[0] && !hasNewResolvedRound && !spinLocked)
           setResult(numbers[0]);
-        setCurrentRound(data?.currentRound || null);
-        setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
-        setMyBets(Array.isArray(data?.myBets) ? data.myBets : []);
+        if (spinLocked) {
+          setCurrentRound(null);
+          setSecondsLeft(0);
+        } else {
+          setCurrentRound(data?.currentRound || null);
+          setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
+          setMyBets(Array.isArray(data?.myBets) ? data.myBets : []);
+          setSecondsLeft(
+            Math.max(0, Number(data?.currentRound?.secondsLeft || 0)),
+          );
+        }
         setInventory(Array.isArray(data?.inventory) ? data.inventory : []);
-        setSecondsLeft(
-          Math.max(0, Number(data?.currentRound?.secondsLeft || 0)),
-        );
         if (hasNewResolvedRound) {
           setPendingResult(data.lastResolvedRound);
           setLastAnimatedRoundId(data.lastResolvedRound.id);
+          lastAnimatedRoundIdRef.current = data.lastResolvedRound.id;
           animateWheelTo(data.lastResolvedRound);
         }
         setMessage("SQL senkronlu masa, geri sayım ve ortak çipler hazır.");
@@ -758,8 +775,13 @@ export function TechRoulette() {
     setTrajectoryPlan(plan);
     setTrajectoryFrame({ angle: 0, radius: 1, progress: 0, done: false });
     setSpinSequence((current) => current + 1);
+    spinningRef.current = true;
     setSpinning(true);
     setPendingResult(resolvedRound);
+    setCurrentRound(null);
+    setTableBets([]);
+    setMyBets([]);
+    setSecondsLeft(0);
 
     const tick = (timestamp: number) => {
       const deltaSeconds = (timestamp - lastTimestamp) / 1000;
@@ -779,10 +801,12 @@ export function TechRoulette() {
 
       animationFrameRef.current = null;
       setTrajectoryFrame({ ...frame, done: true });
+      spinningRef.current = false;
       setSpinning(false);
       setPendingResult(null);
       setResult(resolvedRound);
       playOffSound("win");
+      window.setTimeout(loadState, 150);
     };
 
     animationFrameRef.current = window.requestAnimationFrame(tick);
@@ -796,11 +820,15 @@ export function TechRoulette() {
         progress: 1,
         done: true,
       });
-      setWheelPhiDegrees((WHEEL_ZERO_REFERENCE_DEGREES + plan.pocketCenterAngle) % 360);
+      setWheelPhiDegrees(
+        (WHEEL_ZERO_REFERENCE_DEGREES + plan.pocketCenterAngle) % 360,
+      );
+      spinningRef.current = false;
       setSpinning(false);
       setPendingResult(null);
       setResult(resolvedRound);
       playOffSound("win");
+      window.setTimeout(loadState, 150);
     }, (SPIN_ANIMATION_SECONDS + 0.25) * 1000);
     playOffSound("reel");
   };
