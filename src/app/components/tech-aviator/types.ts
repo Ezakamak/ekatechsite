@@ -37,6 +37,7 @@ export interface GameState {
   currentMultiplier: number;
   startedAt: number;
   bettingSeconds: number;
+  serverNow?: number;
 }
 
 export interface BetPanelState {
