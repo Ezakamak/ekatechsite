@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -135,6 +136,14 @@ const ROULETTE_WHEEL = [
   16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26,
 ];
 const WHEEL_SECTOR_DEGREES = 360 / ROULETTE_WHEEL.length;
+const WHEEL_SECTOR_RADIANS = (Math.PI * 2) / ROULETTE_WHEEL.length;
+const WHEEL_ZERO_REFERENCE_DEGREES = 0;
+const WHEEL_TEXTURE_ATLAS_WIDTH = 4096;
+const WHEEL_TEXTURE_TILE_SIZE = 128;
+const WHEEL_UV_EDGE_GUARD = 0.028;
+const WHEEL_MANUAL_RADIAL_SCALE = 0.965;
+const WHEEL_TEXEL_DENSITY_RINGS = 10;
+const WHEEL_ANISOTROPY_TARGET = 16;
 const SPIN_ANIMATION_SECONDS = 16;
 const WHEEL_IDLE_SPIN_SECONDS = 8;
 const BALL_ORBIT_TURNS = 7;
@@ -213,6 +222,385 @@ function initialTrajectoryFrame(winningNumber = 0): RouletteTrajectoryFrame {
 }
 
 
+type TechRouletteWheelWebGLProps = {
+  className?: string;
+  phiDegrees: number;
+  uvOffset: number;
+};
+
+type RouletteWheelGlResources = {
+  program: WebGLProgram;
+  positionBuffer: WebGLBuffer;
+  uvBuffer: WebGLBuffer;
+  indexBuffer: WebGLBuffer;
+  texture: WebGLTexture;
+  indexCount: number;
+  uniforms: {
+    phi: WebGLUniformLocation | null;
+    uvOffset: WebGLUniformLocation | null;
+    textureMap: WebGLUniformLocation | null;
+  };
+  attributes: {
+    position: number;
+    uv: number;
+  };
+};
+
+function createShader(gl: WebGLRenderingContext, type: number, source: string) {
+  const shader = gl.createShader(type);
+  if (!shader) throw new Error("Rulet shader oluşturulamadı.");
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader) || "Bilinmeyen shader hatası";
+    gl.deleteShader(shader);
+    throw new Error(info);
+  }
+
+  return shader;
+}
+
+function createProgram(
+  gl: WebGLRenderingContext,
+  vertexSource: string,
+  fragmentSource: string,
+) {
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  const program = gl.createProgram();
+  if (!program) throw new Error("Rulet WebGL programı oluşturulamadı.");
+
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const info = gl.getProgramInfoLog(program) || "Bilinmeyen program hatası";
+    gl.deleteProgram(program);
+    throw new Error(info);
+  }
+
+  return program;
+}
+
+function rouletteColor(number: number) {
+  if (number === 0) return "#16a34a";
+  return RED_NUMBERS.has(number) ? "#dc2626" : "#111827";
+}
+
+function createRouletteTextureCanvas() {
+  const canvas = document.createElement("canvas");
+  canvas.width = WHEEL_TEXTURE_ATLAS_WIDTH;
+  canvas.height = WHEEL_TEXTURE_TILE_SIZE;
+  const tileWidth = canvas.width / ROULETTE_WHEEL.length;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ROULETTE_WHEEL.forEach((number, index) => {
+    const x = index * tileWidth;
+    const center = x + tileWidth / 2;
+    const guard = tileWidth * WHEEL_UV_EDGE_GUARD;
+
+    ctx.fillStyle = rouletteColor(number);
+    ctx.fillRect(x, 0, tileWidth, WHEEL_TEXTURE_TILE_SIZE);
+
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    ctx.fillRect(x, 0, 2, WHEEL_TEXTURE_TILE_SIZE);
+    ctx.fillRect(x + tileWidth - 2, 0, 2, WHEEL_TEXTURE_TILE_SIZE);
+
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.fillRect(x + guard, guard, tileWidth - guard * 2, 8);
+    ctx.fillRect(
+      x + guard,
+      WHEEL_TEXTURE_TILE_SIZE - guard - 8,
+      tileWidth - guard * 2,
+      8,
+    );
+
+    ctx.save();
+    ctx.translate(center, WHEEL_TEXTURE_TILE_SIZE * 0.52);
+    ctx.rotate(Math.PI / 2);
+    ctx.font = "900 54px Inter, ui-sans-serif, system-ui, sans-serif";
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = "rgba(0,0,0,0.88)";
+    ctx.strokeText(String(number), 0, 0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(String(number), 0, 0);
+    ctx.restore();
+  });
+
+  return canvas;
+}
+
+function buildRouletteWheelMesh() {
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const innerRadius = 0.34;
+  const outerRadius = 0.96;
+  const radialSteps = WHEEL_TEXEL_DENSITY_RINGS;
+  const segmentCount = ROULETTE_WHEEL.length;
+
+  for (let segment = 0; segment < segmentCount; segment += 1) {
+    const manualUStart = (segment + WHEEL_UV_EDGE_GUARD) / segmentCount;
+    const manualUEnd = (segment + 1 - WHEEL_UV_EDGE_GUARD) / segmentCount;
+    const angleStart =
+      segment * WHEEL_SECTOR_RADIANS +
+      (WHEEL_ZERO_REFERENCE_DEGREES * Math.PI) / 180;
+    const angleEnd = angleStart + WHEEL_SECTOR_RADIANS;
+    const baseVertex = positions.length / 2;
+
+    for (let radial = 0; radial <= radialSteps; radial += 1) {
+      const radialT = radial / radialSteps;
+      const easedRadius =
+        innerRadius +
+        (outerRadius - innerRadius) * Math.pow(radialT, WHEEL_MANUAL_RADIAL_SCALE);
+      const v = 1 - radialT;
+
+      [angleStart, angleEnd].forEach((angle, edge) => {
+        positions.push(Math.sin(angle) * easedRadius, -Math.cos(angle) * easedRadius);
+        uvs.push(edge === 0 ? manualUStart : manualUEnd, v);
+      });
+    }
+
+    for (let radial = 0; radial < radialSteps; radial += 1) {
+      const row = baseVertex + radial * 2;
+      indices.push(row, row + 1, row + 2, row + 1, row + 3, row + 2);
+    }
+  }
+
+  return {
+    positions: new Float32Array(positions),
+    uvs: new Float32Array(uvs),
+    indices: new Uint16Array(indices),
+  };
+}
+
+function createRouletteWheelResources(gl: WebGLRenderingContext) {
+  const program = createProgram(
+    gl,
+    `
+      precision highp float;
+      attribute vec2 a_position;
+      attribute vec2 a_uv;
+      uniform float u_phi;
+      uniform float u_uvOffset;
+      varying vec2 v_uv;
+
+      void main() {
+        float s = sin(u_phi);
+        float c = cos(u_phi);
+        vec2 lockedPosition = vec2(a_position.x, a_position.y);
+
+        gl_Position = vec4(lockedPosition, 0.0, 1.0);
+        v_uv = vec2(fract(a_uv.x + (u_phi / 6.28318530718) + u_uvOffset), a_uv.y);
+      }
+    `,
+    `
+      precision mediump float;
+      uniform sampler2D u_textureMap;
+      varying vec2 v_uv;
+
+      void main() {
+        vec4 texel = texture2D(u_textureMap, v_uv);
+        gl_FragColor = texel;
+      }
+    `,
+  );
+
+  const mesh = buildRouletteWheelMesh();
+  const positionBuffer = gl.createBuffer();
+  const uvBuffer = gl.createBuffer();
+  const indexBuffer = gl.createBuffer();
+  const texture = gl.createTexture();
+  if (!positionBuffer || !uvBuffer || !indexBuffer || !texture) {
+    throw new Error("Rulet WebGL buffer/texture kaynakları oluşturulamadı.");
+  }
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, mesh.uvs, gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
+
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    createRouletteTextureCanvas(),
+  );
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.generateMipmap(gl.TEXTURE_2D);
+
+  const anisotropy = gl.getExtension("EXT_texture_filter_anisotropic");
+  if (anisotropy) {
+    const maxAnisotropy = gl.getParameter(
+      anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT,
+    ) as number;
+    gl.texParameterf(
+      gl.TEXTURE_2D,
+      anisotropy.TEXTURE_MAX_ANISOTROPY_EXT,
+      Math.min(WHEEL_ANISOTROPY_TARGET, maxAnisotropy),
+    );
+  }
+
+  return {
+    program,
+    positionBuffer,
+    uvBuffer,
+    indexBuffer,
+    texture,
+    indexCount: mesh.indices.length,
+    uniforms: {
+      phi: gl.getUniformLocation(program, "u_phi"),
+      uvOffset: gl.getUniformLocation(program, "u_uvOffset"),
+      textureMap: gl.getUniformLocation(program, "u_textureMap"),
+    },
+    attributes: {
+      position: gl.getAttribLocation(program, "a_position"),
+      uv: gl.getAttribLocation(program, "a_uv"),
+    },
+  } satisfies RouletteWheelGlResources;
+}
+
+function renderRouletteWheel(
+  gl: WebGLRenderingContext,
+  resources: RouletteWheelGlResources,
+  phiDegrees: number,
+  uvOffset: number,
+) {
+  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(resources.program);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, resources.positionBuffer);
+  gl.enableVertexAttribArray(resources.attributes.position);
+  gl.vertexAttribPointer(resources.attributes.position, 2, gl.FLOAT, false, 0, 0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, resources.uvBuffer);
+  gl.enableVertexAttribArray(resources.attributes.uv);
+  gl.vertexAttribPointer(resources.attributes.uv, 2, gl.FLOAT, false, 0, 0);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, resources.texture);
+  gl.uniform1i(resources.uniforms.textureMap, 0);
+  gl.uniform1f(resources.uniforms.phi, (phiDegrees * Math.PI) / 180);
+  gl.uniform1f(resources.uniforms.uvOffset, uvOffset);
+
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, resources.indexBuffer);
+  gl.drawElements(gl.TRIANGLES, resources.indexCount, gl.UNSIGNED_SHORT, 0);
+}
+
+function TechRouletteWheelWebGL({
+  className,
+  phiDegrees,
+  uvOffset,
+}: TechRouletteWheelWebGLProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const resourcesRef = useRef<RouletteWheelGlResources | null>(null);
+  const [webGlReady, setWebGlReady] = useState(true);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const gl = canvas.getContext("webgl", {
+      alpha: true,
+      antialias: true,
+      depth: false,
+      premultipliedAlpha: true,
+    });
+
+    if (!gl) {
+      setWebGlReady(false);
+      return;
+    }
+
+    const resize = () => {
+      const { width, height } = canvas.getBoundingClientRect();
+      const size = Math.max(1, Math.floor(Math.min(width, height) * window.devicePixelRatio));
+      if (canvas.width !== size || canvas.height !== size) {
+        canvas.width = size;
+        canvas.height = size;
+      }
+    };
+
+    try {
+      resourcesRef.current = createRouletteWheelResources(gl);
+      resize();
+      renderRouletteWheel(gl, resourcesRef.current, phiDegrees, uvOffset);
+      setWebGlReady(true);
+    } catch (error) {
+      console.error("Tech Roulette WebGL wheel initialization failed", error);
+      setWebGlReady(false);
+    }
+
+    window.addEventListener("resize", resize);
+    return () => {
+      window.removeEventListener("resize", resize);
+      if (!resourcesRef.current) return;
+      gl.deleteProgram(resourcesRef.current.program);
+      gl.deleteBuffer(resourcesRef.current.positionBuffer);
+      gl.deleteBuffer(resourcesRef.current.uvBuffer);
+      gl.deleteBuffer(resourcesRef.current.indexBuffer);
+      gl.deleteTexture(resourcesRef.current.texture);
+      resourcesRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const resources = resourcesRef.current;
+    const gl = canvas?.getContext("webgl");
+    if (!canvas || !gl || !resources) return;
+
+    const { width, height } = canvas.getBoundingClientRect();
+    const size = Math.max(1, Math.floor(Math.min(width, height) * window.devicePixelRatio));
+    if (canvas.width !== size || canvas.height !== size) {
+      canvas.width = size;
+      canvas.height = size;
+    }
+    renderRouletteWheel(gl, resources, phiDegrees, uvOffset);
+  }, [phiDegrees, uvOffset]);
+
+  const fallbackStyle = useMemo<CSSProperties>(
+    () => ({
+      background: buildWheelGradient(),
+      transform: `rotate(${phiDegrees}deg)`,
+    }),
+    [phiDegrees],
+  );
+
+  return (
+    <>
+      <canvas
+        ref={canvasRef}
+        aria-hidden="true"
+        className={`${className || ""} ${webGlReady ? "" : "hidden"}`}
+      />
+      {!webGlReady ? (
+        <div aria-hidden="true" className={className} style={fallbackStyle} />
+      ) : null}
+    </>
+  );
+}
+
+
 export function TechRoulette() {
   const { language } = useLanguage();
   const locale = language === "tr" ? "tr-TR" : "en-US";
@@ -234,6 +622,7 @@ export function TechRoulette() {
     useState<RouletteTrajectoryPlan | null>(null);
   const [trajectoryFrame, setTrajectoryFrame] =
     useState<RouletteTrajectoryFrame>(() => initialTrajectoryFrame());
+  const [wheelPhiDegrees, setWheelPhiDegrees] = useState(WHEEL_ZERO_REFERENCE_DEGREES);
   const animationFrameRef = useRef<number | null>(null);
   const spinTimeoutRef = useRef<number | null>(null);
   const [spinSequence, setSpinSequence] = useState(0);
@@ -347,6 +736,22 @@ export function TechRoulette() {
   }, []);
 
   useEffect(() => {
+    let frameId: number | null = null;
+    const tickIdleWheel = (timestamp: number) => {
+      if (!spinning) {
+        const idlePhi = (timestamp / 1000 / WHEEL_IDLE_SPIN_SECONDS) * 360;
+        setWheelPhiDegrees(idlePhi % 360);
+      }
+      frameId = window.requestAnimationFrame(tickIdleWheel);
+    };
+
+    frameId = window.requestAnimationFrame(tickIdleWheel);
+    return () => {
+      if (frameId != null) window.cancelAnimationFrame(frameId);
+    };
+  }, [spinning]);
+
+  useEffect(() => {
     return () => {
       if (animationFrameRef.current != null)
         window.cancelAnimationFrame(animationFrameRef.current);
@@ -376,7 +781,12 @@ export function TechRoulette() {
       const deltaSeconds = (timestamp - lastTimestamp) / 1000;
       lastTimestamp = timestamp;
       const frame = advanceRouletteTrajectory(plan, runtime, deltaSeconds);
+      const easedWheelPhi =
+        (WHEEL_ZERO_REFERENCE_DEGREES +
+          (360 * 5 + plan.pocketCenterAngle) * frame.progress) %
+        360;
       setTrajectoryFrame(frame);
+      setWheelPhiDegrees(easedWheelPhi);
 
       if (!frame.done) {
         animationFrameRef.current = window.requestAnimationFrame(tick);
@@ -402,6 +812,7 @@ export function TechRoulette() {
         progress: 1,
         done: true,
       });
+      setWheelPhiDegrees((WHEEL_ZERO_REFERENCE_DEGREES + plan.pocketCenterAngle) % 360);
       setSpinning(false);
       setPendingResult(null);
       setResult(resolvedRound);
@@ -532,35 +943,20 @@ export function TechRoulette() {
               <div className="relative flex min-h-[26rem] items-center justify-center overflow-hidden rounded-[2rem] border border-amber-200/20 bg-[radial-gradient(circle_at_center,rgba(250,204,21,0.12),rgba(0,0,0,0.82)_62%)] p-5">
                 <div className="absolute top-4 z-20 h-0 w-0 border-x-[13px] border-t-[24px] border-x-transparent border-t-amber-200 drop-shadow-[0_0_12px_rgba(251,191,36,0.9)]" />
                 <div
-                  className="tech-roulette-wheel relative aspect-square w-full max-w-[24rem] rounded-full border-[12px] border-amber-300 bg-zinc-950 shadow-2xl shadow-black before:absolute before:inset-[12%] before:rounded-full before:border before:border-white/15 before:bg-[radial-gradient(circle,#202020_0_38%,transparent_39%)] after:absolute after:inset-[43%] after:rounded-full after:bg-amber-100 after:shadow-[0_0_24px_rgba(251,191,36,0.8)]"
+                  className="tech-roulette-wheel relative aspect-square w-full max-w-[24rem] rounded-full border-[12px] border-amber-300 bg-zinc-950 shadow-2xl shadow-black before:absolute before:inset-[12%] before:z-10 before:rounded-full before:border before:border-white/15 before:bg-[radial-gradient(circle,#202020_0_38%,transparent_39%)] after:absolute after:inset-[43%] after:z-20 after:rounded-full after:bg-amber-100 after:shadow-[0_0_24px_rgba(251,191,36,0.8)]"
                   style={{
-                    background: wheelGradient,
-                    backgroundPositionX: trajectoryPlan
-                      ? `calc(${trajectoryPlan.wheelUvOffset} * 100%)`
-                      : undefined,
                     ["--wheel-spin-seconds" as string]: `${WHEEL_IDLE_SPIN_SECONDS}s`,
                     ["--wheel-uv-offset" as string]: String(
                       trajectoryPlan?.wheelUvOffset || 0,
                     ),
                   }}
                 >
-                  <div className="absolute inset-[5%] rounded-full border-4 border-black/50" />
-                  {ROULETTE_WHEEL.map((number, index) => {
-                    const angle =
-                      index * WHEEL_SECTOR_DEGREES + WHEEL_SECTOR_DEGREES / 2;
-                    return (
-                      <span
-                        key={number}
-                        className="absolute left-1/2 top-1/2 z-10 flex h-6 w-6 origin-center -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-[0.58rem] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
-                        style={{
-                          transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(clamp(-10.35rem, -42.5vw, -7.45rem))`,
-                          transformOrigin: "center",
-                        }}
-                      >
-                        {number}
-                      </span>
-                    );
-                  })}
+                  <TechRouletteWheelWebGL
+                    className="absolute inset-0 rounded-full"
+                    phiDegrees={wheelPhiDegrees}
+                    uvOffset={WHEEL_ZERO_REFERENCE_DEGREES / 360}
+                  />
+                  <div className="pointer-events-none absolute inset-[5%] z-10 rounded-full border-4 border-black/50" />
                   {pendingResult ? (
                     <div
                       key={`orbit-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
