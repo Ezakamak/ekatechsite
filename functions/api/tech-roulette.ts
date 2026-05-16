@@ -2,8 +2,8 @@ const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 
 const ROULETTE_NUMBERS = Array.from({ length: 37 }, (_, index) => index);
 const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
-const ALLOWED_CHIPS = new Set([1_000_000, 10_000_000, 100_000_000, 1_000_000_000]);
-const BET_LIMITS = { min: 1_000_000, max: 10_000_000_000 };
+const ALLOWED_CHIPS = new Set([100, 1_000, 10_000]);
+const BET_LIMITS = { min: 100, max: 10_000 };
 
 type RouletteBetType = "straight" | "red" | "black" | "odd" | "even" | "low" | "high" | "column" | "dozen";
 
