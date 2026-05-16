@@ -97,11 +97,11 @@ export async function onRequestPost(context: any) {
     const beforeWallet = await getWallet(context, auth.user.id);
 
     if (bet.stakeType === "item") {
-      const consume = await context.env.DB
-        .prepare(`UPDATE off_shop_inventory SET status = 'used', used_at = datetime('now') WHERE id = ? AND user_id = ? AND status = 'available'`)
+      const reserve = await context.env.DB
+        .prepare(`UPDATE off_shop_inventory SET status = 'wagered' WHERE id = ? AND user_id = ? AND status = 'available'`)
         .bind(bet.stakeItemId, auth.user.id)
         .run();
-      if ((consume.meta?.changes || 0) < 1) return Response.json({ error: "Bu racon eşyası artık kullanılabilir değil." }, { status: 409 });
+      if ((reserve.meta?.changes || 0) < 1) return Response.json({ error: "Bu racon eşyası artık kullanılabilir değil." }, { status: 409 });
     } else {
       const debit = await context.env.DB
         .prepare(`UPDATE coin_wallets SET balance = COALESCE(balance, 0) - ?, updated_at = datetime('now') WHERE user_id = ? AND COALESCE(balance, 0) >= ?`)
@@ -183,6 +183,14 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
     const settlement = settleBet(bet, winningNumber);
     if (settlement.payoutAmount > 0) {
       await creditWallet(context, Number(row.user_id), settlement.payoutAmount, `Tech Roulette kazanç: ${winningNumber} / round ${open.id}${row.stake_item_label ? ` / ${row.stake_item_label}` : ""}`);
+    }
+    if ((row.stake_type || "coin") === "item" && row.stake_item_id) {
+      await context.env.DB
+        .prepare(settlement.won
+          ? `UPDATE off_shop_inventory SET status = 'available', used_at = NULL, roulette_bet_id = NULL WHERE id = ? AND user_id = ?`
+          : `UPDATE off_shop_inventory SET status = 'used', used_at = datetime('now') WHERE id = ? AND user_id = ?`)
+        .bind(row.stake_item_id, row.user_id)
+        .run();
     }
     const afterWallet = await getWallet(context, Number(row.user_id));
     await context.env.DB
@@ -339,8 +347,17 @@ async function parseBet(context: any, userId: number, body: any): Promise<Roulet
 }
 
 function settleBet(bet: RouletteBet, winningNumber: number) {
-  const oddsMultiplier = getOddsMultiplier(bet.type);
   const won = isWinningBet(bet, winningNumber);
+  if (bet.stakeType === "item") {
+    return {
+      won,
+      oddsMultiplier: won ? 1 : 0,
+      payoutAmount: won ? bet.amount : 0,
+      profitAmount: won ? bet.amount : 0,
+    };
+  }
+
+  const oddsMultiplier = getOddsMultiplier(bet.type);
   const payoutAmount = won ? bet.amount * (oddsMultiplier + 1) : 0;
   return {
     won,

@@ -223,8 +223,8 @@ export function TechRoulette() {
   const animateWheelTo = (winningNumber: number) => {
     const wheelIndex = Math.max(0, ROULETTE_WHEEL.indexOf(winningNumber));
     const sector = 360 / ROULETTE_WHEEL.length;
-    const sectorCenter = wheelIndex * sector + sector / 2;
-    setWheelRotation((current) => Math.ceil(current / 360) * 360 + 360 * 5 - sectorCenter);
+    const pocketCenter = (wheelIndex + 0.5) * sector;
+    setWheelRotation((current) => Math.ceil(current / 360) * 360 + 360 * 5 - pocketCenter);
     setSpinning(true);
     window.setTimeout(() => setSpinning(false), 3200);
     playOffSound("reel");
@@ -313,17 +313,13 @@ export function TechRoulette() {
                     );
                   })}
                 </motion.div>
-                <motion.div
-                  animate={{ rotate: -wheelRotation * 1.22 }}
-                  transition={{ duration: 3.1, ease: [0.08, 0.72, 0.14, 1] }}
-                  className="pointer-events-none absolute aspect-square w-[78%] max-w-[19rem] rounded-full"
-                >
+                <div className="pointer-events-none absolute aspect-square w-[78%] max-w-[19rem] rounded-full">
                   <motion.span
                     animate={spinning ? { scale: [1, 0.86, 1.08, 0.94, 1], y: [0, 7, -5, 3, 0] } : { scale: 1, y: 0 }}
                     transition={{ duration: 0.65, repeat: spinning ? Infinity : 0, ease: "easeInOut" }}
                     className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
                   />
-                </motion.div>
+                </div>
               </div>
 
               <div className="grid gap-4">
@@ -406,7 +402,7 @@ export function TechRoulette() {
                   <p className="mb-3 text-xs uppercase tracking-[0.18em] text-white/45">Rulet eşyası</p>
                   <div className="grid gap-2">
                     {inventory.filter((item) => item.status === "available").length === 0 ? (
-                      <p className="rounded-2xl border border-amber-200/20 bg-amber-200/10 p-3 text-sm text-amber-100">OFF Hub mağazasından tesbih, çakı veya racon eşyası al; burada para yerine masaya koy.</p>
+                      <p className="rounded-2xl border border-amber-200/20 bg-amber-200/10 p-3 text-sm text-amber-100">OFF Hub Mağaza'dan tesbih, çakı veya racon eşyası al; burada para yerine masaya koy.</p>
                     ) : inventory.filter((item) => item.status === "available").map((item) => (
                       <button key={item.id} type="button" onClick={() => setSelectedItemId(item.id)} className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${selectedItemId === item.id ? "border-amber-200 bg-amber-200 text-black" : "border-white/10 bg-white/10 text-white hover:bg-white/15"}`}>
                         <span><span className="mr-2 text-xl">{item.emoji}</span>{item.item_name}</span>
@@ -414,6 +410,7 @@ export function TechRoulette() {
                       </button>
                     ))}
                   </div>
+                  <p className="mt-3 rounded-2xl border border-emerald-200/20 bg-emerald-200/10 p-3 text-xs leading-5 text-emerald-50/75">Racon eşyası kazanırsa değeri kadar TC cüzdanına eklenir ve eşya envanterde kalır; kaybederse eşya gider, TC kazanılmaz.</p>
                 </div>
               )}
 

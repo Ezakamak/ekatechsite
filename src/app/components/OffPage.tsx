@@ -33,7 +33,7 @@ type Wallet = {
   updated_at?: string | null;
 };
 
-type GameKey = "hub" | "duel" | "cipher" | "raid" | "market" | "miner" | "droptech" | "mines" | "towers" | "aviator" | "roulette";
+type GameKey = "hub" | "shop" | "duel" | "cipher" | "raid" | "market" | "miner" | "droptech" | "mines" | "towers" | "aviator" | "roulette";
 
 type ShopCatalogItem = { slug: string; name: string; emoji: string; description: string; price: number; roulette_value: number; rarity: string };
 type ShopInventoryItem = { id: number; item_name: string; emoji: string; roulette_value: number; status: string };
@@ -98,8 +98,9 @@ export function OffPage() {
         currency: "Para birimi",
         fixedRewardLabel: "Oyun ödülleri",
         rewardRule: "Ödül kuralı",
-        shopTitle: "OFF Mağaza",
-        shopDesc: "Şimdilik pahalı tesbih, çakı ve racon aksesuarları var. Bu eşyalar sadece Tech Roulette masasına para yerine koymak için kullanılabilir.",
+        shopCardDesc: "Racon eşyası satın al, Tech Roulette için envanterini hazırla.",
+        shopTitle: "OFF Hub Mağaza",
+        shopDesc: "Racon eşyaları OFF Hub Mağaza’dan satın alınır; Tech Roulette masasına koyunca kazanırsan eşyanın değeri kadar TC alır ve eşyayı saklarsın, kaybedersen eşya gider.",
         buy: "Satın al",
         inventory: "Racon envanteri",
         onlyRoulette: "Sadece rulette bahis değeri",
@@ -145,8 +146,9 @@ export function OffPage() {
         currency: "Currency",
         fixedRewardLabel: "Game rewards",
         rewardRule: "Reward rule",
-        shopTitle: "OFF Shop",
-        shopDesc: "For now it sells expensive prayer beads, knives and swagger tools. These items can only be used as Tech Roulette table stakes instead of money.",
+        shopCardDesc: "Buy swagger items and prepare your inventory for Tech Roulette.",
+        shopTitle: "OFF Hub Shop",
+        shopDesc: "Buy swagger items from the OFF Hub Shop; when you stake one at Tech Roulette, a win pays its value in TC and keeps the item, while a loss consumes it.",
         buy: "Buy",
         inventory: "Swagger inventory",
         onlyRoulette: "Roulette stake only",
@@ -309,6 +311,12 @@ export function OffPage() {
             <TechDuelSync />
             <TechDuelBotAssist />
           </>
+        ) : activeGame === "shop" ? (
+          <main className="relative min-h-screen bg-black px-4 pb-24 pt-32 text-white sm:px-6">
+            <div className="mx-auto max-w-7xl">
+              <OffShopPanel catalog={shopCatalog} inventory={shopInventory} message={shopMessage} buyingSlug={buyingSlug} copy={copy} locale={tr ? "tr-TR" : "en-US"} onBuy={buyShopItem} />
+            </div>
+          </main>
         ) : activeGame === "cipher" ? <CipherBreak /> : activeGame === "raid" ? <CoreRaid /> : activeGame === "miner" ? <TechCoinMiner /> : activeGame === "droptech" ? <DropTech /> : activeGame === "mines" ? <TechCoinMines /> : activeGame === "towers" ? <EkaTowers /> : activeGame === "aviator" ? <TechAviator /> : activeGame === "roulette" ? <TechRoulette /> : <MarketAcademy />}
       </>
     );
@@ -348,9 +356,8 @@ export function OffPage() {
           </div>
         </section>
 
-        <OffShopPanel catalog={shopCatalog} inventory={shopInventory} message={shopMessage} buyingSlug={buyingSlug} copy={copy} locale={tr ? "tr-TR" : "en-US"} onBuy={buyShopItem} />
-
         <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <GameCard icon={<Store className="h-6 w-6" />} status={copy.available} title={copy.shopTitle} description={copy.shopCardDesc} accent="amber" buttonLabel={copy.open} onClick={() => { playOffSound("market"); setActiveGame("shop"); }} />
           <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("join"); setActiveGame("duel"); }} />
           <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("code"); setActiveGame("cipher"); }} />
           <GameCard icon={<Gamepad2 className="h-6 w-6" />} status={copy.available} title={copy.clashTitle} description={copy.clashDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("card"); navigateTo("/core-clash"); }} />
@@ -378,7 +385,7 @@ function OffShopPanel({ catalog, inventory, message, buyingSlug, copy, locale, o
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/25 bg-amber-200/10 px-4 py-2 text-sm text-amber-100">
             <Store className="h-4 w-4" /> {copy.shopTitle}
           </div>
-          <h2 className="mt-4 text-3xl font-medium text-white">Racon aletleri vitrini</h2>
+          <h2 className="mt-4 text-3xl font-medium text-white">OFF Hub Mağaza racon vitrini</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">{copy.shopDesc}</p>
           {message && <p className="mt-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-amber-100">{message}</p>}
         </div>
