@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS tech_roulette_bets (
   bet_type TEXT NOT NULL,
   bet_value TEXT,
   bet_amount INTEGER NOT NULL,
+  stake_type TEXT NOT NULL DEFAULT 'coin',
+  stake_item_id INTEGER,
+  stake_item_label TEXT,
   winning_number INTEGER,
   payout_multiplier INTEGER NOT NULL DEFAULT 0,
   payout_amount INTEGER NOT NULL DEFAULT 0,
@@ -36,6 +39,9 @@ CREATE TABLE IF NOT EXISTS tech_roulette_logs (
   bet_type TEXT NOT NULL,
   bet_value TEXT,
   bet_amount INTEGER NOT NULL,
+  stake_type TEXT NOT NULL DEFAULT 'coin',
+  stake_item_id INTEGER,
+  stake_item_label TEXT,
   winning_number INTEGER NOT NULL,
   winning_color TEXT NOT NULL,
   winning_parity TEXT NOT NULL,
@@ -59,3 +65,14 @@ CREATE INDEX IF NOT EXISTS idx_tech_roulette_bets_user_round
 
 CREATE INDEX IF NOT EXISTS idx_tech_roulette_logs_user_created
   ON tech_roulette_logs(user_id, created_at DESC);
+
+
+CREATE TABLE IF NOT EXISTS tech_roulette_chat_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  message TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tech_roulette_chat_created
+  ON tech_roulette_chat_messages(created_at DESC);

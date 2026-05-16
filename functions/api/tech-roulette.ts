@@ -20,6 +20,9 @@ type RouletteBet = {
   type: RouletteBetType;
   amount: number;
   value?: number | string;
+  stakeType?: "coin" | "item";
+  stakeItemId?: number | null;
+  stakeItemLabel?: string | null;
 };
 
 type RouletteRound = {
@@ -44,11 +47,12 @@ export async function onRequestGet(context: any) {
     const settledRound = await settleExpiredRound(context);
     const round = await getOrCreateOpenRound(context);
     const wallet = await getWallet(context, auth.user.id);
-    const [recent, tableBets, myBets, recentNumbers] = await Promise.all([
+    const [recent, tableBets, myBets, recentNumbers, inventory] = await Promise.all([
       loadRecentLogs(context, auth.user.id),
       loadRoundBets(context, round.id),
       loadUserRoundBets(context, round.id, auth.user.id),
       loadRecentNumbers(context),
+      loadInventory(context, auth.user.id),
     ]);
 
     return Response.json({
@@ -64,6 +68,7 @@ export async function onRequestGet(context: any) {
       myBets,
       recent: recent?.results || [],
       recentNumbers: recentNumbers?.results || [],
+      inventory,
     });
   } catch (error) {
     return Response.json({ error: "Tech Roulette SQL durumu yüklenemedi.", detail: readableError(error) }, { status: 500 });
@@ -88,34 +93,48 @@ export async function onRequestPost(context: any) {
     const round = await getOrCreateOpenRound(context);
     if (round.spins_at <= nowSeconds() + 1) throw new Error("Bu tur kapanıyor. Yeni tur için bekle.");
 
-    const bet = parseBet(body);
+    const bet = await parseBet(context, auth.user.id, body);
     const beforeWallet = await getWallet(context, auth.user.id);
-    const debit = await context.env.DB
-      .prepare(`UPDATE coin_wallets SET balance = COALESCE(balance, 0) - ?, updated_at = datetime('now') WHERE user_id = ? AND COALESCE(balance, 0) >= ?`)
-      .bind(bet.amount, auth.user.id, bet.amount)
-      .run();
 
-    if ((debit.meta?.changes || 0) < 1) {
-      return Response.json({ error: "Yetersiz ekatechwallet bakiyesi.", ekatechwallet: beforeWallet.balance, wallet: beforeWallet }, { status: 402 });
+    if (bet.stakeType === "item") {
+      const consume = await context.env.DB
+        .prepare(`UPDATE off_shop_inventory SET status = 'used', used_at = datetime('now') WHERE id = ? AND user_id = ? AND status = 'available'`)
+        .bind(bet.stakeItemId, auth.user.id)
+        .run();
+      if ((consume.meta?.changes || 0) < 1) return Response.json({ error: "Bu racon eşyası artık kullanılabilir değil." }, { status: 409 });
+    } else {
+      const debit = await context.env.DB
+        .prepare(`UPDATE coin_wallets SET balance = COALESCE(balance, 0) - ?, updated_at = datetime('now') WHERE user_id = ? AND COALESCE(balance, 0) >= ?`)
+        .bind(bet.amount, auth.user.id, bet.amount)
+        .run();
+
+      if ((debit.meta?.changes || 0) < 1) {
+        return Response.json({ error: "Yetersiz ekatechwallet bakiyesi.", ekatechwallet: beforeWallet.balance, wallet: beforeWallet }, { status: 402 });
+      }
+
+      await context.env.DB
+        .prepare(`INSERT INTO coin_transactions (user_id, amount, reason, created_at) VALUES (?, ?, ?, datetime('now'))`)
+        .bind(auth.user.id, -bet.amount, `Tech Roulette bahis: ${describeBet(bet)} / round ${round.id}`)
+        .run();
     }
-
-    await context.env.DB
-      .prepare(`INSERT INTO coin_transactions (user_id, amount, reason, created_at) VALUES (?, ?, ?, datetime('now'))`)
-      .bind(auth.user.id, -bet.amount, `Tech Roulette bahis: ${describeBet(bet)} / round ${round.id}`)
-      .run();
 
     const betResult = await context.env.DB
       .prepare(`
-        INSERT INTO tech_roulette_bets (round_id, user_id, user_name, bet_type, bet_value, bet_amount, status, wallet_before, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))
+        INSERT INTO tech_roulette_bets (round_id, user_id, user_name, bet_type, bet_value, bet_amount, stake_type, stake_item_id, stake_item_label, status, wallet_before, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))
       `)
-      .bind(round.id, auth.user.id, auth.user.name || "OFF Player", bet.type, bet.value == null ? null : String(bet.value), bet.amount, beforeWallet.balance)
+      .bind(round.id, auth.user.id, auth.user.name || "OFF Player", bet.type, bet.value == null ? null : String(bet.value), bet.amount, bet.stakeType || "coin", bet.stakeItemId || null, bet.stakeItemLabel || null, beforeWallet.balance)
       .run();
 
     const wallet = await getWallet(context, auth.user.id);
-    const [tableBets, myBets] = await Promise.all([
+    if (bet.stakeType === "item" && bet.stakeItemId) {
+      await context.env.DB.prepare(`UPDATE off_shop_inventory SET roulette_bet_id = ? WHERE id = ?`).bind(betResult.meta?.last_row_id || null, bet.stakeItemId).run();
+    }
+
+    const [tableBets, myBets, inventory] = await Promise.all([
       loadRoundBets(context, round.id),
       loadUserRoundBets(context, round.id, auth.user.id),
+      loadInventory(context, auth.user.id),
     ]);
 
     return Response.json({
@@ -131,6 +150,7 @@ export async function onRequestPost(context: any) {
       lastResolvedRound: settledRound ? serializeRound(settledRound) : null,
       tableBets,
       myBets,
+      inventory,
     });
   } catch (error) {
     return Response.json({ error: readableError(error) }, { status: 400 });
@@ -159,10 +179,10 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
     .all();
 
   for (const row of bets?.results || []) {
-    const bet: RouletteBet = { type: row.bet_type, value: row.bet_value, amount: Number(row.bet_amount || 0) };
+    const bet: RouletteBet = { type: row.bet_type, value: row.bet_value, amount: Number(row.bet_amount || 0), stakeType: row.stake_type || "coin", stakeItemId: row.stake_item_id, stakeItemLabel: row.stake_item_label };
     const settlement = settleBet(bet, winningNumber);
     if (settlement.payoutAmount > 0) {
-      await creditWallet(context, Number(row.user_id), settlement.payoutAmount, `Tech Roulette kazanç: ${winningNumber} / round ${open.id}`);
+      await creditWallet(context, Number(row.user_id), settlement.payoutAmount, `Tech Roulette kazanç: ${winningNumber} / round ${open.id}${row.stake_item_label ? ` / ${row.stake_item_label}` : ""}`);
     }
     const afterWallet = await getWallet(context, Number(row.user_id));
     await context.env.DB
@@ -173,8 +193,8 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
       .prepare(`
         INSERT INTO tech_roulette_logs (
           round_id, user_id, bet_type, bet_value, bet_amount, winning_number, winning_color, winning_parity,
-          payout_multiplier, payout_amount, profit_amount, wallet_before, wallet_after, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          payout_multiplier, payout_amount, profit_amount, wallet_before, wallet_after, stake_type, stake_item_id, stake_item_label, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `)
       .bind(
         open.id,
@@ -190,6 +210,9 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
         settlement.profitAmount,
         row.wallet_before || 0,
         afterWallet.balance,
+        row.stake_type || "coin",
+        row.stake_item_id || null,
+        row.stake_item_label || null,
         settlement.won ? "won" : "lost",
       )
       .run();
@@ -230,7 +253,7 @@ function serializeRound(round: RouletteRound) {
 
 function loadRecentLogs(context: any, userId: number) {
   return context.env.DB
-    .prepare(`SELECT id, round_id, bet_type, bet_value, bet_amount, winning_number, winning_color, payout_amount, profit_amount, status, created_at FROM tech_roulette_logs WHERE user_id = ? ORDER BY id DESC LIMIT 12`)
+    .prepare(`SELECT id, round_id, bet_type, bet_value, bet_amount, stake_type, stake_item_label, winning_number, winning_color, payout_amount, profit_amount, status, created_at FROM tech_roulette_logs WHERE user_id = ? ORDER BY id DESC LIMIT 12`)
     .bind(userId)
     .all();
 }
@@ -246,7 +269,8 @@ function loadRoundBets(context: any, roundId: number) {
     .prepare(`
       SELECT bet_type, bet_value, COUNT(*) AS chip_count, SUM(bet_amount) AS total_amount,
              MAX(created_at) AS last_bet_at,
-             GROUP_CONCAT(substr(user_name, 1, 14), ', ') AS users
+             GROUP_CONCAT(substr(user_name, 1, 14), ', ') AS users,
+             GROUP_CONCAT(stake_item_label, ', ') AS item_labels
       FROM tech_roulette_bets
       WHERE round_id = ?
       GROUP BY bet_type, COALESCE(bet_value, '')
@@ -259,26 +283,39 @@ function loadRoundBets(context: any, roundId: number) {
 
 function loadUserRoundBets(context: any, roundId: number, userId: number) {
   return context.env.DB
-    .prepare(`SELECT id, bet_type, bet_value, bet_amount, status, created_at FROM tech_roulette_bets WHERE round_id = ? AND user_id = ? ORDER BY id DESC`)
+    .prepare(`SELECT id, bet_type, bet_value, bet_amount, stake_type, stake_item_label, status, created_at FROM tech_roulette_bets WHERE round_id = ? AND user_id = ? ORDER BY id DESC`)
     .bind(roundId, userId)
     .all()
     .then((result: any) => result?.results || []);
 }
 
-function parseBet(body: any): RouletteBet {
+async function parseBet(context: any, userId: number, body: any): Promise<RouletteBet> {
   const rawType = String(body?.type || body?.betType || "").toLowerCase();
   const type = rawType as RouletteBetType;
   if (!["straight", "red", "black", "odd", "even", "low", "high", "column", "dozen"].includes(type)) throw new Error("Geçersiz rulet bahis türü.");
 
-  const chipAmount = Math.floor(Number(body?.chipAmount || body?.chip || 0));
-  const chipCount = Math.max(1, Math.min(10, Math.floor(Number(body?.chipCount || 1))));
-  const directAmount = Math.floor(Number(body?.amount || 0));
-  const amount = directAmount > 0 ? directAmount : chipAmount * chipCount;
+  const stakeItemId = Math.floor(Number(body?.stakeItemId || 0));
+  let bet: RouletteBet;
 
-  if (chipAmount > 0 && !ALLOWED_CHIPS.has(chipAmount)) throw new Error("Geçersiz çip değeri. 10-10000 aralığındaki hızlı çipleri kullanın.");
-  if (!Number.isFinite(amount) || amount < BET_LIMITS.min || amount > BET_LIMITS.max) throw new Error("Bahis 10 ile 10000 Tech Coin arasında olmalı.");
+  if (stakeItemId > 0) {
+    const item = await context.env.DB
+      .prepare(`SELECT id, item_name, emoji, roulette_value FROM off_shop_inventory WHERE id = ? AND user_id = ? AND status = 'available'`)
+      .bind(stakeItemId, userId)
+      .first();
+    if (!item) throw new Error("Kullanılabilir racon eşyası bulunamadı.");
+    const amount = Math.floor(Number(item.roulette_value || 0));
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error("Eşyanın rulet değeri geçersiz.");
+    bet = { type, amount, stakeType: "item", stakeItemId, stakeItemLabel: `${item.emoji || "🎲"} ${item.item_name || "Racon eşyası"}` };
+  } else {
+    const chipAmount = Math.floor(Number(body?.chipAmount || body?.chip || 0));
+    const chipCount = Math.max(1, Math.min(10, Math.floor(Number(body?.chipCount || 1))));
+    const directAmount = Math.floor(Number(body?.amount || 0));
+    const amount = directAmount > 0 ? directAmount : chipAmount * chipCount;
 
-  const bet: RouletteBet = { type, amount };
+    if (chipAmount > 0 && !ALLOWED_CHIPS.has(chipAmount)) throw new Error("Geçersiz çip değeri. 10-10000 aralığındaki hızlı çipleri kullanın.");
+    if (!Number.isFinite(amount) || amount < BET_LIMITS.min || amount > BET_LIMITS.max) throw new Error("Bahis 10 ile 10000 Tech Coin arasında olmalı.");
+    bet = { type, amount, stakeType: "coin" };
+  }
 
   if (type === "straight") {
     const value = Math.floor(Number(body?.value ?? body?.number));
@@ -403,11 +440,44 @@ async function ensureRouletteTables(context: any) {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `).run();
+  await addColumnIfMissing(context, "tech_roulette_bets", "stake_type", "TEXT NOT NULL DEFAULT 'coin'");
+  await addColumnIfMissing(context, "tech_roulette_bets", "stake_item_id", "INTEGER");
+  await addColumnIfMissing(context, "tech_roulette_bets", "stake_item_label", "TEXT");
   await addColumnIfMissing(context, "tech_roulette_logs", "round_id", "INTEGER");
+  await addColumnIfMissing(context, "tech_roulette_logs", "stake_type", "TEXT NOT NULL DEFAULT 'coin'");
+  await addColumnIfMissing(context, "tech_roulette_logs", "stake_item_id", "INTEGER");
+  await addColumnIfMissing(context, "tech_roulette_logs", "stake_item_label", "TEXT");
+  await ensureOffShopInventoryTable(context);
   await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_tech_roulette_rounds_status_spins ON tech_roulette_rounds(status, spins_at)`).run();
   await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_tech_roulette_bets_round ON tech_roulette_bets(round_id, created_at DESC)`).run();
   await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_tech_roulette_bets_user_round ON tech_roulette_bets(user_id, round_id)`).run();
   await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_tech_roulette_logs_user_created ON tech_roulette_logs(user_id, created_at DESC)`).run();
+}
+
+function loadInventory(context: any, userId: number) {
+  return context.env.DB
+    .prepare(`SELECT id, item_slug, item_name, emoji, roulette_value, status, acquired_at, used_at, roulette_bet_id FROM off_shop_inventory WHERE user_id = ? ORDER BY id DESC LIMIT 80`)
+    .bind(userId)
+    .all()
+    .then((result: any) => result?.results || []);
+}
+
+async function ensureOffShopInventoryTable(context: any) {
+  await context.env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS off_shop_inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      item_slug TEXT NOT NULL,
+      item_name TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      roulette_value INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available',
+      acquired_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      used_at TEXT,
+      roulette_bet_id INTEGER
+    )
+  `).run();
+  await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_off_shop_inventory_user_status ON off_shop_inventory(user_id, status, id DESC)`).run();
 }
 
 async function addColumnIfMissing(context: any, table: string, column: string, definition: string) {

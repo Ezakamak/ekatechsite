@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { BarChart3, Building2, CircleDot, Gamepad2, Gift, Lock, Pickaxe, Plane, Shield, Sparkles, Swords, Trophy, Zap } from "lucide-react";
+import { BarChart3, Building2, CircleDot, Gamepad2, Gift, Lock, Pickaxe, Plane, Shield, ShoppingBag, Sparkles, Store, Swords, Trophy, Zap } from "lucide-react";
 import coinIcon from "../../imports/ekatech-coin.png";
 import { useLanguage } from "../i18n";
 import { TechDuelSync } from "./TechDuelSyncFixed";
@@ -35,6 +35,9 @@ type Wallet = {
 
 type GameKey = "hub" | "duel" | "cipher" | "raid" | "market" | "miner" | "droptech" | "mines" | "towers" | "aviator" | "roulette";
 
+type ShopCatalogItem = { slug: string; name: string; emoji: string; description: string; price: number; roulette_value: number; rarity: string };
+type ShopInventoryItem = { id: number; item_name: string; emoji: string; roulette_value: number; status: string };
+
 function navigateTo(path: string) {
   window.history.pushState({}, "", path);
   window.dispatchEvent(new Event("ekatech-route-change"));
@@ -48,6 +51,10 @@ export function OffPage() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeGame, setActiveGame] = useState<GameKey>("hub");
+  const [shopCatalog, setShopCatalog] = useState<ShopCatalogItem[]>([]);
+  const [shopInventory, setShopInventory] = useState<ShopInventoryItem[]>([]);
+  const [shopMessage, setShopMessage] = useState("");
+  const [buyingSlug, setBuyingSlug] = useState<string | null>(null);
 
   const copy = tr
     ? {
@@ -91,6 +98,11 @@ export function OffPage() {
         currency: "Para birimi",
         fixedRewardLabel: "Oyun ödülleri",
         rewardRule: "Ödül kuralı",
+        shopTitle: "OFF Mağaza",
+        shopDesc: "Şimdilik pahalı tesbih, çakı ve racon aksesuarları var. Bu eşyalar sadece Tech Roulette masasına para yerine koymak için kullanılabilir.",
+        buy: "Satın al",
+        inventory: "Racon envanteri",
+        onlyRoulette: "Sadece rulette bahis değeri",
       }
     : {
         loading: "Checking OFF access...",
@@ -133,6 +145,11 @@ export function OffPage() {
         currency: "Currency",
         fixedRewardLabel: "Game rewards",
         rewardRule: "Reward rule",
+        shopTitle: "OFF Shop",
+        shopDesc: "For now it sells expensive prayer beads, knives and swagger tools. These items can only be used as Tech Roulette table stakes instead of money.",
+        buy: "Buy",
+        inventory: "Swagger inventory",
+        onlyRoulette: "Roulette stake only",
       };
 
   useEffect(() => {
@@ -186,6 +203,54 @@ export function OffPage() {
       window.removeEventListener("ekatech-techcoin-refresh", loadWallet);
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const loadShop = () => {
+      fetch("/api/off-shop", { credentials: "same-origin", cache: "no-store" })
+        .then(async (response) => response.json().catch(() => null))
+        .then((data) => {
+          if (!active || !data) return;
+          setShopCatalog(Array.isArray(data.catalog) ? data.catalog : []);
+          setShopInventory(Array.isArray(data.inventory) ? data.inventory : []);
+        })
+        .catch(() => {
+          if (active) setShopMessage("OFF mağaza yüklenemedi.");
+        });
+    };
+    loadShop();
+    window.addEventListener("ekatech-techcoin-refresh", loadShop);
+    return () => {
+      active = false;
+      window.removeEventListener("ekatech-techcoin-refresh", loadShop);
+    };
+  }, [user?.id]);
+
+  const buyShopItem = async (slug: string) => {
+    setBuyingSlug(slug);
+    setShopMessage("");
+    try {
+      const response = await fetch("/api/off-shop", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Ürün alınamadı.");
+      setShopInventory(Array.isArray(data.inventory) ? data.inventory : []);
+      if (data.wallet) setWallet(data.wallet);
+      setShopMessage(data?.message || "Ürün envantere eklendi.");
+      window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
+      playOffSound("coin");
+    } catch (error) {
+      setShopMessage(error instanceof Error ? error.message : "Ürün alınamadı.");
+      playOffSound("error");
+    } finally {
+      setBuyingSlug(null);
+    }
+  };
 
   const canAccess = user?.role === "off" || user?.role === "admin" || user?.role === "owner";
 
@@ -283,6 +348,8 @@ export function OffPage() {
           </div>
         </section>
 
+        <OffShopPanel catalog={shopCatalog} inventory={shopInventory} message={shopMessage} buyingSlug={buyingSlug} copy={copy} locale={tr ? "tr-TR" : "en-US"} onBuy={buyShopItem} />
+
         <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <GameCard icon={<Swords className="h-6 w-6" />} status={copy.available} title={copy.duelTitle} description={copy.duelDesc} accent="cyan" buttonLabel={copy.open} onClick={() => { playOffSound("join"); setActiveGame("duel"); }} />
           <GameCard icon={<Zap className="h-6 w-6" />} status={copy.available} title={copy.cipherTitle} description={copy.cipherDesc} accent="purple" buttonLabel={copy.open} onClick={() => { playOffSound("code"); setActiveGame("cipher"); }} />
@@ -298,6 +365,48 @@ export function OffPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+
+function OffShopPanel({ catalog, inventory, message, buyingSlug, copy, locale, onBuy }: { catalog: ShopCatalogItem[]; inventory: ShopInventoryItem[]; message: string; buyingSlug: string | null; copy: any; locale: string; onBuy: (slug: string) => void }) {
+  const availableInventory = inventory.filter((item) => item.status === "available");
+  return (
+    <section className="rounded-[2rem] border border-amber-300/20 bg-[linear-gradient(135deg,rgba(146,64,14,0.24),rgba(0,0,0,0.42))] p-5 backdrop-blur-xl sm:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/25 bg-amber-200/10 px-4 py-2 text-sm text-amber-100">
+            <Store className="h-4 w-4" /> {copy.shopTitle}
+          </div>
+          <h2 className="mt-4 text-3xl font-medium text-white">Racon aletleri vitrini</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">{copy.shopDesc}</p>
+          {message && <p className="mt-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-amber-100">{message}</p>}
+        </div>
+        <div className="rounded-3xl border border-white/10 bg-black/25 p-4 text-sm text-white/60">
+          <div className="flex items-center gap-2 font-medium text-white"><ShoppingBag className="h-4 w-4 text-amber-100" /> {copy.inventory}</div>
+          <p className="mt-2">{availableInventory.length ? availableInventory.map((item) => `${item.emoji} ${item.item_name}`).join(" · ") : "Envanter boş"}</p>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        {catalog.map((item) => (
+          <div key={item.slug} className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-4xl">{item.emoji}</span>
+              <span className="rounded-full border border-amber-200/20 bg-amber-200/10 px-3 py-1 text-xs text-amber-100">{item.rarity}</span>
+            </div>
+            <h3 className="mt-4 text-xl font-semibold text-white">{item.name}</h3>
+            <p className="mt-2 min-h-20 text-sm leading-6 text-white/48">{item.description}</p>
+            <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm">
+              <div className="flex justify-between gap-3 text-white/60"><span>Fiyat</span><strong className="text-white">{new Intl.NumberFormat(locale).format(item.price)} TC</strong></div>
+              <div className="flex justify-between gap-3 text-amber-100/80"><span>{copy.onlyRoulette}</span><strong>{new Intl.NumberFormat(locale).format(item.roulette_value)} TC</strong></div>
+            </div>
+            <button type="button" disabled={buyingSlug === item.slug} onClick={() => onBuy(item.slug)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50">
+              <ShoppingBag className="h-4 w-4" /> {buyingSlug === item.slug ? "..." : copy.buy}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
