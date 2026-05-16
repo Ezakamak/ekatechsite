@@ -1,22 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Image, MessageCircle, RefreshCcw, UserRound, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Image,
+  RefreshCcw,
+  UserRound,
+  XCircle,
+} from "lucide-react";
 import { useLanguage } from "../i18n";
 
-type ApprovalTab = "comments" | "adminPhotos" | "userPhotos";
-
-type ModerationComment = {
-  id: number;
-  symbol: string;
-  comment: string;
-  status: "pending" | "approved" | "rejected" | string;
-  created_at?: string;
-  reviewed_at?: string | null;
-  approved_at?: string | null;
-  user_name?: string;
-  user_email?: string;
-  user_avatar_url?: string | null;
-  reviewer_name?: string | null;
-};
+type ApprovalTab = "adminPhotos" | "userPhotos";
 
 type AvatarApproval = {
   id: number;
@@ -30,12 +22,14 @@ type AvatarApproval = {
 
 function getInitials(name?: string, email?: string) {
   const source = name || email || "U";
-  return source
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "U";
+  return (
+    source
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "U"
+  );
 }
 
 export function AdminApprovalCenter() {
@@ -46,8 +40,8 @@ export function AdminApprovalCenter() {
       tr
         ? {
             title: "Onay Merkezi",
-            subtitle: "Hisse yorumları, admin profil fotoğrafları ve kullanıcı profil fotoğrafları tek yerden yönetilir.",
-            comments: "Hisse yorumları",
+            subtitle:
+              "Admin profil fotoğrafları ve kullanıcı profil fotoğrafları tek yerden yönetilir. Hisse yorumları artık onaysız yayımlanır.",
             adminPhotos: "Admin fotoğrafları",
             userPhotos: "Kullanıcı fotoğrafları",
             pending: "Bekleyen",
@@ -65,13 +59,15 @@ export function AdminApprovalCenter() {
             user: "Kullanıcı",
             reviewedBy: "İnceleyen",
             ownerOnly: "Fotoğraf onayları sadece owner hesabına görünür.",
-            adminPhotoNote: "Admin fotoğrafı onaylanmazsa admin sipariş yönetemez.",
-            userPhotoNote: "Kullanıcı fotoğrafı onaylanmadan genel alanlarda gösterilmez.",
+            adminPhotoNote:
+              "Admin fotoğrafı onaylanmazsa admin sipariş yönetemez.",
+            userPhotoNote:
+              "Kullanıcı fotoğrafı onaylanmadan genel alanlarda gösterilmez.",
           }
         : {
             title: "Approval Center",
-            subtitle: "Manage stock comments, admin profile photos and user profile photos from one place.",
-            comments: "Stock comments",
+            subtitle:
+              "Manage admin and user profile photos from one place. Stock comments now publish without approval.",
             adminPhotos: "Admin photos",
             userPhotos: "User photos",
             pending: "Pending",
@@ -89,60 +85,41 @@ export function AdminApprovalCenter() {
             user: "User",
             reviewedBy: "Reviewed by",
             ownerOnly: "Photo approvals are visible only to the owner account.",
-            adminPhotoNote: "Admins cannot manage orders until their photo is approved.",
+            adminPhotoNote:
+              "Admins cannot manage orders until their photo is approved.",
             userPhotoNote: "User photos are not shown publicly until approved.",
           },
-    [tr]
+    [tr],
   );
 
-  const [activeTab, setActiveTab] = useState<ApprovalTab>("comments");
-  const [commentFilter, setCommentFilter] = useState("pending");
-  const [comments, setComments] = useState<ModerationComment[]>([]);
+  const [activeTab, setActiveTab] = useState<ApprovalTab>("adminPhotos");
   const [avatars, setAvatars] = useState<AvatarApproval[]>([]);
   const [loading, setLoading] = useState(false);
   const [photoAccess, setPhotoAccess] = useState(true);
-  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [status, setStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const tabs = [
-    { value: "comments" as const, label: copy.comments, icon: <MessageCircle className="h-4 w-4" /> },
-    { value: "adminPhotos" as const, label: copy.adminPhotos, icon: <Image className="h-4 w-4" /> },
-    { value: "userPhotos" as const, label: copy.userPhotos, icon: <UserRound className="h-4 w-4" /> },
-  ];
-
-  const commentFilters = [
-    { value: "pending", label: copy.pending },
-    { value: "approved", label: copy.approved },
-    { value: "rejected", label: copy.rejected },
-    { value: "all", label: copy.all },
+    {
+      value: "adminPhotos" as const,
+      label: copy.adminPhotos,
+      icon: <Image className="h-4 w-4" />,
+    },
+    {
+      value: "userPhotos" as const,
+      label: copy.userPhotos,
+      icon: <UserRound className="h-4 w-4" />,
+    },
   ];
 
   useEffect(() => {
-    if (activeTab === "comments") loadComments();
-    else loadAvatars(activeTab === "adminPhotos" ? "admin" : "user");
-  }, [activeTab, commentFilter, language]);
+    loadAvatars(activeTab === "adminPhotos" ? "admin" : "user");
+  }, [activeTab, language]);
 
   async function loadCurrent() {
-    if (activeTab === "comments") await loadComments();
-    else await loadAvatars(activeTab === "adminPhotos" ? "admin" : "user");
-  }
-
-  async function loadComments() {
-    setLoading(true);
-    setStatus(null);
-    try {
-      const response = await fetch(`/api/admin/market-comments?status=${encodeURIComponent(commentFilter)}`, {
-        credentials: "same-origin",
-        cache: "no-store",
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || copy.commentError);
-      setComments(Array.isArray(data?.comments) ? data.comments : []);
-    } catch (error) {
-      setComments([]);
-      setStatus({ type: "error", message: error instanceof Error ? error.message : copy.commentError });
-    } finally {
-      setLoading(false);
-    }
+    await loadAvatars(activeTab === "adminPhotos" ? "admin" : "user");
   }
 
   async function loadAvatars(type: "admin" | "user") {
@@ -161,32 +138,19 @@ export function AdminApprovalCenter() {
       }
       if (!response.ok) throw new Error(data?.error || copy.photoError);
       setPhotoAccess(true);
-      setAvatars(Array.isArray(data?.avatars) ? data.avatars : Array.isArray(data?.admins) ? data.admins : []);
+      setAvatars(
+        Array.isArray(data?.avatars)
+          ? data.avatars
+          : Array.isArray(data?.admins)
+            ? data.admins
+            : [],
+      );
     } catch (error) {
       setAvatars([]);
-      setStatus({ type: "error", message: error instanceof Error ? error.message : copy.photoError });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function moderateComment(commentId: number, action: "approve" | "reject") {
-    setLoading(true);
-    setStatus(null);
-    try {
-      const response = await fetch("/api/admin/market-comments", {
-        method: "PATCH",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commentId, action }),
+      setStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : copy.photoError,
       });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || copy.commentError);
-      setStatus({ type: "success", message: data?.message || copy.saved });
-      await loadComments();
-    } catch (error) {
-      setStatus({ type: "error", message: error instanceof Error ? error.message : copy.commentError });
     } finally {
       setLoading(false);
     }
@@ -208,7 +172,10 @@ export function AdminApprovalCenter() {
       setStatus({ type: "success", message: data?.message || copy.saved });
       await loadAvatars(activeTab === "adminPhotos" ? "admin" : "user");
     } catch (error) {
-      setStatus({ type: "error", message: error instanceof Error ? error.message : copy.photoError });
+      setStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : copy.photoError,
+      });
     } finally {
       setLoading(false);
     }
@@ -221,7 +188,9 @@ export function AdminApprovalCenter() {
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100">
             <CheckCircle2 className="h-4 w-4" /> {copy.title}
           </div>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/50">{copy.subtitle}</p>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/50">
+            {copy.subtitle}
+          </p>
         </div>
         <button
           type="button"
@@ -246,113 +215,96 @@ export function AdminApprovalCenter() {
         ))}
       </div>
 
-      {activeTab === "comments" && (
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
-          {commentFilters.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => setCommentFilter(item.value)}
-              className={`shrink-0 rounded-full border px-4 py-2 text-xs transition-all ${commentFilter === item.value ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-black/25 text-white/45 hover:bg-white/[0.08] hover:text-white"}`}
-            >
-              {item.label}
-            </button>
-          ))}
+      {!photoAccess ? (
+        <div className="mt-5 rounded-3xl border border-amber-300/20 bg-amber-300/10 p-5 text-sm text-amber-100">
+          {copy.ownerOnly}
         </div>
-      )}
-
-      {status && (
-        <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${status.type === "success" ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-red-300/20 bg-red-300/10 text-red-100"}`}>
-          {status.message}
-        </div>
-      )}
-
-      {activeTab === "comments" ? (
-        <CommentModerationGrid comments={comments} copy={copy} loading={loading} onModerate={moderateComment} />
-      ) : !photoAccess ? (
-        <div className="mt-5 rounded-3xl border border-amber-300/20 bg-amber-300/10 p-5 text-sm text-amber-100">{copy.ownerOnly}</div>
       ) : (
-        <AvatarModerationGrid avatars={avatars} copy={copy} loading={loading} isAdminTab={activeTab === "adminPhotos"} onModerate={moderateAvatar} />
+        <AvatarModerationGrid
+          avatars={avatars}
+          copy={copy}
+          loading={loading}
+          isAdminTab={activeTab === "adminPhotos"}
+          onModerate={moderateAvatar}
+        />
       )}
     </section>
   );
 }
 
-function CommentModerationGrid({ comments, copy, loading, onModerate }: { comments: ModerationComment[]; copy: any; loading: boolean; onModerate: (commentId: number, action: "approve" | "reject") => void }) {
-  return (
-    <div className="mt-5 grid gap-3 lg:grid-cols-2">
-      {comments.length === 0 ? (
-        <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/45">{copy.emptyComments}</p>
-      ) : (
-        comments.map((item) => (
-          <article key={item.id} className="rounded-3xl border border-white/10 bg-black/25 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                {item.user_avatar_url ? (
-                  <img src={item.user_avatar_url} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
-                ) : (
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">
-                    {(item.user_name || "U").slice(0, 1).toUpperCase()}
-                  </span>
-                )}
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-white">{item.user_name || copy.user}</p>
-                  <p className="truncate text-xs text-white/35">{item.user_email}</p>
-                </div>
-              </div>
-              <span className={`rounded-full px-3 py-1 text-xs ${item.status === "approved" ? "bg-emerald-300/10 text-emerald-100" : item.status === "rejected" ? "bg-red-300/10 text-red-100" : "bg-amber-300/10 text-amber-100"}`}>{item.status}</span>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-cyan-100/50">{item.symbol}</p>
-              <p className="mt-2 text-sm leading-6 text-white/70">{item.comment}</p>
-            </div>
-
-            {item.reviewer_name && <p className="mt-3 text-xs text-white/35">{copy.reviewedBy}: {item.reviewer_name}</p>}
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              <button type="button" onClick={() => onModerate(item.id, "approve")} disabled={loading || item.status === "approved"} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-40">
-                <CheckCircle2 className="h-4 w-4" /> {copy.approve}
-              </button>
-              <button type="button" onClick={() => onModerate(item.id, "reject")} disabled={loading || item.status === "rejected"} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-medium text-white/75 transition-all hover:bg-white/[0.1] disabled:opacity-40">
-                <XCircle className="h-4 w-4" /> {copy.reject}
-              </button>
-            </div>
-          </article>
-        ))
-      )}
-    </div>
-  );
-}
-
-function AvatarModerationGrid({ avatars, copy, loading, isAdminTab, onModerate }: { avatars: AvatarApproval[]; copy: any; loading: boolean; isAdminTab: boolean; onModerate: (userId: number, action: "approve" | "reject") => void }) {
+function AvatarModerationGrid({
+  avatars,
+  copy,
+  loading,
+  isAdminTab,
+  onModerate,
+}: {
+  avatars: AvatarApproval[];
+  copy: any;
+  loading: boolean;
+  isAdminTab: boolean;
+  onModerate: (userId: number, action: "approve" | "reject") => void;
+}) {
   return (
     <div className="mt-5">
-      <p className="mb-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/45">{isAdminTab ? copy.adminPhotoNote : copy.userPhotoNote}</p>
+      <p className="mb-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/45">
+        {isAdminTab ? copy.adminPhotoNote : copy.userPhotoNote}
+      </p>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {avatars.length === 0 ? (
-          <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/45">{copy.emptyPhotos}</p>
+          <p className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/45">
+            {copy.emptyPhotos}
+          </p>
         ) : (
           avatars.map((avatar) => {
             const hasPhoto = Boolean(avatar.avatar_url);
             return (
-              <article key={avatar.id} className="rounded-3xl border border-white/10 bg-black/25 p-4">
+              <article
+                key={avatar.id}
+                className="rounded-3xl border border-white/10 bg-black/25 p-4"
+              >
                 <div className="flex items-center gap-3">
                   <div className="h-16 w-16 overflow-hidden rounded-full border border-white/15 bg-white text-black">
-                    {hasPhoto ? <img src={avatar.avatar_url} alt="Profile" className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-sm font-semibold">{getInitials(avatar.name, avatar.email)}</div>}
+                    {hasPhoto ? (
+                      <img
+                        src={avatar.avatar_url}
+                        alt="Profile"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-sm font-semibold">
+                        {getInitials(avatar.name, avatar.email)}
+                      </div>
+                    )}
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-white">{avatar.name}</p>
-                    <p className="truncate text-sm text-white/45">{avatar.email}</p>
-                    <p className="mt-1 text-xs text-cyan-100/60">{avatar.role || "client"}</p>
+                    <p className="truncate font-medium text-white">
+                      {avatar.name}
+                    </p>
+                    <p className="truncate text-sm text-white/45">
+                      {avatar.email}
+                    </p>
+                    <p className="mt-1 text-xs text-cyan-100/60">
+                      {avatar.role || "client"}
+                    </p>
                   </div>
                 </div>
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  <button type="button" onClick={() => onModerate(avatar.id, "approve")} disabled={loading || !hasPhoto} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-40">
+                  <button
+                    type="button"
+                    onClick={() => onModerate(avatar.id, "approve")}
+                    disabled={loading || !hasPhoto}
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-40"
+                  >
                     <CheckCircle2 className="h-4 w-4" /> {copy.approve}
                   </button>
-                  <button type="button" onClick={() => onModerate(avatar.id, "reject")} disabled={loading || !hasPhoto} className="inline-flex items-center justify-center gap-2 rounded-full border border-red-300/20 bg-red-300/10 px-4 py-2 text-sm font-medium text-red-100 transition-all hover:bg-red-300/15 disabled:opacity-40">
+                  <button
+                    type="button"
+                    onClick={() => onModerate(avatar.id, "reject")}
+                    disabled={loading || !hasPhoto}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-red-300/20 bg-red-300/10 px-4 py-2 text-sm font-medium text-red-100 transition-all hover:bg-red-300/15 disabled:opacity-40"
+                  >
                     <XCircle className="h-4 w-4" /> {copy.reject}
                   </button>
                 </div>

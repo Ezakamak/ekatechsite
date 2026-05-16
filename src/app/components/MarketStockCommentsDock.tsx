@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { MessageCircle, RefreshCcw, Send } from "lucide-react";
+import { BadgeCheck, MessageCircle, RefreshCcw, Send } from "lucide-react";
 import { useLanguage } from "../i18n";
 
 type MarketComment = {
@@ -9,12 +9,15 @@ type MarketComment = {
   created_at?: string;
   user_name?: string;
   user_avatar_url?: string | null;
+  user_level?: number;
 };
 
 function detectDetailSymbol() {
   if (typeof document === "undefined") return null;
 
-  const hasDetailBackButton = Array.from(document.querySelectorAll("button, a")).some((node) => {
+  const hasDetailBackButton = Array.from(
+    document.querySelectorAll("button, a"),
+  ).some((node) => {
     const text = node.textContent?.trim().toLowerCase() || "";
     return text.includes("piyasaya dön") || text.includes("back to market");
   });
@@ -37,12 +40,13 @@ export function MarketStockCommentsDock() {
       tr
         ? {
             title: "Hisse yorumları",
-            subtitle: "Yorumlar admin onayından sonra yayımlanır.",
+            subtitle:
+              "Yorumlar onay beklemeden yayımlanır; Level 5+ kullanıcılar mavi tiklidir.",
             placeholder: "Bu hisse hakkında kısa yorum yaz...",
-            send: "Onaya gönder",
+            send: "Yayınla",
             refresh: "Yenile",
             empty: "Bu hisse için onaylanmış yorum yok.",
-            pending: "Yorum admin onayına gönderildi.",
+            pending: "Yorum yayımlandı.",
             error: "Yorum işlemi başarısız.",
             close: "Kapat",
             open: "Yorumlar",
@@ -50,25 +54,29 @@ export function MarketStockCommentsDock() {
           }
         : {
             title: "Stock comments",
-            subtitle: "Comments are published only after admin approval.",
+            subtitle:
+              "Comments publish instantly; Level 5+ users get a blue check.",
             placeholder: "Write a short comment about this stock...",
-            send: "Send for review",
+            send: "Publish",
             refresh: "Refresh",
             empty: "No approved comments for this stock yet.",
-            pending: "Comment sent for admin approval.",
+            pending: "Comment published.",
             error: "Comment action failed.",
             close: "Close",
             open: "Comments",
             user: "User",
           },
-    [tr]
+    [tr],
   );
 
   const [symbol, setSymbol] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
   const [comments, setComments] = useState<MarketComment[]>([]);
   const [text, setText] = useState("");
-  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [status, setStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -90,15 +98,21 @@ export function MarketStockCommentsDock() {
     if (!nextSymbol) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/market-comments?symbol=${encodeURIComponent(nextSymbol)}`, {
-        credentials: "same-origin",
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `/api/market-comments?symbol=${encodeURIComponent(nextSymbol)}`,
+        {
+          credentials: "same-origin",
+          cache: "no-store",
+        },
+      );
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || copy.error);
       setComments(Array.isArray(data?.comments) ? data.comments : []);
     } catch (error) {
-      setStatus({ type: "error", message: error instanceof Error ? error.message : copy.error });
+      setStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : copy.error,
+      });
     } finally {
       setLoading(false);
     }
@@ -121,7 +135,10 @@ export function MarketStockCommentsDock() {
       setText("");
       setStatus({ type: "success", message: data?.message || copy.pending });
     } catch (error) {
-      setStatus({ type: "error", message: error instanceof Error ? error.message : copy.error });
+      setStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : copy.error,
+      });
     } finally {
       setLoading(false);
     }
@@ -146,11 +163,19 @@ export function MarketStockCommentsDock() {
       <div className="border-b border-white/10 bg-white/[0.04] p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-100/60">{symbol}</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-100/60">
+              {symbol}
+            </p>
             <h3 className="mt-1 text-xl font-semibold">{copy.title}</h3>
-            <p className="mt-1 text-xs leading-5 text-white/45">{copy.subtitle}</p>
+            <p className="mt-1 text-xs leading-5 text-white/45">
+              {copy.subtitle}
+            </p>
           </div>
-          <button type="button" onClick={() => setOpen(false)} className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/[0.08]">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/[0.08]"
+          >
             {copy.close}
           </button>
         </div>
@@ -158,22 +183,46 @@ export function MarketStockCommentsDock() {
 
       <div className="max-h-64 space-y-3 overflow-y-auto p-4">
         {comments.length === 0 ? (
-          <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/45">{copy.empty}</p>
+          <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/45">
+            {copy.empty}
+          </p>
         ) : (
           comments.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            <div
+              key={item.id}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+            >
               <div className="flex items-center gap-2">
-                {item.user_avatar_url ? <img src={item.user_avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-semibold text-black">{(item.user_name || "U").slice(0, 1).toUpperCase()}</span>}
-                <p className="text-sm font-medium text-white">{item.user_name || copy.user}</p>
+                {item.user_avatar_url ? (
+                  <img
+                    src={item.user_avatar_url}
+                    alt=""
+                    className="h-7 w-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-semibold text-black">
+                    {(item.user_name || "U").slice(0, 1).toUpperCase()}
+                  </span>
+                )}
+                <p className="inline-flex items-center gap-1 text-sm font-medium text-white">
+                  {item.user_name || copy.user}
+                  {Number(item.user_level || 1) >= 5 ? (
+                    <BadgeCheck className="h-4 w-4 fill-blue-500 text-white" />
+                  ) : null}
+                </p>
               </div>
-              <p className="mt-3 text-sm leading-6 text-white/65">{item.comment}</p>
+              <p className="mt-3 text-sm leading-6 text-white/65">
+                {item.comment}
+              </p>
             </div>
           ))
         )}
       </div>
 
       {status && (
-        <div className={`mx-4 rounded-2xl border px-4 py-3 text-xs ${status.type === "success" ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-red-300/20 bg-red-300/10 text-red-100"}`}>
+        <div
+          className={`mx-4 rounded-2xl border px-4 py-3 text-xs ${status.type === "success" ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-red-300/20 bg-red-300/10 text-red-100"}`}
+        >
           {status.message}
         </div>
       )}
@@ -186,10 +235,20 @@ export function MarketStockCommentsDock() {
           className="min-h-24 w-full resize-none rounded-2xl border border-white/10 bg-black/45 p-3 text-sm text-white outline-none placeholder:text-white/25"
         />
         <div className="flex items-center justify-between gap-3">
-          <button type="button" onClick={() => loadComments()} disabled={loading} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/65 hover:bg-white/[0.09] disabled:opacity-40">
+          <button
+            type="button"
+            onClick={() => loadComments()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/65 hover:bg-white/[0.09] disabled:opacity-40"
+          >
             <RefreshCcw className="h-4 w-4" /> {copy.refresh}
           </button>
-          <button type="button" onClick={submitComment} disabled={loading || text.trim().length < 3} className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-40">
+          <button
+            type="button"
+            onClick={submitComment}
+            disabled={loading || text.trim().length < 3}
+            className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-40"
+          >
             <Send className="h-4 w-4" /> {copy.send}
           </button>
         </div>
