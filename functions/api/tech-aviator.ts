@@ -1,6 +1,11 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+const BETTING_SECONDS = 8;
+const CRASHED_SECONDS = 3;
+const ROUND_GRACE_MS = CRASHED_SECONDS * 1000;
+const MULTIPLIER_GROWTH = 0.28;
 
 type AviatorAction = "place-bet" | "cash-out" | "record-round" | "settle-crash";
+type AviatorStatus = "STATUS_BETTING" | "STATUS_FLYING" | "STATUS_CRASHED";
 
 export async function onRequestGet(context: any) {
   const auth = await requireUser(context);
@@ -11,7 +16,7 @@ export async function onRequestGet(context: any) {
     await ensureWallet(context, auth.user.id);
     return Response.json(await buildState(context, auth.user));
   } catch (error) {
-    return Response.json({ error: "Tech Aviator canlı cüzdan durumu yüklenemedi." }, { status: 500 });
+    return Response.json({ error: "Tech Aviator canlı SQL round durumu yüklenemedi." }, { status: 500 });
   }
 }
 
@@ -34,8 +39,7 @@ export async function onRequestPost(context: any) {
 
     if (action === "place-bet") return placeBet(context, auth.user, body);
     if (action === "cash-out") return cashOut(context, auth.user, body);
-    if (action === "record-round") return recordRound(context, auth.user, body);
-    if (action === "settle-crash") return settleCrash(context, auth.user, body);
+    if (action === "record-round" || action === "settle-crash") return settleCrash(context, auth.user, body);
 
     return Response.json({ error: "Bilinmeyen Tech Aviator aksiyonu." }, { status: 400 });
   } catch (error) {
@@ -44,14 +48,18 @@ export async function onRequestPost(context: any) {
 }
 
 async function placeBet(context: any, user: any, body: any) {
-  const roundId = normalizeText(body.roundId, 96);
+  const requestedRoundId = normalizeText(body.roundId, 96);
   const panelId = normalizeText(body.panelId || "main", 48);
   const amount = roundTc(Number(body.amount));
+  const now = Date.now();
+  const round = await getSharedRound(context, now);
+  const runtime = getRoundRuntime(round, now);
 
-  if (!roundId) return Response.json({ error: "Round bilgisi eksik." }, { status: 400 });
+  if (!requestedRoundId || requestedRoundId !== round.round_id) return Response.json({ error: "Bu round artık aktif değil; SQL canlı roundu yenilendi." }, { status: 409 });
+  if (runtime.status !== "STATUS_BETTING") return Response.json({ error: "Bahis süresi kapandı." }, { status: 409 });
   if (!Number.isFinite(amount) || amount <= 0) return Response.json({ error: "Geçerli bir bahis miktarı girin." }, { status: 400 });
 
-  const existing = await context.env.DB.prepare(`SELECT id FROM tech_aviator_bets WHERE user_id = ? AND round_id = ? AND panel_id = ?`).bind(user.id, roundId, panelId).first();
+  const existing = await context.env.DB.prepare(`SELECT id FROM tech_aviator_bets WHERE user_id = ? AND round_id = ? AND panel_id = ?`).bind(user.id, round.round_id, panelId).first();
   if (existing) return Response.json({ error: "Bu panel için round bahsi zaten kilitlendi." }, { status: 409 });
 
   const debit = await context.env.DB
@@ -62,60 +70,68 @@ async function placeBet(context: any, user: any, body: any) {
   if ((debit.meta?.changes || 0) < 1) return Response.json({ error: "Yetersiz Tech Coin bakiyesi." }, { status: 402 });
 
   await context.env.DB.prepare(`INSERT INTO coin_transactions (user_id, amount, reason, created_at) VALUES (?, ?, ?, datetime('now'))`).bind(user.id, -amount, `Tech Aviator bahis (${panelId})`).run();
-  await context.env.DB.prepare(`INSERT INTO tech_aviator_bets (user_id, round_id, panel_id, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', datetime('now'), datetime('now'))`).bind(user.id, roundId, panelId, amount).run();
+  await context.env.DB.prepare(`INSERT INTO tech_aviator_bets (user_id, round_id, panel_id, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', datetime('now'), datetime('now'))`).bind(user.id, round.round_id, panelId, amount).run();
 
-  return Response.json({ ok: true, bet: { roundId, panelId, amount }, ...(await buildState(context, user)) });
+  return Response.json({ ok: true, bet: { roundId: round.round_id, panelId, amount }, ...(await buildState(context, user)) });
 }
 
 async function cashOut(context: any, user: any, body: any) {
-  const roundId = normalizeText(body.roundId, 96);
+  const requestedRoundId = normalizeText(body.roundId, 96);
   const panelId = normalizeText(body.panelId || "main", 48);
-  const multiplier = roundMultiplier(Number(body.multiplier));
+  const now = Date.now();
+  const round = await getSharedRound(context, now);
+  const runtime = getRoundRuntime(round, now);
 
-  if (!roundId) return Response.json({ error: "Round bilgisi eksik." }, { status: 400 });
-  if (!Number.isFinite(multiplier) || multiplier < 1) return Response.json({ error: "Geçersiz çarpan." }, { status: 400 });
+  if (!requestedRoundId || requestedRoundId !== round.round_id) return Response.json({ error: "Bu round artık aktif değil; SQL canlı roundu yenilendi." }, { status: 409 });
+  if (runtime.status !== "STATUS_FLYING" || runtime.currentMultiplier >= Number(round.crash_point)) return Response.json({ error: "Nakit çekim şu anda uygun değil." }, { status: 409 });
 
-  const bet = await context.env.DB.prepare(`SELECT id, amount, status FROM tech_aviator_bets WHERE user_id = ? AND round_id = ? AND panel_id = ?`).bind(user.id, roundId, panelId).first();
+  const bet = await context.env.DB.prepare(`SELECT id, amount, status FROM tech_aviator_bets WHERE user_id = ? AND round_id = ? AND panel_id = ?`).bind(user.id, round.round_id, panelId).first();
   if (!bet || bet.status !== "active") return Response.json({ error: "Aktif bahis bulunamadı." }, { status: 409 });
 
-  const payout = roundTc(Number(bet.amount || 0) * multiplier);
+  const payout = roundTc(Number(bet.amount || 0) * runtime.currentMultiplier);
   const updateBet = await context.env.DB
     .prepare(`UPDATE tech_aviator_bets SET status = 'cashed_out', cashout_multiplier = ?, payout = ?, updated_at = datetime('now') WHERE id = ? AND status = 'active'`)
-    .bind(multiplier, payout, bet.id)
+    .bind(runtime.currentMultiplier, payout, bet.id)
     .run();
 
   if ((updateBet.meta?.changes || 0) < 1) return Response.json({ error: "Bu bahis daha önce kapatıldı." }, { status: 409 });
 
-  await creditWallet(context, user.id, payout, `Tech Aviator cashout @ ${multiplier.toFixed(2)}x`);
-  return Response.json({ ok: true, payout, multiplier, ...(await buildState(context, user)) });
-}
-
-async function recordRound(context: any, user: any, body: any) {
-  const roundId = normalizeText(body.roundId, 96);
-  const crashPoint = roundMultiplier(Number(body.crashPoint));
-  const hash = normalizeText(body.hash || "", 128);
-
-  if (!roundId || !Number.isFinite(crashPoint) || crashPoint < 1) return Response.json({ error: "Round sonucu geçersiz." }, { status: 400 });
-
-  await context.env.DB.prepare(`INSERT OR IGNORE INTO tech_aviator_rounds (round_id, crash_point, hash, created_at) VALUES (?, ?, ?, datetime('now'))`).bind(roundId, crashPoint, hash).run();
-  await context.env.DB.prepare(`UPDATE tech_aviator_bets SET status = 'lost', updated_at = datetime('now') WHERE user_id = ? AND round_id = ? AND status = 'active'`).bind(user.id, roundId).run();
-
-  return Response.json({ ok: true, ...(await buildState(context, user)) });
+  await creditWallet(context, user.id, payout, `Tech Aviator SQL cashout @ ${runtime.currentMultiplier.toFixed(2)}x`);
+  return Response.json({ ok: true, payout, multiplier: runtime.currentMultiplier, ...(await buildState(context, user)) });
 }
 
 async function settleCrash(context: any, user: any, body: any) {
-  const roundId = normalizeText(body.roundId, 96);
-  if (!roundId) return Response.json({ error: "Round bilgisi eksik." }, { status: 400 });
-  await context.env.DB.prepare(`UPDATE tech_aviator_bets SET status = 'lost', updated_at = datetime('now') WHERE user_id = ? AND round_id = ? AND status = 'active'`).bind(user.id, roundId).run();
+  const requestedRoundId = normalizeText(body.roundId, 96);
+  const now = Date.now();
+  const round = await getSharedRound(context, now);
+  const targetRoundId = requestedRoundId || round.round_id;
+  await settleActiveBetsForRound(context, targetRoundId);
   return Response.json({ ok: true, ...(await buildState(context, user)) });
 }
 
 async function buildState(context: any, user: any) {
+  const now = Date.now();
+  const round = await getSharedRound(context, now);
+  const runtime = getRoundRuntime(round, now);
+  if (runtime.status === "STATUS_CRASHED") await settleActiveBetsForRound(context, round.round_id);
+
   const wallet = await context.env.DB.prepare(`SELECT balance, lifetime_earned, updated_at FROM coin_wallets WHERE user_id = ?`).bind(user.id).first();
   const transactions = await context.env.DB.prepare(`SELECT id, amount, reason, created_at FROM coin_transactions WHERE user_id = ? ORDER BY id DESC LIMIT 10`).bind(user.id).all();
-  const rounds = await context.env.DB.prepare(`SELECT round_id, crash_point, hash, created_at FROM tech_aviator_rounds ORDER BY id DESC LIMIT 10`).all();
+  const rounds = await context.env.DB.prepare(`SELECT round_id, crash_point, hash, created_at FROM tech_aviator_rounds WHERE crashed_at <= ? ORDER BY betting_started_at DESC LIMIT 10`).bind(now).all();
 
   return {
+    gameState: {
+      roundId: round.round_id,
+      status: runtime.status,
+      salt: round.salt || "sql-shared",
+      hash: round.hash || "pending",
+      serverSeed: runtime.status === "STATUS_CRASHED" ? round.server_seed : undefined,
+      crashPoint: runtime.status === "STATUS_CRASHED" ? Number(round.crash_point || 1) : undefined,
+      currentMultiplier: runtime.currentMultiplier,
+      startedAt: Number(round.betting_started_at || now),
+      bettingSeconds: BETTING_SECONDS,
+      serverNow: now,
+    },
     wallet: {
       userId: String(user.id),
       userName: user.name || "Tech Pilot",
@@ -140,6 +156,60 @@ async function buildState(context: any, user: any) {
   };
 }
 
+async function getSharedRound(context: any, now: number): Promise<any> {
+  const latest = await context.env.DB.prepare(`SELECT * FROM tech_aviator_rounds ORDER BY betting_started_at DESC, id DESC LIMIT 1`).first();
+  if (latest && now < Number(latest.crashed_at || 0) + ROUND_GRACE_MS) return latest;
+
+  if (latest) await settleActiveBetsForRound(context, latest.round_id);
+  const created = await createSharedRound(context, latest, now);
+  return created || await context.env.DB.prepare(`SELECT * FROM tech_aviator_rounds ORDER BY betting_started_at DESC, id DESC LIMIT 1`).first();
+}
+
+async function createSharedRound(context: any, latest: any, now: number) {
+  const seed = randomHex(32);
+  const salt = randomHex(16);
+  const crashPoint = createCrashPoint(seed, salt);
+  const hash = await sha256Hex(`${seed}:${salt}:${crashPoint}`);
+  const roundId = `sql_${now}_${hash.slice(0, 10)}`;
+  const bettingStartedAt = Math.max(now, Number(latest?.crashed_at || 0) + ROUND_GRACE_MS);
+  const flightStartedAt = bettingStartedAt + BETTING_SECONDS * 1000;
+  const crashedAt = flightStartedAt + getFlightDurationMs(crashPoint);
+
+  await context.env.DB.prepare(`INSERT OR IGNORE INTO tech_aviator_rounds (round_id, crash_point, hash, server_seed, salt, betting_started_at, flight_started_at, crashed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`)
+    .bind(roundId, crashPoint, hash, seed, salt, bettingStartedAt, flightStartedAt, crashedAt)
+    .run();
+
+  return context.env.DB.prepare(`SELECT * FROM tech_aviator_rounds WHERE round_id = ?`).bind(roundId).first();
+}
+
+function getRoundRuntime(round: any, now: number): { status: AviatorStatus; currentMultiplier: number } {
+  const flightStartedAt = Number(round.flight_started_at || now + BETTING_SECONDS * 1000);
+  const crashedAt = Number(round.crashed_at || flightStartedAt);
+  const crashPoint = Number(round.crash_point || 1);
+
+  if (now < flightStartedAt) return { status: "STATUS_BETTING", currentMultiplier: 1 };
+  if (now >= crashedAt) return { status: "STATUS_CRASHED", currentMultiplier: roundMultiplier(crashPoint) };
+
+  const elapsedSeconds = Math.max(0, (now - flightStartedAt) / 1000);
+  return { status: "STATUS_FLYING", currentMultiplier: roundMultiplier(Math.min(crashPoint, Math.exp(MULTIPLIER_GROWTH * elapsedSeconds))) };
+}
+
+function getFlightDurationMs(crashPoint: number) {
+  return Math.max(250, Math.ceil((Math.log(Math.max(1.01, crashPoint)) / MULTIPLIER_GROWTH) * 1000));
+}
+
+function createCrashPoint(seed: string, salt: string) {
+  const hex = `${seed}${salt}`.slice(0, 13);
+  const unit = parseInt(hex, 16) / 0xfffffffffffff;
+  const rawMultiplier = 1 + 0.25 / Math.max(1 - unit, 0.04);
+  return roundMultiplier(Math.min(12, Math.max(1.02, rawMultiplier)));
+}
+
+async function settleActiveBetsForRound(context: any, roundId: string) {
+  if (!roundId) return;
+  await context.env.DB.prepare(`UPDATE tech_aviator_bets SET status = 'lost', updated_at = datetime('now') WHERE round_id = ? AND status = 'active'`).bind(roundId).run();
+}
+
 async function creditWallet(context: any, userId: number, amount: number, reason: string) {
   await context.env.DB.prepare(`UPDATE coin_wallets SET balance = COALESCE(balance, 0) + ?, lifetime_earned = COALESCE(lifetime_earned, 0) + ?, updated_at = datetime('now') WHERE user_id = ?`).bind(amount, Math.max(0, amount), userId).run();
   await context.env.DB.prepare(`INSERT INTO coin_transactions (user_id, amount, reason, created_at) VALUES (?, ?, ?, datetime('now'))`).bind(userId, amount, reason).run();
@@ -149,8 +219,22 @@ async function ensureAviatorTables(context: any) {
   await ensureCoinTables(context);
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS tech_aviator_rounds (id INTEGER PRIMARY KEY AUTOINCREMENT, round_id TEXT UNIQUE NOT NULL, crash_point REAL NOT NULL, hash TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS tech_aviator_bets (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, round_id TEXT NOT NULL, panel_id TEXT NOT NULL, amount REAL NOT NULL, status TEXT NOT NULL DEFAULT 'active', cashout_multiplier REAL, payout REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, round_id, panel_id))`).run();
+  await ensureColumn(context, "tech_aviator_rounds", "server_seed", "TEXT");
+  await ensureColumn(context, "tech_aviator_rounds", "salt", "TEXT");
+  await ensureColumn(context, "tech_aviator_rounds", "betting_started_at", "INTEGER");
+  await ensureColumn(context, "tech_aviator_rounds", "flight_started_at", "INTEGER");
+  await ensureColumn(context, "tech_aviator_rounds", "crashed_at", "INTEGER");
+  await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_tech_aviator_rounds_timing ON tech_aviator_rounds(betting_started_at, crashed_at)`).run();
   await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_tech_aviator_rounds_created ON tech_aviator_rounds(created_at)`).run();
   await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_tech_aviator_bets_user_round ON tech_aviator_bets(user_id, round_id)`).run();
+}
+
+async function ensureColumn(context: any, table: string, column: string, definition: string) {
+  try {
+    await context.env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  } catch {
+    // Column already exists on deployed D1 databases.
+  }
 }
 
 async function ensureCoinTables(context: any) {
@@ -182,6 +266,18 @@ function getCookie(cookieHeader: string, name: string) {
 
 function normalizeText(value: unknown, maxLength: number) {
   return String(value || "").replace(/[^a-zA-Z0-9_.:-]/g, "").slice(0, maxLength);
+}
+
+function randomHex(bytes: number) {
+  const values = new Uint8Array(bytes);
+  crypto.getRandomValues(values);
+  return Array.from(values, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Hex(value: string) {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function roundTc(value: number) {
