@@ -144,7 +144,9 @@ const WHEEL_UV_EDGE_GUARD = 0.028;
 const WHEEL_MANUAL_RADIAL_SCALE = 0.965;
 const WHEEL_TEXEL_DENSITY_RINGS = 10;
 const WHEEL_ANISOTROPY_TARGET = 16;
-const SPIN_ANIMATION_SECONDS = 16;
+// Keep this aligned with functions/api/tech-roulette.ts SPIN_COOLDOWN_SECONDS so
+// the next betting round does not open while the client is still showing the ball settle.
+const SPIN_ANIMATION_SECONDS = 22;
 const WHEEL_IDLE_SPIN_SECONDS = 8;
 const BALL_ORBIT_TURNS = 7;
 const RED_NUMBERS = new Set([
@@ -1065,7 +1067,7 @@ export function TechRoulette() {
                       Sonuç gizli
                     </p>
                     <p className="mt-3 text-lg font-semibold text-amber-50">
-                      Top aynı katmanda kesintisiz dönüyor; yavaşlayıp {SPIN_ANIMATION_SECONDS}. saniyede kazanan kutucuğun içine akarak oturacak.
+                      Top aynı katmanda kesintisiz dönüyor; yavaşlama fazı uzatıldı ve top tamamen cebe oturunca sonuç açılacak.
                     </p>
                     <p className="mt-2 text-sm text-white/55">
                       Rulet motoru dönerken top artık ayrı bir hedefe ışınlanmaz; son turda aynı pocket hizasını takip eder.
