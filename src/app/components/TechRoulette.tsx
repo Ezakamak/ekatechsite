@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { CircleDollarSign, Database, Dice5, History, LockKeyhole, Play, ShieldCheck, Touchpad } from "lucide-react";
+import { CircleDollarSign, Clock3, Database, Dice5, History, LockKeyhole, Play, ShieldCheck, Touchpad } from "lucide-react";
 import { useLanguage } from "../i18n";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
@@ -8,18 +8,16 @@ import { playOffSound } from "./OffSoundEngine";
 type BetType = "straight" | "red" | "black" | "odd" | "even" | "low" | "high" | "column" | "dozen";
 
 type RouletteResult = {
-  winningNumber: number;
-  color: "green" | "red" | "black";
-  parity: "none" | "odd" | "even";
-  won: boolean;
-  payoutMultiplier: number;
-  payoutAmount: number;
-  profitAmount: number;
-  ekatechwallet: number;
+  id?: number;
+  winning_number: number;
+  winning_color: "green" | "red" | "black";
+  winning_parity?: "none" | "odd" | "even";
+  resolved_at?: string;
 };
 
 type RouletteLog = {
   id: number;
+  round_id?: number;
   bet_type: string;
   bet_value?: string | null;
   bet_amount: number;
@@ -38,16 +36,34 @@ type BoardBet = {
   multiplier: string;
 };
 
+type RouletteRound = {
+  id: number;
+  status: "betting" | "resolved";
+  betting_started_at: number;
+  spins_at: number;
+  secondsLeft: number;
+};
+
+type TableBet = {
+  bet_type: BetType;
+  bet_value?: string | null;
+  chip_count: number;
+  total_amount: number;
+  users?: string | null;
+};
+
 const QUICK_BETS = [
-  { label: "1M", value: 1_000_000 },
-  { label: "10M", value: 10_000_000 },
-  { label: "100M", value: 100_000_000 },
-  { label: "1B", value: 1_000_000_000 },
-  { label: "10B", value: 10_000_000_000 },
+  { label: "10", value: 10 },
+  { label: "50", value: 50 },
+  { label: "100", value: 100 },
+  { label: "500", value: 500 },
+  { label: "1K", value: 1_000 },
+  { label: "5K", value: 5_000 },
+  { label: "10K", value: 10_000 },
 ];
 
-const MIN_BET = 1_000_000;
-const MAX_BET = 10_000_000_000;
+const MIN_BET = 10;
+const MAX_BET = 10_000;
 const ROULETTE_WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
 const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const TABLE_ROWS = [
@@ -79,6 +95,10 @@ function buildWheelGradient() {
   }).join(", ")})`;
 }
 
+function tableBetKey(type: string, value?: number | string | null) {
+  return `${type}:${value == null ? "" : value}`;
+}
+
 function describeBet(type: BetType, value?: number) {
   if (type === "straight") return `Sayı ${value}`;
   if (type === "red") return "Kırmızı";
@@ -95,20 +115,32 @@ export function TechRoulette() {
   const { language } = useLanguage();
   const locale = language === "tr" ? "tr-TR" : "en-US";
   const [wallet, setWallet] = useState(0);
-  const [betInput, setBetInput] = useState(String(1_000_000));
+  const [betInput, setBetInput] = useState(String(100));
   const [betType, setBetType] = useState<BetType>("red");
   const [straightNumber, setStraightNumber] = useState(7);
   const [column, setColumn] = useState(1);
   const [dozen, setDozen] = useState(1);
   const [result, setResult] = useState<RouletteResult | null>(null);
   const [recent, setRecent] = useState<RouletteLog[]>([]);
+  const [recentNumbers, setRecentNumbers] = useState<RouletteResult[]>([]);
+  const [currentRound, setCurrentRound] = useState<RouletteRound | null>(null);
+  const [tableBets, setTableBets] = useState<TableBet[]>([]);
+  const [secondsLeft, setSecondsLeft] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [wheelRotation, setWheelRotation] = useState(0);
+  const [lastAnimatedRoundId, setLastAnimatedRoundId] = useState<number | null>(null);
   const [message, setMessage] = useState("SQL ekatechwallet bakiyesi yükleniyor...");
 
   const betAmount = parseBetInput(betInput);
   const wheelGradient = useMemo(buildWheelGradient, []);
   const betAmountValid = betAmount >= MIN_BET && betAmount <= MAX_BET;
+  const betChips = useMemo(() => {
+    const chips: Record<string, TableBet> = {};
+    tableBets.forEach((bet) => {
+      chips[tableBetKey(bet.bet_type, bet.bet_value)] = bet;
+    });
+    return chips;
+  }, [tableBets]);
 
   const betValue = useMemo(() => {
     if (betType === "straight") return straightNumber;
@@ -137,19 +169,46 @@ export function TechRoulette() {
       .then((data) => {
         setWallet(Number(data?.ekatechwallet || data?.wallet?.balance || 0));
         setRecent(Array.isArray(data?.recent) ? data.recent : []);
-        setMessage("Sunucu tarafı RNG ve SQL cüzdan kilidi hazır.");
+        const numbers = Array.isArray(data?.recentNumbers) ? data.recentNumbers : [];
+        setRecentNumbers(numbers);
+        if (numbers[0]) setResult(numbers[0]);
+        setCurrentRound(data?.currentRound || null);
+        setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
+        setSecondsLeft(Math.max(0, Number(data?.currentRound?.secondsLeft || 0)));
+        if (data?.lastResolvedRound?.winning_number != null && data.lastResolvedRound.id !== lastAnimatedRoundId) {
+          setResult(data.lastResolvedRound);
+          setLastAnimatedRoundId(data.lastResolvedRound.id);
+          animateWheelTo(Number(data.lastResolvedRound.winning_number));
+        }
+        setMessage("SQL senkronlu masa, geri sayım ve ortak çipler hazır.");
       })
       .catch((error) => setMessage(error instanceof Error ? error.message : "Tech Roulette yüklenemedi."));
   };
 
   useEffect(() => {
     loadState();
+    const poll = window.setInterval(loadState, 2500);
+    return () => window.clearInterval(poll);
+  }, [lastAnimatedRoundId]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setSecondsLeft((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const playRound = async () => {
-    if (spinning || !betAmountValid) return;
+  const animateWheelTo = (winningNumber: number) => {
+    const wheelIndex = Math.max(0, ROULETTE_WHEEL.indexOf(winningNumber));
+    const sector = 360 / ROULETTE_WHEEL.length;
+    const targetRotation = 360 * 5 + (360 - wheelIndex * sector) + sector / 2;
+    setWheelRotation((current) => current + targetRotation);
     setSpinning(true);
-    setMessage("SQL'den güncel ekatechwallet çekiliyor ve bahis kilitleniyor...");
+    window.setTimeout(() => setSpinning(false), 3200);
+    playOffSound("reel");
+  };
+
+  const playRound = async () => {
+    if (spinning || !betAmountValid || secondsLeft <= 1) return;
+    setMessage("Bahis SQL masasına yazılıyor ve tüm kullanıcılara senkronlanıyor...");
     playOffSound("bet");
 
     try {
@@ -160,21 +219,17 @@ export function TechRoulette() {
         body: JSON.stringify({ type: betType, value: betValue, amount: betAmount }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || "Rulet turu tamamlanamadı.");
+      if (!response.ok) throw new Error(data?.error || "Rulet bahsi tamamlanamadı.");
 
-      const wheelIndex = Math.max(0, ROULETTE_WHEEL.indexOf(Number(data.winningNumber)));
-      const sector = 360 / ROULETTE_WHEEL.length;
-      const targetRotation = 360 * 5 + (360 - wheelIndex * sector);
-      setWheelRotation((current) => current + targetRotation);
-      setResult(data);
       setWallet(Number(data.ekatechwallet || 0));
-      setMessage(data.won ? `Kazanan sayı ${data.winningNumber}. ${formatTc(data.payoutAmount, locale)} TC ödeme SQL'e yazıldı.` : `Kazanan sayı ${data.winningNumber}. Bahis loglandı, ödeme yok.`);
+      setCurrentRound(data?.currentRound || currentRound);
+      setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
+      setSecondsLeft(Math.max(0, Number(data?.currentRound?.secondsLeft || secondsLeft)));
+      setMessage(`${selectedBetLabel} üzerine ${formatTc(betAmount, locale)} TC çip koyuldu. Çipler ortak SQL masasından herkese görünür.`);
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
-      window.setTimeout(loadState, 900);
-      window.setTimeout(() => setSpinning(false), 2600);
+      window.setTimeout(loadState, 500);
     } catch (error) {
-      setSpinning(false);
-      setMessage(error instanceof Error ? error.message : "Rulet turu tamamlanamadı.");
+      setMessage(error instanceof Error ? error.message : "Rulet bahsi tamamlanamadı.");
       playOffSound("error");
     }
   };
@@ -184,6 +239,17 @@ export function TechRoulette() {
       <div className="absolute left-1/2 top-28 h-96 w-96 -translate-x-1/2 rounded-full bg-emerald-500/10 blur-3xl" />
       <div className="absolute right-0 top-80 h-80 w-80 rounded-full bg-red-500/10 blur-3xl" />
       <div className="relative mx-auto max-w-7xl space-y-6">
+        <div className="sticky top-20 z-30 rounded-full border border-white/10 bg-black/60 px-4 py-2 shadow-xl shadow-black/30 backdrop-blur-xl">
+          <div className="flex items-center gap-2 overflow-x-auto text-xs text-white/55">
+            <span className="shrink-0 font-semibold uppercase tracking-[0.18em] text-amber-100/80">Son sayılar</span>
+            {recentNumbers.length === 0 ? <span>Henüz sonuç yok</span> : recentNumbers.map((item) => (
+              <span key={item.id || `${item.winning_number}-${item.resolved_at}`} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black text-white ${item.winning_color === "green" ? "bg-emerald-500" : item.winning_color === "red" ? "bg-red-600" : "bg-zinc-950 ring-1 ring-white/20"}`}>
+                {item.winning_number}
+              </span>
+            ))}
+          </div>
+        </div>
+
         <section className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-emerald-500/10 backdrop-blur-xl sm:p-7">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -222,23 +288,47 @@ export function TechRoulette() {
                     );
                   })}
                 </motion.div>
+                <motion.div
+                  animate={{ rotate: -wheelRotation * 1.22 }}
+                  transition={{ duration: 3.1, ease: [0.08, 0.72, 0.14, 1] }}
+                  className="pointer-events-none absolute aspect-square w-[78%] max-w-[19rem] rounded-full"
+                >
+                  <motion.span
+                    animate={spinning ? { scale: [1, 0.86, 1.08, 0.94, 1], y: [0, 7, -5, 3, 0] } : { scale: 1, y: 0 }}
+                    transition={{ duration: 0.65, repeat: spinning ? Infinity : 0, ease: "easeInOut" }}
+                    className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                  />
+                </motion.div>
               </div>
 
               <div className="grid gap-4">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <StatCard icon={<CircleDollarSign className="h-4 w-4" />} label="ekatechwallet" value={`${formatTc(wallet, locale)} TC`} />
                   <StatCard icon={<Dice5 className="h-4 w-4" />} label="Bahis" value={`${formatTc(betAmount, locale)} TC`} />
-                  <StatCard icon={<Database className="h-4 w-4" />} label="SQL durum" value={spinning ? "Kilitli" : "Hazır"} />
+                  <StatCard icon={<Database className="h-4 w-4" />} label="SQL durum" value={spinning ? "Çevriliyor" : "Hazır"} />
+                </div>
+
+                <div className="rounded-[1.5rem] border border-cyan-200/20 bg-cyan-300/10 p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em] text-cyan-50/55">Ortak tur #{currentRound?.id || "..."}</p>
+                      <p className="mt-2 text-sm text-white/60">Kimse bahis koymasa bile sayaç bitince SQL turu kapatır ve çark döner.</p>
+                    </div>
+                    <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-full border border-cyan-100/30 bg-black/30">
+                      <Clock3 className="h-5 w-5 text-cyan-100" />
+                      <span className="mt-1 font-mono text-2xl font-black text-white">{secondsLeft}s</span>
+                    </div>
+                  </div>
                 </div>
 
                 {result && (
-                  <div className={`rounded-[1.5rem] border p-5 ${result.won ? "border-emerald-300/30 bg-emerald-300/10" : "border-red-300/25 bg-red-300/10"}`}>
-                    <p className="text-xs uppercase tracking-[0.22em] text-white/45">Sonuç</p>
+                  <div className="rounded-[1.5rem] border border-amber-300/25 bg-amber-300/10 p-5">
+                    <p className="text-xs uppercase tracking-[0.22em] text-white/45">Son çıkan sayı</p>
                     <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <span className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl font-black ${result.color === "green" ? "bg-emerald-500" : result.color === "red" ? "bg-red-600" : "bg-zinc-950 ring-1 ring-white/20"}`}>{result.winningNumber}</span>
+                      <span className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl font-black ${result.winning_color === "green" ? "bg-emerald-500" : result.winning_color === "red" ? "bg-red-600" : "bg-zinc-950 ring-1 ring-white/20"}`}>{result.winning_number}</span>
                       <div>
-                        <p className="text-2xl font-semibold">{result.won ? "Kazandın" : "Kaybettin"}</p>
-                        <p className="text-sm text-white/55">Çarpan {result.payoutMultiplier}:1 · Ödeme {formatTc(result.payoutAmount, locale)} TC · Yeni bakiye {formatTc(result.ekatechwallet, locale)} TC</p>
+                        <p className="text-2xl font-semibold">SQL tur sonucu</p>
+                        <p className="text-sm text-white/55">Tüm kullanıcılar aynı round, aynı geri sayım ve aynı kazanan sayıyı görür.</p>
                       </div>
                     </div>
                   </div>
@@ -263,7 +353,7 @@ export function TechRoulette() {
             </div>
 
             <div className="mt-5 rounded-[1.6rem] border border-white/10 bg-emerald-950/70 p-3 shadow-inner shadow-black/40">
-              <RouletteTable selectedType={betType} selectedValue={betValue} onSelect={selectBet} />
+              <RouletteTable selectedType={betType} selectedValue={betValue} betChips={betChips} onSelect={selectBet} />
             </div>
 
             <div className="mt-5 grid gap-4 rounded-[1.6rem] border border-white/10 bg-black/25 p-4">
@@ -276,7 +366,7 @@ export function TechRoulette() {
                   max={MAX_BET}
                   value={betInput}
                   onChange={(event) => setBetInput(event.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder="1000000"
+                  placeholder="100"
                 />
                 <span className={`mt-2 block text-xs ${betAmountValid ? "text-emerald-100/60" : "text-amber-200"}`}>Limit: {formatTc(MIN_BET, locale)} - {formatTc(MAX_BET, locale)} TC</span>
               </label>
@@ -292,8 +382,8 @@ export function TechRoulette() {
                 </div>
               </div>
 
-              <button type="button" disabled={spinning || !betAmountValid} onClick={playRound} className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-4 font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-45">
-                <Play className="h-5 w-5" /> {spinning ? "Çark dönüyor..." : "Bahsi Oyna"}
+              <button type="button" disabled={spinning || !betAmountValid || secondsLeft <= 1} onClick={playRound} className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-4 font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-45">
+                <Play className="h-5 w-5" /> {spinning ? "Çark dönüyor..." : secondsLeft <= 1 ? "Tur kapanıyor..." : "Çipi Koy"}
               </button>
             </div>
           </aside>
@@ -321,20 +411,23 @@ export function TechRoulette() {
   );
 }
 
-function RouletteTable({ selectedType, selectedValue, onSelect }: { selectedType: BetType; selectedValue?: number; onSelect: (bet: BoardBet) => void }) {
+function RouletteTable({ selectedType, selectedValue, betChips, onSelect }: { selectedType: BetType; selectedValue?: number; betChips: Record<string, TableBet>; onSelect: (bet: BoardBet) => void }) {
   const isSelected = (type: BetType, value?: number) => selectedType === type && (value === undefined || selectedValue === value);
+  const chipFor = (type: BetType, value?: number) => betChips[tableBetKey(type, value)];
   return (
     <div className="min-w-0 overflow-x-auto pb-2">
       <div className="min-w-[46rem] select-none">
         <div className="grid grid-cols-[4.5rem_repeat(12,minmax(3.1rem,1fr))_4.5rem] gap-1.5">
-          <button type="button" onClick={() => onSelect({ type: "straight", value: 0, label: "0", multiplier: "35:1" })} className={`row-span-3 rounded-l-[1.3rem] border-2 text-2xl font-black transition-all ${isSelected("straight", 0) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-500 text-white hover:border-amber-200"}`}>
+          <button type="button" onClick={() => onSelect({ type: "straight", value: 0, label: "0", multiplier: "35:1" })} className={`relative row-span-3 rounded-l-[1.3rem] border-2 text-2xl font-black transition-all ${isSelected("straight", 0) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-500 text-white hover:border-amber-200"}`}>
             0
+            <ChipPile chip={chipFor("straight", 0)} />
           </button>
           {TABLE_ROWS.map((row, rowIndex) => row.map((number) => (
-            <NumberCell key={number} number={number} selected={isSelected("straight", number)} onClick={() => onSelect({ type: "straight", value: number, label: String(number), multiplier: "35:1" })} />
+            <NumberCell key={number} number={number} selected={isSelected("straight", number)} chip={chipFor("straight", number)} onClick={() => onSelect({ type: "straight", value: number, label: String(number), multiplier: "35:1" })} />
           )).concat(
-            <button key={`column-${rowIndex}`} type="button" onClick={() => onSelect({ type: "column", value: 3 - rowIndex, label: `${3 - rowIndex}. Sütun`, multiplier: "2:1" })} className={`rounded-r-xl border-2 px-2 text-sm font-black transition-all ${isSelected("column", 3 - rowIndex) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-800 text-white hover:border-amber-200"}`}>
+            <button key={`column-${rowIndex}`} type="button" onClick={() => onSelect({ type: "column", value: 3 - rowIndex, label: `${3 - rowIndex}. Sütun`, multiplier: "2:1" })} className={`relative rounded-r-xl border-2 px-2 text-sm font-black transition-all ${isSelected("column", 3 - rowIndex) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-800 text-white hover:border-amber-200"}`}>
               2:1
+              <ChipPile chip={chipFor("column", 3 - rowIndex)} />
             </button>,
           ))}
         </div>
@@ -342,8 +435,9 @@ function RouletteTable({ selectedType, selectedValue, onSelect }: { selectedType
         <div className="mt-1.5 grid grid-cols-[4.5rem_repeat(3,1fr)_4.5rem] gap-1.5">
           <div />
           {[1, 2, 3].map((value) => (
-            <button key={value} type="button" onClick={() => onSelect({ type: "dozen", value, label: `${value}. 12'li`, multiplier: "2:1" })} className={`rounded-xl border-2 py-3 text-sm font-black transition-all ${isSelected("dozen", value) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-700 text-white hover:border-amber-200"}`}>
+            <button key={value} type="button" onClick={() => onSelect({ type: "dozen", value, label: `${value}. 12'li`, multiplier: "2:1" })} className={`relative rounded-xl border-2 py-3 text-sm font-black transition-all ${isSelected("dozen", value) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-700 text-white hover:border-amber-200"}`}>
               {value === 1 ? "1-12" : value === 2 ? "13-24" : "25-36"}
+              <ChipPile chip={chipFor("dozen", value)} />
             </button>
           ))}
           <div />
@@ -351,12 +445,12 @@ function RouletteTable({ selectedType, selectedValue, onSelect }: { selectedType
 
         <div className="mt-1.5 grid grid-cols-[4.5rem_repeat(6,1fr)_4.5rem] gap-1.5">
           <div />
-          <OutsideBet active={isSelected("low")} onClick={() => onSelect({ type: "low", label: "1-18", multiplier: "1:1" })}>1-18</OutsideBet>
-          <OutsideBet active={isSelected("even")} onClick={() => onSelect({ type: "even", label: "Çift", multiplier: "1:1" })}>ÇİFT</OutsideBet>
-          <OutsideBet active={isSelected("red")} tone="red" onClick={() => onSelect({ type: "red", label: "Kırmızı", multiplier: "1:1" })}>KIRMIZI</OutsideBet>
-          <OutsideBet active={isSelected("black")} tone="black" onClick={() => onSelect({ type: "black", label: "Siyah", multiplier: "1:1" })}>SİYAH</OutsideBet>
-          <OutsideBet active={isSelected("odd")} onClick={() => onSelect({ type: "odd", label: "Tek", multiplier: "1:1" })}>TEK</OutsideBet>
-          <OutsideBet active={isSelected("high")} onClick={() => onSelect({ type: "high", label: "19-36", multiplier: "1:1" })}>19-36</OutsideBet>
+          <OutsideBet active={isSelected("low")} chip={chipFor("low")} onClick={() => onSelect({ type: "low", label: "1-18", multiplier: "1:1" })}>1-18</OutsideBet>
+          <OutsideBet active={isSelected("even")} chip={chipFor("even")} onClick={() => onSelect({ type: "even", label: "Çift", multiplier: "1:1" })}>ÇİFT</OutsideBet>
+          <OutsideBet active={isSelected("red")} chip={chipFor("red")} tone="red" onClick={() => onSelect({ type: "red", label: "Kırmızı", multiplier: "1:1" })}>KIRMIZI</OutsideBet>
+          <OutsideBet active={isSelected("black")} chip={chipFor("black")} tone="black" onClick={() => onSelect({ type: "black", label: "Siyah", multiplier: "1:1" })}>SİYAH</OutsideBet>
+          <OutsideBet active={isSelected("odd")} chip={chipFor("odd")} onClick={() => onSelect({ type: "odd", label: "Tek", multiplier: "1:1" })}>TEK</OutsideBet>
+          <OutsideBet active={isSelected("high")} chip={chipFor("high")} onClick={() => onSelect({ type: "high", label: "19-36", multiplier: "1:1" })}>19-36</OutsideBet>
           <div />
         </div>
 
@@ -368,21 +462,32 @@ function RouletteTable({ selectedType, selectedValue, onSelect }: { selectedType
   );
 }
 
-function NumberCell({ number, selected, onClick }: { number: number; selected: boolean; onClick: () => void }) {
+function NumberCell({ number, selected, chip, onClick }: { number: number; selected: boolean; chip?: TableBet; onClick: () => void }) {
   const color = numberColor(number);
   return (
-    <button type="button" onClick={onClick} className={`min-h-14 rounded-lg border-2 text-lg font-black shadow-inner transition-all ${selected ? "border-amber-200 bg-amber-200 text-black shadow-amber-950/30" : color === "red" ? "border-white/25 bg-red-600 text-white hover:border-amber-200" : "border-white/25 bg-zinc-950 text-white hover:border-amber-200"}`}>
+    <button type="button" onClick={onClick} className={`relative min-h-14 rounded-lg border-2 text-lg font-black shadow-inner transition-all ${selected ? "border-amber-200 bg-amber-200 text-black shadow-amber-950/30" : color === "red" ? "border-white/25 bg-red-600 text-white hover:border-amber-200" : "border-white/25 bg-zinc-950 text-white hover:border-amber-200"}`}>
       {number}
+      <ChipPile chip={chip} />
     </button>
   );
 }
 
-function OutsideBet({ active, tone = "green", onClick, children }: { active: boolean; tone?: "green" | "red" | "black"; onClick: () => void; children: ReactNode }) {
+function OutsideBet({ active, chip, tone = "green", onClick, children }: { active: boolean; chip?: TableBet; tone?: "green" | "red" | "black"; onClick: () => void; children: ReactNode }) {
   const base = tone === "red" ? "bg-red-600" : tone === "black" ? "bg-zinc-950" : "bg-emerald-700";
   return (
-    <button type="button" onClick={onClick} className={`rounded-xl border-2 py-3 text-sm font-black transition-all ${active ? "border-amber-200 bg-amber-200 text-black" : `border-white/25 ${base} text-white hover:border-amber-200`}`}>
+    <button type="button" onClick={onClick} className={`relative rounded-xl border-2 py-3 text-sm font-black transition-all ${active ? "border-amber-200 bg-amber-200 text-black" : `border-white/25 ${base} text-white hover:border-amber-200`}`}>
       {children}
+      <ChipPile chip={chip} />
     </button>
+  );
+}
+
+function ChipPile({ chip }: { chip?: TableBet }) {
+  if (!chip) return null;
+  return (
+    <span title={`${chip.users || "Oyuncular"} · ${formatTc(Number(chip.total_amount || 0), "tr-TR")} TC`} className="pointer-events-none absolute -right-2 -top-2 z-20 flex min-w-9 items-center justify-center rounded-full border-2 border-amber-100 bg-[radial-gradient(circle_at_35%_30%,#fff7ad,#f59e0b_58%,#92400e)] px-2 py-1 text-[0.62rem] font-black text-black shadow-lg shadow-black/35 ring-2 ring-black/25">
+      {Math.min(99, Number(chip.chip_count || 1))}×
+    </span>
   );
 }
 
