@@ -128,9 +128,9 @@ const ROULETTE_WHEEL = [
   16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26,
 ];
 const WHEEL_SECTOR_DEGREES = 360 / ROULETTE_WHEEL.length;
-const SPIN_ANIMATION_SECONDS = 13;
-const WHEEL_IDLE_SPIN_SECONDS = 7;
-const BALL_ORBIT_TURNS = 5.35;
+const SPIN_ANIMATION_SECONDS = 16;
+const WHEEL_IDLE_SPIN_SECONDS = 8;
+const BALL_ORBIT_TURNS = 7;
 const RED_NUMBERS = new Set([
   1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36,
 ]);
@@ -193,7 +193,7 @@ function wheelSectorCenterForNumber(winningNumber: number) {
 }
 
 function ballOrbitEndForNumber(winningNumber: number) {
-  return -(360 * BALL_ORBIT_TURNS + wheelSectorCenterForNumber(winningNumber));
+  return wheelSectorCenterForNumber(winningNumber) - 360 * BALL_ORBIT_TURNS;
 }
 
 
@@ -254,6 +254,7 @@ export function TechRoulette() {
   }, [betType, column, dozen, straightNumber]);
 
   const selectedBetLabel = describeBet(betType, betValue);
+  const bettingOpen = !spinning && !!currentRound && secondsLeft > 1;
 
   const selectBet = (bet: BoardBet) => {
     setBetType(bet.type);
@@ -337,7 +338,7 @@ export function TechRoulette() {
   };
 
   const playRound = async () => {
-    if (spinning || !betAmountValid || secondsLeft <= 1) return;
+    if (!bettingOpen || !betAmountValid) return;
     setMessage(
       "Bahis SQL masasına yazılıyor ve tüm kullanıcılara senkronlanıyor...",
     );
@@ -380,7 +381,7 @@ export function TechRoulette() {
 
   const cancelBet = async (chip?: TableBet) => {
     const ownBetId = Number(String(chip?.my_bet_ids || "").split(",")[0] || 0);
-    if (!ownBetId || spinning || secondsLeft <= 1) return;
+    if (!ownBetId || !bettingOpen) return;
     setMessage("Çip geri çekiliyor ve bahis bakiyesi iade ediliyor...");
     playOffSound("click");
 
@@ -473,7 +474,7 @@ export function TechRoulette() {
                         key={number}
                         className="absolute left-1/2 top-1/2 z-10 flex h-6 w-6 origin-center -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-[0.58rem] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
                         style={{
-                          transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(clamp(-10.35rem, -42.5vw, -7.45rem)) rotate(${-angle}deg)`,
+                          transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(clamp(-10.35rem, -42.5vw, -7.45rem))`,
                           transformOrigin: "center",
                         }}
                       >
@@ -482,32 +483,23 @@ export function TechRoulette() {
                     );
                   })}
                   {pendingResult ? (
-                    <span
-                      key={`pocket-ball-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
-                      className="tech-roulette-pocket-ball absolute left-1/2 top-1/2 z-20 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                    <div
+                      key={`orbit-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
+                      className="tech-roulette-ball-orbit pointer-events-none absolute inset-0 z-20 rounded-full"
                       style={{
-                        transform: `translate(-50%, -50%) rotate(${wheelSectorCenterForNumber(pendingResult.winning_number)}deg) translateY(clamp(-9.25rem, -38vw, -6.65rem))`,
-                        animationDuration: `${SPIN_ANIMATION_SECONDS}s`,
+                        ["--ball-orbit-end" as string]: `${ballOrbitEndForNumber(pendingResult.winning_number)}deg`,
+                        ["--ball-spin-seconds" as string]: `${SPIN_ANIMATION_SECONDS}s`,
                       }}
-                    />
+                    >
+                      <span className="tech-roulette-ball-runner absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]" />
+                    </div>
                   ) : null}
                 </div>
-                {pendingResult ? (
-                  <div
-                    key={`orbit-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
-                    className="tech-roulette-ball-orbit pointer-events-none absolute aspect-square w-[96%] max-w-[25rem] rounded-full"
-                    style={{
-                      ["--ball-orbit-end" as string]: `${ballOrbitEndForNumber(pendingResult.winning_number)}deg`,
-                      ["--ball-spin-seconds" as string]: `${SPIN_ANIMATION_SECONDS}s`,
-                    }}
-                  >
-                    <span className="tech-roulette-ball-runner absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]" />
-                  </div>
-                ) : (
+                {!pendingResult ? (
                   <div className="pointer-events-none absolute aspect-square w-[96%] max-w-[25rem] rounded-full">
                     <span className="tech-roulette-idle-ball absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 shadow-[0_0_14px_rgba(255,255,255,0.75),inset_-3px_-4px_5px_rgba(0,0,0,0.3)]" />
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="grid gap-4">
@@ -532,17 +524,18 @@ export function TechRoulette() {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.22em] text-cyan-50/55">
-                        Ortak tur #{currentRound?.id || "..."}
+                        {currentRound ? `Ortak tur #${currentRound.id}` : "Bahisler kapalı"}
                       </p>
                       <p className="mt-2 text-sm text-white/60">
-                        Kimse bahis koymasa bile sayaç bitince SQL turu kapatır
-                        ve çark döner.
+                        {currentRound
+                          ? "Bahis süresi sadece masa açıkken işler; sayaç bitince bahisler kapanır ve top döner."
+                          : "Top kazanan cebe akarken yeni bahis sayacı başlamaz; sonraki tur açılınca tam sayaç görünür."}
                       </p>
                     </div>
                     <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-full border border-cyan-100/30 bg-black/30">
                       <Clock3 className="h-5 w-5 text-cyan-100" />
-                      <span className="mt-1 font-mono text-2xl font-black text-white">
-                        {secondsLeft}s
+                      <span className="mt-1 text-center font-mono text-xl font-black text-white">
+                        {bettingOpen ? `${secondsLeft}s` : spinning ? "Dönüyor" : "Bekle"}
                       </span>
                     </div>
                   </div>
@@ -554,10 +547,10 @@ export function TechRoulette() {
                       Sonuç gizli
                     </p>
                     <p className="mt-3 text-lg font-semibold text-amber-50">
-                      Top çerçeveden ters yönde dönüyor, yavaşça içeri girip {SPIN_ANIMATION_SECONDS}. saniyede kazanan kutucuğa oturacak.
+                      Top aynı katmanda kesintisiz dönüyor; yavaşlayıp {SPIN_ANIMATION_SECONDS}. saniyede kazanan kutucuğun içine akarak oturacak.
                     </p>
                     <p className="mt-2 text-sm text-white/55">
-                      Rulet kendi etrafında hiç durmadan dönmeye devam eder; top iç kutucuğa yerleşince sonuç açıklanır.
+                      Rulet motoru dönerken top artık ayrı bir hedefe ışınlanmaz; son turda aynı pocket hizasını takip eder.
                     </p>
                   </div>
                 ) : result && (
@@ -716,16 +709,18 @@ export function TechRoulette() {
 
               <button
                 type="button"
-                disabled={spinning || !betAmountValid || secondsLeft <= 1}
+                disabled={!bettingOpen || !betAmountValid}
                 onClick={playRound}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-4 font-semibold text-black transition-all hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Play className="h-5 w-5" />{" "}
                 {spinning
                   ? "Çark dönüyor..."
-                  : secondsLeft <= 1
-                    ? "Tur kapanıyor..."
-                    : "Çipi Koy"}
+                  : !currentRound
+                    ? "Sonraki tur bekleniyor..."
+                    : secondsLeft <= 1
+                      ? "Tur kapanıyor..."
+                      : "Çipi Koy"}
               </button>
             </div>
           </aside>
