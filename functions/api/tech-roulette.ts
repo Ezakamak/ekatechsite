@@ -12,7 +12,8 @@ const ROUND_SECONDS = 18;
 const SPIN_COOLDOWN_SECONDS = 16;
 
 const OPEN_ROUND_SELECT = `
-  SELECT id, status, betting_started_at, spins_at, winning_number, winning_color, winning_parity, created_at, resolved_at
+  SELECT id, status, betting_started_at, spins_at, winning_number, winning_color, winning_parity,
+         server_seed_hash, server_seed, client_seed, nonce, result_hmac, created_at, resolved_at
   FROM tech_roulette_rounds
   WHERE status = 'betting'
   ORDER BY id DESC
@@ -47,6 +48,11 @@ type RouletteRound = {
   winning_number?: number | null;
   winning_color?: string | null;
   winning_parity?: string | null;
+  server_seed_hash?: string | null;
+  server_seed?: string | null;
+  client_seed?: string | null;
+  nonce?: number | null;
+  result_hmac?: string | null;
   created_at?: string | null;
   resolved_at?: string | null;
 };
@@ -316,12 +322,13 @@ async function settleExpiredRound(context: any): Promise<RouletteRound | null> {
   const open = await context.env.DB.prepare(OPEN_ROUND_SELECT).first();
   if (!open || Number(open.spins_at) > nowSeconds()) return null;
 
-  const winningNumber = secureRouletteNumber();
+  const fairResult = await fairRouletteNumber(open);
+  const winningNumber = fairResult.number;
   const outcome = buildOutcome(winningNumber);
   const close = await context.env.DB.prepare(
-    `UPDATE tech_roulette_rounds SET status = 'resolved', winning_number = ?, winning_color = ?, winning_parity = ?, resolved_at = datetime('now') WHERE id = ? AND status = 'betting'`,
+    `UPDATE tech_roulette_rounds SET status = 'resolved', winning_number = ?, winning_color = ?, winning_parity = ?, result_hmac = ?, resolved_at = datetime('now') WHERE id = ? AND status = 'betting'`,
   )
-    .bind(winningNumber, outcome.color, outcome.parity, open.id)
+    .bind(winningNumber, outcome.color, outcome.parity, fairResult.hmac, open.id)
     .run();
 
   if ((close.meta?.changes || 0) < 1) {
@@ -415,7 +422,7 @@ async function getOrCreateOpenRound(
   context: any,
 ): Promise<RouletteRound | null> {
   const open = await context.env.DB.prepare(OPEN_ROUND_SELECT).first();
-  if (open) return open;
+  if (open) return ensureRoundFairness(context, open);
 
   const latestResolved = await context.env.DB.prepare(
     `SELECT MAX(strftime('%s', resolved_at)) AS resolved_at_epoch FROM tech_roulette_rounds WHERE status = 'resolved' AND resolved_at IS NOT NULL`,
@@ -427,26 +434,69 @@ async function getOrCreateOpenRound(
   return createOpenRound(context);
 }
 
+async function ensureRoundFairness(
+  context: any,
+  round: RouletteRound,
+): Promise<RouletteRound> {
+  if (round.server_seed_hash && round.server_seed && round.client_seed) return round;
+
+  const serverSeed = randomHex(32);
+  const serverSeedHash = await sha512Hex(serverSeed);
+  const clientSeed = `tech-roulette:${round.betting_started_at}:${serverSeedHash.slice(0, 16)}`;
+  const nonce = Number(round.betting_started_at || round.id);
+
+  await context.env.DB.prepare(
+    `UPDATE tech_roulette_rounds SET server_seed_hash = ?, server_seed = ?, client_seed = ?, nonce = ? WHERE id = ? AND status = 'betting'`,
+  )
+    .bind(serverSeedHash, serverSeed, clientSeed, nonce, round.id)
+    .run();
+
+  return {
+    ...round,
+    server_seed_hash: serverSeedHash,
+    server_seed: serverSeed,
+    client_seed: clientSeed,
+    nonce,
+  };
+}
+
 async function createOpenRound(context: any): Promise<RouletteRound> {
   const startedAt = nowSeconds();
   const spinsAt = startedAt + ROUND_SECONDS;
+  const serverSeed = randomHex(32);
+  const serverSeedHash = await sha512Hex(serverSeed);
+  const clientSeed = `tech-roulette:${startedAt}:${serverSeedHash.slice(0, 16)}`;
+  const nonce = Number(startedAt);
   const result = await context.env.DB.prepare(
-    `INSERT INTO tech_roulette_rounds (status, betting_started_at, spins_at, created_at) VALUES ('betting', ?, ?, datetime('now'))`,
+    `INSERT INTO tech_roulette_rounds (status, betting_started_at, spins_at, server_seed_hash, server_seed, client_seed, nonce, created_at) VALUES ('betting', ?, ?, ?, ?, ?, ?, datetime('now'))`,
   )
-    .bind(startedAt, spinsAt)
+    .bind(startedAt, spinsAt, serverSeedHash, serverSeed, clientSeed, nonce)
     .run();
   return {
     id: Number(result.meta?.last_row_id || 0),
     status: "betting",
     betting_started_at: startedAt,
     spins_at: spinsAt,
+    server_seed_hash: serverSeedHash,
+    client_seed: clientSeed,
+    nonce,
     created_at: new Date(startedAt * 1000).toISOString(),
   };
 }
 
 function serializeRound(round: RouletteRound) {
+  const resolved = round.status === "resolved";
   return {
     ...round,
+    server_seed: resolved ? round.server_seed : undefined,
+    fairness: {
+      algorithm: "HMAC-SHA512",
+      serverSeedHash: round.server_seed_hash || null,
+      serverSeed: resolved ? round.server_seed || null : null,
+      clientSeed: round.client_seed || null,
+      nonce: round.nonce ?? null,
+      resultHmac: resolved ? round.result_hmac || null : null,
+    },
     secondsLeft: Math.max(0, Number(round.spins_at || 0) - nowSeconds()),
   };
 }
@@ -628,14 +678,63 @@ function buildOutcome(winningNumber: number) {
   return { color, parity };
 }
 
-function secureRouletteNumber() {
+async function fairRouletteNumber(round: RouletteRound) {
+  const serverSeed = round.server_seed || randomHex(32);
+  const clientSeed = round.client_seed || `tech-roulette:${round.id}`;
+  const nonce = Number(round.nonce ?? round.id);
+  const hmac = await hmacSha512Hex(
+    serverSeed,
+    `${clientSeed}:${round.id}:${nonce}`,
+  );
   const maxValid =
-    Math.floor(256 / ROULETTE_NUMBERS.length) * ROULETTE_NUMBERS.length;
-  const bytes = new Uint8Array(1);
-  do {
-    crypto.getRandomValues(bytes);
-  } while (bytes[0] >= maxValid);
-  return bytes[0] % ROULETTE_NUMBERS.length;
+    Math.floor(0x10000 / ROULETTE_NUMBERS.length) * ROULETTE_NUMBERS.length;
+
+  for (let offset = 0; offset <= hmac.length - 4; offset += 4) {
+    const roll = Number.parseInt(hmac.slice(offset, offset + 4), 16);
+    if (roll < maxValid)
+      return { number: roll % ROULETTE_NUMBERS.length, hmac };
+  }
+
+  return {
+    number: Number.parseInt(hmac.slice(-8), 16) % ROULETTE_NUMBERS.length,
+    hmac,
+  };
+}
+
+function randomHex(byteLength: number) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return bytesToHex(bytes);
+}
+
+async function sha512Hex(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-512",
+    new TextEncoder().encode(value),
+  );
+  return bytesToHex(new Uint8Array(digest));
+}
+
+async function hmacSha512Hex(secret: string, message: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-512" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(message),
+  );
+  return bytesToHex(new Uint8Array(signature));
+}
+
+function bytesToHex(bytes: Uint8Array) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 async function ensureRouletteTables(context: any) {
@@ -650,6 +749,11 @@ async function ensureRouletteTables(context: any) {
       winning_number INTEGER,
       winning_color TEXT,
       winning_parity TEXT,
+      server_seed_hash TEXT,
+      server_seed TEXT,
+      client_seed TEXT,
+      nonce INTEGER,
+      result_hmac TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       resolved_at TEXT
     )
@@ -699,6 +803,16 @@ async function ensureRouletteTables(context: any) {
     )
   `,
   ).run();
+  await addColumnIfMissing(
+    context,
+    "tech_roulette_rounds",
+    "server_seed_hash",
+    "TEXT",
+  );
+  await addColumnIfMissing(context, "tech_roulette_rounds", "server_seed", "TEXT");
+  await addColumnIfMissing(context, "tech_roulette_rounds", "client_seed", "TEXT");
+  await addColumnIfMissing(context, "tech_roulette_rounds", "nonce", "INTEGER");
+  await addColumnIfMissing(context, "tech_roulette_rounds", "result_hmac", "TEXT");
   await addColumnIfMissing(
     context,
     "tech_roulette_bets",

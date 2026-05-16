@@ -20,6 +20,13 @@ import {
   Touchpad,
 } from "lucide-react";
 import { useLanguage } from "../i18n";
+import {
+  advanceRouletteTrajectory,
+  createRouletteTrajectoryPlan,
+  createRouletteTrajectoryRuntime,
+  type RouletteTrajectoryFrame,
+  type RouletteTrajectoryPlan,
+} from "../lib/techRouletteTrajectory";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
 
@@ -196,6 +203,15 @@ function ballOrbitEndForNumber(winningNumber: number) {
   return wheelSectorCenterForNumber(winningNumber) - 360 * BALL_ORBIT_TURNS;
 }
 
+function initialTrajectoryFrame(winningNumber = 0): RouletteTrajectoryFrame {
+  return {
+    angle: ballOrbitEndForNumber(winningNumber),
+    radius: 1,
+    progress: 0,
+    done: true,
+  };
+}
+
 
 export function TechRoulette() {
   const { language } = useLanguage();
@@ -214,6 +230,12 @@ export function TechRoulette() {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [pendingResult, setPendingResult] = useState<RouletteResult | null>(null);
+  const [trajectoryPlan, setTrajectoryPlan] =
+    useState<RouletteTrajectoryPlan | null>(null);
+  const [trajectoryFrame, setTrajectoryFrame] =
+    useState<RouletteTrajectoryFrame>(() => initialTrajectoryFrame());
+  const animationFrameRef = useRef<number | null>(null);
+  const spinTimeoutRef = useRef<number | null>(null);
   const [spinSequence, setSpinSequence] = useState(0);
   const [lastAnimatedRoundId, setLastAnimatedRoundId] = useState<number | null>(
     null,
@@ -324,16 +346,67 @@ export function TechRoulette() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current != null)
+        window.cancelAnimationFrame(animationFrameRef.current);
+      if (spinTimeoutRef.current != null) window.clearTimeout(spinTimeoutRef.current);
+    };
+  }, []);
+
   const animateWheelTo = (resolvedRound: RouletteResult) => {
+    if (animationFrameRef.current != null)
+      window.cancelAnimationFrame(animationFrameRef.current);
+    if (spinTimeoutRef.current != null) window.clearTimeout(spinTimeoutRef.current);
+
+    const plan = createRouletteTrajectoryPlan(
+      resolvedRound.winning_number,
+      SPIN_ANIMATION_SECONDS,
+    );
+    const runtime = createRouletteTrajectoryRuntime(plan);
+    let lastTimestamp = performance.now();
+
+    setTrajectoryPlan(plan);
+    setTrajectoryFrame({ angle: 0, radius: 1, progress: 0, done: false });
     setSpinSequence((current) => current + 1);
     setSpinning(true);
     setPendingResult(resolvedRound);
-    window.setTimeout(() => {
+
+    const tick = (timestamp: number) => {
+      const deltaSeconds = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+      const frame = advanceRouletteTrajectory(plan, runtime, deltaSeconds);
+      setTrajectoryFrame(frame);
+
+      if (!frame.done) {
+        animationFrameRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
+
+      animationFrameRef.current = null;
+      setTrajectoryFrame({ ...frame, done: true });
       setSpinning(false);
       setPendingResult(null);
       setResult(resolvedRound);
       playOffSound("win");
-    }, SPIN_ANIMATION_SECONDS * 1000);
+    };
+
+    animationFrameRef.current = window.requestAnimationFrame(tick);
+    spinTimeoutRef.current = window.setTimeout(() => {
+      if (animationFrameRef.current == null) return;
+      window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+      setTrajectoryFrame({
+        angle: plan.targetAngle,
+        radius: 0.78,
+        progress: 1,
+        done: true,
+      });
+      setSpinning(false);
+      setPendingResult(null);
+      setResult(resolvedRound);
+      playOffSound("win");
+    }, (SPIN_ANIMATION_SECONDS + 0.25) * 1000);
     playOffSound("reel");
   };
 
@@ -462,7 +535,13 @@ export function TechRoulette() {
                   className="tech-roulette-wheel relative aspect-square w-full max-w-[24rem] rounded-full border-[12px] border-amber-300 bg-zinc-950 shadow-2xl shadow-black before:absolute before:inset-[12%] before:rounded-full before:border before:border-white/15 before:bg-[radial-gradient(circle,#202020_0_38%,transparent_39%)] after:absolute after:inset-[43%] after:rounded-full after:bg-amber-100 after:shadow-[0_0_24px_rgba(251,191,36,0.8)]"
                   style={{
                     background: wheelGradient,
+                    backgroundPositionX: trajectoryPlan
+                      ? `calc(${trajectoryPlan.wheelUvOffset} * 100%)`
+                      : undefined,
                     ["--wheel-spin-seconds" as string]: `${WHEEL_IDLE_SPIN_SECONDS}s`,
+                    ["--wheel-uv-offset" as string]: String(
+                      trajectoryPlan?.wheelUvOffset || 0,
+                    ),
                   }}
                 >
                   <div className="absolute inset-[5%] rounded-full border-4 border-black/50" />
@@ -487,11 +566,17 @@ export function TechRoulette() {
                       key={`orbit-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
                       className="tech-roulette-ball-orbit pointer-events-none absolute inset-0 z-20 rounded-full"
                       style={{
-                        ["--ball-orbit-end" as string]: `${ballOrbitEndForNumber(pendingResult.winning_number)}deg`,
+                        transform: `rotate(${trajectoryFrame.angle}deg)`,
+                        ["--ball-orbit-end" as string]: `${trajectoryPlan?.targetAngle ?? ballOrbitEndForNumber(pendingResult.winning_number)}deg`,
                         ["--ball-spin-seconds" as string]: `${SPIN_ANIMATION_SECONDS}s`,
                       }}
                     >
-                      <span className="tech-roulette-ball-runner absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]" />
+                      <span
+                        className="tech-roulette-ball-runner absolute left-1/2 top-1/2 h-4 w-4 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.95),inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                        style={{
+                          transform: `translate(-50%, -50%) translateY(clamp(-${(12.55 * trajectoryFrame.radius).toFixed(2)}rem, -${(50 * trajectoryFrame.radius).toFixed(2)}vw, -${(9.15 * trajectoryFrame.radius).toFixed(2)}rem)) scale(${(0.92 + trajectoryFrame.radius * 0.08).toFixed(3)})`,
+                        }}
+                      />
                     </div>
                   ) : null}
                 </div>
