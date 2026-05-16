@@ -4,3 +4,27 @@
 @import './off-games-mobile.css';
 @import './core-clash-effects.css';
 @import './market-academy.css';
+@keyframes chip-pop {
+  0% {
+    opacity: 0;
+    transform: translate3d(-12px, -18px, 0) scale(0.62) rotate(-14deg);
+  }
+  68% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1.12) rotate(5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes chip-land {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(1deg);
+  }
+}

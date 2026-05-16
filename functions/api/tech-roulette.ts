@@ -64,7 +64,7 @@ export async function onRequestGet(context: any) {
     const [recent, tableBets, myBets, recentNumbers, inventory] =
       await Promise.all([
         loadRecentLogs(context, auth.user.id),
-        loadRoundBets(context, round.id),
+        loadRoundBets(context, round.id, auth.user.id),
         loadUserRoundBets(context, round.id, auth.user.id),
         loadRecentNumbers(context),
         loadInventory(context, auth.user.id),
@@ -204,7 +204,7 @@ export async function onRequestPost(context: any) {
     }
 
     const [tableBets, myBets, inventory] = await Promise.all([
-      loadRoundBets(context, round.id),
+      loadRoundBets(context, round.id, auth.user.id),
       loadUserRoundBets(context, round.id, auth.user.id),
       loadInventory(context, auth.user.id),
     ]);
@@ -220,6 +220,86 @@ export async function onRequestPost(context: any) {
       serverNow: nowSeconds(),
       currentRound: serializeRound(round),
       lastResolvedRound: settledRound ? serializeRound(settledRound) : null,
+      tableBets,
+      myBets,
+      inventory,
+    });
+  } catch (error) {
+    return Response.json({ error: readableError(error) }, { status: 400 });
+  }
+}
+
+
+export async function onRequestDelete(context: any) {
+  const auth = await requireUser(context);
+  if (!auth.ok)
+    return Response.json({ error: auth.error }, { status: auth.status });
+
+  let body: any = {};
+  try {
+    body = await context.request.json();
+  } catch {
+    return Response.json({ error: "Geçersiz istek gövdesi." }, { status: 400 });
+  }
+
+  try {
+    await ensureRouletteTables(context);
+    await ensureWallet(context, auth.user.id);
+    await settleExpiredRound(context);
+
+    const betId = Math.floor(Number(body?.betId || body?.id || 0));
+    if (!Number.isFinite(betId) || betId <= 0)
+      throw new Error("Geri çekilecek bahis bulunamadı.");
+
+    const bet = await context.env.DB.prepare(
+      `SELECT b.*, r.spins_at, r.status AS round_status
+       FROM tech_roulette_bets b
+       JOIN tech_roulette_rounds r ON r.id = b.round_id
+       WHERE b.id = ? AND b.user_id = ?`,
+    )
+      .bind(betId, auth.user.id)
+      .first();
+
+    if (!bet || bet.status !== "pending" || bet.round_status !== "betting")
+      throw new Error("Sadece açık turdaki bekleyen çip geri çekilebilir.");
+    if (Number(bet.spins_at || 0) <= nowSeconds() + 1)
+      throw new Error("Tur kapanırken çip geri çekilemez.");
+
+    const cancel = await context.env.DB.prepare(
+      `UPDATE tech_roulette_bets SET status = 'cancelled', settled_at = datetime('now') WHERE id = ? AND user_id = ? AND status = 'pending'`,
+    )
+      .bind(betId, auth.user.id)
+      .run();
+    if ((cancel.meta?.changes || 0) < 1)
+      throw new Error("Bu çip zaten masadan kalkmış.");
+
+    if ((bet.stake_type || "coin") === "item" && bet.stake_item_id) {
+      await context.env.DB.prepare(
+        `UPDATE off_shop_inventory SET status = 'available', used_at = NULL, roulette_bet_id = NULL WHERE id = ? AND user_id = ? AND roulette_bet_id = ?`,
+      )
+        .bind(bet.stake_item_id, auth.user.id, betId)
+        .run();
+    } else {
+      await creditWallet(
+        context,
+        auth.user.id,
+        Number(bet.bet_amount || 0),
+        `Tech Roulette bahis iadesi: ${bet.bet_type}${bet.bet_value ? `:${bet.bet_value}` : ""} / round ${bet.round_id}`,
+      );
+    }
+
+    const wallet = await getWallet(context, auth.user.id);
+    const [tableBets, myBets, inventory] = await Promise.all([
+      loadRoundBets(context, Number(bet.round_id), auth.user.id),
+      loadUserRoundBets(context, Number(bet.round_id), auth.user.id),
+      loadInventory(context, auth.user.id),
+    ]);
+
+    return Response.json({
+      ok: true,
+      cancelledBetId: betId,
+      ekatechwallet: wallet.balance,
+      wallet,
       tableBets,
       myBets,
       inventory,
@@ -373,20 +453,22 @@ function loadRecentNumbers(context: any) {
   ).all();
 }
 
-function loadRoundBets(context: any, roundId: number) {
+function loadRoundBets(context: any, roundId: number, userId: number) {
   return context.env.DB.prepare(
     `
       SELECT bet_type, bet_value, COUNT(*) AS chip_count, SUM(bet_amount) AS total_amount,
              MAX(created_at) AS last_bet_at,
              GROUP_CONCAT(substr(user_name, 1, 14), ', ') AS users,
-             GROUP_CONCAT(stake_item_label, ', ') AS item_labels
+             GROUP_CONCAT(stake_item_label, ', ') AS item_labels,
+             GROUP_CONCAT(id, ',') AS bet_ids,
+             GROUP_CONCAT(CASE WHEN user_id = ? THEN id END, ',') AS my_bet_ids
       FROM tech_roulette_bets
-      WHERE round_id = ?
+      WHERE round_id = ? AND status = 'pending'
       GROUP BY bet_type, COALESCE(bet_value, '')
       ORDER BY last_bet_at DESC
     `,
   )
-    .bind(roundId)
+    .bind(userId, roundId)
     .all()
     .then((result: any) => result?.results || []);
 }

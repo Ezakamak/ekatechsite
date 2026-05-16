@@ -59,6 +59,10 @@
         function () {
           var loadChat = function () {
             window.Tawk_API = window.Tawk_API || {};
+            window.Tawk_API.customStyle = {
+              zIndex: 2147482999,
+              visibility: { desktop: { xOffset: 24, yOffset: 24 }, mobile: { xOffset: 16, yOffset: 88 } },
+            };
             window.Tawk_LoadStart = new Date();
             var s1 = document.createElement("script");
             var s0 = document.getElementsByTagName("script")[0];
