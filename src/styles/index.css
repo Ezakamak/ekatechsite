@@ -31,10 +31,10 @@
 
 @keyframes tech-roulette-wheel-spin {
   from {
-    transform: rotate(0deg);
+    transform: rotate(var(--wheel-settle-angle, 0deg));
   }
   to {
-    transform: rotate(360deg);
+    transform: rotate(calc(var(--wheel-settle-angle, 0deg) + 360deg));
   }
 }
 
@@ -131,6 +131,14 @@
 
 .tech-roulette-idle-ball {
   animation: tech-roulette-idle-ball-orbit 3.8s linear infinite;
+}
+
+.tech-roulette-settled-ball-orbit {
+  transform-origin: center;
+}
+
+.tech-roulette-settled-ball {
+  filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.85));
 }
 
 .tech-roulette-ball-orbit {
