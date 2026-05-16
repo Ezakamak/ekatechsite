@@ -11,7 +11,7 @@ const BET_LIMITS = { min: 10, max: 10_000 };
 const ROUND_SECONDS = 18;
 // Keep this aligned with the client spin animation so a hidden next round is not
 // created before the ball visibly settles for players.
-const SPIN_COOLDOWN_SECONDS = 22;
+const SPIN_COOLDOWN_SECONDS = 30;
 
 const OPEN_ROUND_SELECT = `
   SELECT id, status, betting_started_at, spins_at, winning_number, winning_color, winning_parity,
