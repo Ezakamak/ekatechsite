@@ -1,4 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  Component,
+  useEffect,
+  useState,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import { motion } from "motion/react";
 import {
   Award,
@@ -33,6 +39,59 @@ import { TechAviator } from "./tech-aviator/TechAviator";
 import { TechRoulette } from "./TechRoulette";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
+
+type GameErrorBoundaryProps = {
+  children: ReactNode;
+  gameName: string;
+  onBack: () => void;
+};
+
+type GameErrorBoundaryState = {
+  hasError: boolean;
+};
+
+class GameErrorBoundary extends Component<
+  GameErrorBoundaryProps,
+  GameErrorBoundaryState
+> {
+  state: GameErrorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(`${this.props.gameName} açılırken hata oluştu`, error, info);
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <main className="relative min-h-screen bg-black px-4 pb-24 pt-32 text-white sm:px-6">
+        <div className="mx-auto max-w-2xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-center shadow-2xl shadow-red-500/10 backdrop-blur-xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-100/70">
+            Oyun yüklenemedi
+          </p>
+          <h1 className="mt-4 text-3xl font-semibold">
+            {this.props.gameName} güvenli moda alındı.
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-white/60">
+            Sayfanın tamamının çökmesini engelledim. Lütfen hub'a dönüp tekrar dene;
+            hata devam ederse bu kart açık kalır.
+          </p>
+          <button
+            type="button"
+            onClick={this.props.onBack}
+            className="mt-6 rounded-full border border-white/10 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
+          >
+            Hub'a dön
+          </button>
+        </div>
+      </main>
+    );
+  }
+}
 
 type User = {
   id: number;
@@ -434,7 +493,12 @@ export function OffPage() {
         ) : activeGame === "aviator" ? (
           <TechAviator />
         ) : activeGame === "roulette" ? (
-          <TechRoulette />
+          <GameErrorBoundary
+            gameName="Tech Roulette"
+            onBack={() => setActiveGame("hub")}
+          >
+            <TechRoulette />
+          </GameErrorBoundary>
         ) : (
           <MarketAcademy />
         )}
