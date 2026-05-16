@@ -35,6 +35,8 @@ export function Hero() {
         src={background}
         alt=""
         className="absolute inset-0 w-full h-full object-cover opacity-70 blur-sm pointer-events-none"
+        decoding="async"
+        fetchPriority="high"
       />
 
       <div className="absolute inset-0 bg-black/25 pointer-events-none" />

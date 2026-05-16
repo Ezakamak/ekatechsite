@@ -19,7 +19,7 @@
       content="Premium web experiences, AI automation concepts, dashboards, and modern digital systems."
     />
     <meta property="og:url" content="https://ekatech.net" />
-    <meta property="og:image" content="https://ekatech.net/src/imports/View_recent_photos.png" />
+    <meta property="og:image" content="https://ekatech.net/og-image.svg" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="EkaTech — Minimal Software. Maximum Impact." />
@@ -27,11 +27,11 @@
       name="twitter:description"
       content="Premium web experiences, AI automation concepts, dashboards, and modern digital systems."
     />
-    <meta name="twitter:image" content="https://ekatech.net/src/imports/View_recent_photos.png" />
+    <meta name="twitter:image" content="https://ekatech.net/og-image.svg" />
     
     <link rel="canonical" href="https://ekatech.net" />
-    <link rel="icon" type="image/png" href="/src/imports/View_recent_photos.png" />
-    <link rel="apple-touch-icon" href="/src/imports/View_recent_photos.png" />
+    <link rel="icon" type="image/svg+xml" href="/og-image.svg" />
+    <link rel="apple-touch-icon" href="/og-image.svg" />
 
     <style>
       html,
@@ -52,20 +52,32 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!--Start of Tawk.to Script-->
+    <!--Start of deferred Tawk.to Script-->
     <script type="text/javascript">
-      var Tawk_API = Tawk_API || {},
-        Tawk_LoadStart = new Date();
-      (function () {
-        var s1 = document.createElement("script"),
-          s0 = document.getElementsByTagName("script")[0];
-        s1.async = true;
-        s1.src = "https://embed.tawk.to/6a01cd9d6d01861c385f3200/default";
-        s1.charset = "UTF-8";
-        s1.setAttribute("crossorigin", "*");
-        s0.parentNode.insertBefore(s1, s0);
-      })();
+      window.addEventListener(
+        "load",
+        function () {
+          var loadChat = function () {
+            window.Tawk_API = window.Tawk_API || {};
+            window.Tawk_LoadStart = new Date();
+            var s1 = document.createElement("script");
+            var s0 = document.getElementsByTagName("script")[0];
+            s1.async = true;
+            s1.src = "https://embed.tawk.to/6a01cd9d6d01861c385f3200/default";
+            s1.charset = "UTF-8";
+            s1.setAttribute("crossorigin", "*");
+            s0.parentNode.insertBefore(s1, s0);
+          };
+
+          if ("requestIdleCallback" in window) {
+            window.requestIdleCallback(loadChat, { timeout: 3000 });
+          } else {
+            window.setTimeout(loadChat, 1500);
+          }
+        },
+        { once: true }
+      );
     </script>
-    <!--End of Tawk.to Script-->
+    <!--End of deferred Tawk.to Script-->
   </body>
 </html>
