@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Hash, ServerCog } from "lucide-react";
+import { AlertTriangle, Hash, ListRestart, ServerCog } from "lucide-react";
 import { BetControls } from "./BetControls";
 import { TechCanvas } from "./TechCanvas";
 import { TechWalletPanel } from "./TechWalletPanel";
 import { connectTechAviatorSocket } from "./socketClient";
-import type { BetPanelState, GameState, SocketLike, TechCoinWallet } from "./types";
+import type { AviatorRoundResult, BetPanelState, GameState, SocketLike, TechCoinWallet } from "./types";
 
 const BETTING_SECONDS = 8;
 const CRASHED_SECONDS = 3;
-const DEFAULT_DEMO_BALANCE = 14_550.25;
 
 const initialPanels: BetPanelState[] = [
   { id: "panel-a", amount: 100, autoBet: false, autoCashout: true, autoCashoutMultiplier: 2, isBetAccepted: false, hasCashedOut: false },
@@ -33,6 +32,7 @@ interface DemoRound {
 
 export function TechAviator() {
   const [wallet, setWallet] = useState<TechCoinWallet>();
+  const [recentMultipliers, setRecentMultipliers] = useState<AviatorRoundResult[]>([]);
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const [panels, setPanels] = useState<BetPanelState[]>(initialPanels);
   const [countdown, setCountdown] = useState(BETTING_SECONDS);
@@ -57,36 +57,31 @@ export function TechAviator() {
     setPanels((current) => current.map((panel) => (panel.id === panelId ? { ...panel, ...patch } : panel)));
   }, []);
 
-  const ensureDemoWallet = useCallback(() => {
-    setWallet((current) => current ?? createDemoWallet(user.userId, user.userName));
-  }, [user.userId, user.userName]);
+  const applyLiveState = useCallback((data: any) => {
+    if (data?.wallet) setWallet(data.wallet);
+    if (Array.isArray(data?.recentMultipliers)) setRecentMultipliers(data.recentMultipliers);
+  }, []);
 
-  const addDemoTransaction = useCallback((type: "DEDUCT_BET" | "ADD_WINNING", amount: number, description: string, multiplier?: number) => {
-    const roundId = demoRoundRef.current?.roundId;
+  const loadLiveState = useCallback(async () => {
+    const response = await fetch("/api/tech-aviator", { credentials: "same-origin", cache: "no-store" });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data) throw new Error(data?.error || "Canlı OFF Tech Coin cüzdanı yüklenemedi.");
+    applyLiveState(data);
+  }, [applyLiveState]);
 
-    setWallet((current) => {
-      const source = current ?? createDemoWallet(user.userId, user.userName);
-      const nextBalance = roundMoney(source.techCoinBalance + amount);
-
-      return {
-        ...source,
-        techCoinBalance: nextBalance,
-        transactionHistory: [
-          {
-            id: `demo_txn_${Date.now()}_${Math.random().toString(16).slice(2)}`,
-            type,
-            amount: roundMoney(amount),
-            balanceAfter: nextBalance,
-            description,
-            roundId,
-            multiplier,
-            createdAt: new Date().toISOString(),
-          },
-          ...source.transactionHistory,
-        ].slice(0, 100),
-      };
+  const postLiveAction = useCallback(async (payload: Record<string, unknown>) => {
+    const response = await fetch("/api/tech-aviator", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
-  }, [user.userId, user.userName]);
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok) throw new Error(data?.error || "Canlı Tech Coin işlemi tamamlanamadı.");
+    applyLiveState(data);
+    window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
+    return data;
+  }, [applyLiveState]);
 
   const enterDemoMode = useCallback((notice = "Canlı Tech Aviator sunucusu bulunamadı; bahisler tarayıcı içi demo motorunda çalışıyor.") => {
     if (demoModeRef.current) return;
@@ -98,8 +93,7 @@ export function TechAviator() {
     setConnectionNotice(notice);
     socketRef.current?.disconnect();
     socketRef.current = undefined;
-    ensureDemoWallet();
-  }, [ensureDemoWallet]);
+  }, []);
 
   const startDemoRound = useCallback(() => {
     if (!demoModeRef.current) return;
@@ -135,6 +129,7 @@ export function TechAviator() {
         if (nextMultiplier >= round.crashPoint) {
           window.clearInterval(tickTimer);
           setGameState(createDemoGameState(round, "STATUS_CRASHED", round.crashPoint, true));
+          void postLiveAction({ action: "record-round", roundId: round.roundId, crashPoint: round.crashPoint, hash: `demo-${round.roundId}` }).catch(() => undefined);
           demoTimersRef.current.push(window.setTimeout(startDemoRound, CRASHED_SECONDS * 1000));
           return;
         }
@@ -144,9 +139,9 @@ export function TechAviator() {
       demoTimersRef.current.push(tickTimer);
     }, BETTING_SECONDS * 1000);
     demoTimersRef.current.push(flightTimer);
-  }, [clearDemoTimers]);
+  }, [clearDemoTimers, postLiveAction]);
 
-  const placeDemoBet = useCallback((panel: BetPanelState) => {
+  const placeDemoBet = useCallback(async (panel: BetPanelState) => {
     if (gameState.status !== "STATUS_BETTING") {
       setErrorMessage("BETTING_CLOSED");
       return;
@@ -158,75 +153,46 @@ export function TechAviator() {
       return;
     }
 
-    if ((wallet?.techCoinBalance ?? DEFAULT_DEMO_BALANCE) < amount) {
+    if ((wallet?.techCoinBalance ?? 0) < amount) {
       setErrorMessage("Yetersiz Tech Coin bakiyesi.");
       return;
     }
 
-    addDemoTransaction("DEDUCT_BET", -amount, "Tech Aviator Demo Bahis");
-    updatePanel(panel.id, {
-      isBetAccepted: true,
-      hasCashedOut: false,
-      activeBetAmount: amount,
-    });
-    setErrorMessage(undefined);
-  }, [addDemoTransaction, gameState.status, updatePanel, wallet?.techCoinBalance]);
+    try {
+      await postLiveAction({ action: "place-bet", roundId: gameState.roundId, panelId: panel.id, amount });
+      updatePanel(panel.id, {
+        isBetAccepted: true,
+        hasCashedOut: false,
+        activeBetAmount: amount,
+      });
+      setErrorMessage(undefined);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Bahis reddedildi.");
+    }
+  }, [gameState.roundId, gameState.status, postLiveAction, updatePanel, wallet?.techCoinBalance]);
 
-  const cashOutDemoBet = useCallback((panel: BetPanelState) => {
+  const cashOutDemoBet = useCallback(async (panel: BetPanelState) => {
     if (gameState.status !== "STATUS_FLYING" || !panel.isBetAccepted || panel.hasCashedOut) {
       setErrorMessage("Nakit çekim şu anda uygun değil.");
       return;
     }
 
-    const payout = roundMoney((panel.activeBetAmount ?? panel.amount) * gameState.currentMultiplier);
-    addDemoTransaction("ADD_WINNING", payout, `Tech Aviator Demo Nakit Çekim @ ${gameState.currentMultiplier.toFixed(2)}x`, gameState.currentMultiplier);
-    updatePanel(panel.id, { hasCashedOut: true });
-    setErrorMessage(undefined);
-  }, [addDemoTransaction, gameState.currentMultiplier, gameState.status, updatePanel]);
-
-  const placeBet = useCallback((panel: BetPanelState) => {
-    if (demoModeRef.current) {
-      placeDemoBet(panel);
-      return;
-    }
-
-    socketRef.current?.emit(
-      "place-bet",
-      {
-        panelId: panel.id,
-        amount: panel.amount,
-        autoCashoutMultiplier: panel.autoCashout ? panel.autoCashoutMultiplier : undefined,
-      },
-      (response) => {
-        if (!response?.ok) {
-          setErrorMessage(response?.code === "INSUFFICIENT_TECH_COIN" ? "Yetersiz Tech Coin bakiyesi." : response?.code || "Bahis reddedildi.");
-          return;
-        }
-        updatePanel(panel.id, {
-          isBetAccepted: true,
-          hasCashedOut: false,
-          activeBetAmount: panel.amount,
-        });
-        setErrorMessage(undefined);
-      },
-    );
-  }, [placeDemoBet, updatePanel]);
-
-  const cashOut = useCallback((panel: BetPanelState) => {
-    if (demoModeRef.current) {
-      cashOutDemoBet(panel);
-      return;
-    }
-
-    socketRef.current?.emit("cash-out", { panelId: panel.id }, (response) => {
-      if (!response?.ok) {
-        setErrorMessage(response?.code || "Nakit çekim reddedildi.");
-        return;
-      }
+    try {
+      await postLiveAction({ action: "cash-out", roundId: gameState.roundId, panelId: panel.id, multiplier: gameState.currentMultiplier });
       updatePanel(panel.id, { hasCashedOut: true });
       setErrorMessage(undefined);
-    });
-  }, [cashOutDemoBet, updatePanel]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Nakit çekim reddedildi.");
+    }
+  }, [gameState.currentMultiplier, gameState.roundId, gameState.status, postLiveAction, updatePanel]);
+
+  const placeBet = useCallback((panel: BetPanelState) => {
+    void placeDemoBet(panel);
+  }, [placeDemoBet]);
+
+  const cashOut = useCallback((panel: BetPanelState) => {
+    void cashOutDemoBet(panel);
+  }, [cashOutDemoBet]);
 
   useEffect(() => {
     let disposed = false;
@@ -253,7 +219,7 @@ export function TechAviator() {
         });
         socket.on("disconnect", () => setConnected(false));
         socket.on("connect_error", () => enterDemoMode());
-        socket.on("wallet-update", (nextWallet: TechCoinWallet) => setWallet(nextWallet));
+        socket.on("wallet-update", () => { void loadLiveState().catch(() => undefined); });
         socket.on("game-state", (nextState: GameState) => {
           setGameState(nextState);
           if (nextState.status === "STATUS_BETTING") {
@@ -272,7 +238,10 @@ export function TechAviator() {
         socket.on("multiplier-update", (payload: { currentMultiplier: number }) => {
           setGameState((current) => ({ ...current, status: "STATUS_FLYING", currentMultiplier: payload.currentMultiplier }));
         });
-        socket.on("round-crashed", (nextState: GameState) => setGameState(nextState));
+        socket.on("round-crashed", (nextState: GameState) => {
+          setGameState(nextState);
+          void postLiveAction({ action: "record-round", roundId: nextState.roundId, crashPoint: nextState.crashPoint, hash: nextState.hash }).catch(() => undefined);
+        });
         socket.on("cash-out-success", (payload: { panelId: string }) => updatePanel(payload.panelId, { hasCashedOut: true }));
         socket.on("game-error", (payload: { code: string }) => {
           setErrorMessage(payload.code === "INSUFFICIENT_TECH_COIN" ? "Yetersiz Tech Coin bakiyesi." : payload.code);
@@ -289,7 +258,24 @@ export function TechAviator() {
       setConnected(false);
       socketRef.current?.disconnect();
     };
-  }, [clearDemoTimers, enterDemoMode, updatePanel, user]);
+  }, [clearDemoTimers, enterDemoMode, loadLiveState, postLiveAction, updatePanel, user]);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => loadLiveState().catch((error) => {
+      if (active) setErrorMessage(error instanceof Error ? error.message : "Canlı OFF Tech Coin cüzdanı yüklenemedi.");
+    });
+
+    refresh();
+    const timer = window.setInterval(refresh, 10_000);
+    window.addEventListener("ekatech-techcoin-refresh", refresh);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("ekatech-techcoin-refresh", refresh);
+    };
+  }, [loadLiveState]);
 
   useEffect(() => {
     if (demoMode) startDemoRound();
@@ -322,10 +308,10 @@ export function TechAviator() {
               Tech Coin <span className="text-emerald-300 drop-shadow-[0_0_18px_rgba(16,185,129,0.8)]">Aviator</span>
             </h1>
             <p className="mt-3 max-w-2xl text-zinc-400">
-              Gerçek zamanlı WebSocket oyun döngüsü, dosya tabanlı Tech Coin cüzdanı ve SHA-256 provably-fair crash noktası ile siberpunk uçuş deneyimi.
+              Canlı OFF Hub Tech Coin cüzdanına bağlı bahisler, son 10 round çarpanı ve SHA-256 provably-fair crash noktası ile siberpunk uçuş deneyimi.
             </p>
           </div>
-          <TechWalletPanel wallet={wallet} connected={connected || demoMode} />
+          <TechWalletPanel wallet={wallet} connected={Boolean(wallet)} />
         </div>
 
         {connectionNotice ? (
@@ -345,8 +331,10 @@ export function TechAviator() {
         <div className="my-5 grid gap-3 rounded-3xl border border-zinc-800 bg-zinc-950/80 p-4 text-xs text-zinc-400 md:grid-cols-3">
           <span className="flex items-center gap-2"><ServerCog className="h-4 w-4 text-cyan-300" /> Tur: {gameState.roundId}</span>
           <span className="flex items-center gap-2"><Hash className="h-4 w-4 text-emerald-300" /> Hash: {gameState.hash.slice(0, 24)}...</span>
-          <span>Status: <strong className="text-white">{demoMode ? "DEMO / " : ""}{gameState.status}</strong></span>
+          <span>Status: <strong className="text-white">{demoMode ? "DEMO MOTOR / " : ""}{gameState.status}</strong></span>
         </div>
+
+        <RecentMultipliers rounds={recentMultipliers} />
 
         <BetControls panels={panels} status={gameState.status} currentMultiplier={gameState.currentMultiplier} onPanelChange={updatePanel} onPlaceBet={placeBet} onCashOut={cashOut} />
       </div>
@@ -354,22 +342,21 @@ export function TechAviator() {
   );
 }
 
-function createDemoWallet(userId: string, userName: string): TechCoinWallet {
-  return {
-    userId,
-    userName,
-    techCoinBalance: DEFAULT_DEMO_BALANCE,
-    transactionHistory: [
-      {
-        id: `demo_wallet_${Date.now()}`,
-        type: "WALLET_CREATED",
-        amount: DEFAULT_DEMO_BALANCE,
-        balanceAfter: DEFAULT_DEMO_BALANCE,
-        description: "Tech Aviator demo cüzdanı oluşturuldu",
-        createdAt: new Date().toISOString(),
-      },
-    ],
-  };
+function RecentMultipliers({ rounds }: { rounds: AviatorRoundResult[] }) {
+  return (
+    <section className="mb-5 rounded-3xl border border-amber-300/20 bg-amber-300/[0.07] p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.22em] text-amber-100/80">
+        <ListRestart className="h-4 w-4" /> Son 10 round çarpanları
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {rounds.length ? rounds.map((round) => (
+          <span key={round.roundId} className={`rounded-full border px-3 py-1.5 font-mono text-sm font-black ${round.crashPoint >= 2 ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200" : "border-red-300/25 bg-red-300/10 text-red-200"}`}>
+            {round.crashPoint.toFixed(2)}x
+          </span>
+        )) : <span className="text-sm text-amber-100/55">Henüz kayıtlı round yok; ilk crash sonrası liste dolacak.</span>}
+      </div>
+    </section>
+  );
 }
 
 function createDemoGameState(round: DemoRound, status: GameState["status"], currentMultiplier: number, revealCrashPoint = false): GameState {

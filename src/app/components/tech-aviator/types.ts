@@ -15,7 +15,16 @@ export interface TechCoinWallet {
   userId: string;
   userName: string;
   techCoinBalance: number;
+  lifetimeEarned?: number;
+  updatedAt?: string | null;
   transactionHistory: WalletTransaction[];
+}
+
+export interface AviatorRoundResult {
+  roundId: string;
+  crashPoint: number;
+  hash?: string;
+  createdAt?: string;
 }
 
 export interface GameState {
