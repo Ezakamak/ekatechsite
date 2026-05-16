@@ -9,7 +9,6 @@ import {
 import { motion } from "motion/react";
 import {
   BadgeCheck,
-  CircleDollarSign,
   Clock3,
   Database,
   Dice5,
@@ -80,6 +79,18 @@ type TableBet = {
   total_amount: number;
   users?: string | null;
   item_labels?: string | null;
+  bet_ids?: string | null;
+  my_bet_ids?: string | null;
+};
+
+type MyRouletteBet = {
+  id: number;
+  bet_type: BetType;
+  bet_value?: string | null;
+  bet_amount: number;
+  stake_type?: "coin" | "item";
+  stake_item_label?: string | null;
+  status: string;
 };
 
 type RouletteInventoryItem = {
@@ -119,6 +130,7 @@ const ROULETTE_WHEEL = [
 ];
 const WHEEL_SECTOR_DEGREES = 360 / ROULETTE_WHEEL.length;
 const BALL_ROTATION_MULTIPLIER = 1.22;
+const SPIN_ANIMATION_SECONDS = 13;
 const RED_NUMBERS = new Set([
   1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36,
 ]);
@@ -198,7 +210,6 @@ function wheelRotationForWinningNumber(
 export function TechRoulette() {
   const { language } = useLanguage();
   const locale = language === "tr" ? "tr-TR" : "en-US";
-  const [wallet, setWallet] = useState(0);
   const [betInput, setBetInput] = useState(String(100));
   const [betType, setBetType] = useState<BetType>("red");
   const [straightNumber, setStraightNumber] = useState(7);
@@ -209,8 +220,10 @@ export function TechRoulette() {
   const [recentNumbers, setRecentNumbers] = useState<RouletteResult[]>([]);
   const [currentRound, setCurrentRound] = useState<RouletteRound | null>(null);
   const [tableBets, setTableBets] = useState<TableBet[]>([]);
+  const [myBets, setMyBets] = useState<MyRouletteBet[]>([]);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [spinning, setSpinning] = useState(false);
+  const [pendingResult, setPendingResult] = useState<RouletteResult | null>(null);
   const [wheelRotation, setWheelRotation] = useState(0);
   const [lastAnimatedRoundId, setLastAnimatedRoundId] = useState<number | null>(
     null,
@@ -275,26 +288,27 @@ export function TechRoulette() {
         return data;
       })
       .then((data) => {
-        setWallet(Number(data?.ekatechwallet || data?.wallet?.balance || 0));
         setRecent(Array.isArray(data?.recent) ? data.recent : []);
         const numbers = Array.isArray(data?.recentNumbers)
           ? data.recentNumbers
           : [];
         setRecentNumbers(numbers);
-        if (numbers[0]) setResult(numbers[0]);
+        const hasNewResolvedRound =
+          data?.lastResolvedRound?.winning_number != null &&
+          data.lastResolvedRound.id !== lastAnimatedRoundId;
+        if (numbers[0] && !hasNewResolvedRound && !pendingResult)
+          setResult(numbers[0]);
         setCurrentRound(data?.currentRound || null);
         setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
+        setMyBets(Array.isArray(data?.myBets) ? data.myBets : []);
         setInventory(Array.isArray(data?.inventory) ? data.inventory : []);
         setSecondsLeft(
           Math.max(0, Number(data?.currentRound?.secondsLeft || 0)),
         );
-        if (
-          data?.lastResolvedRound?.winning_number != null &&
-          data.lastResolvedRound.id !== lastAnimatedRoundId
-        ) {
-          setResult(data.lastResolvedRound);
+        if (hasNewResolvedRound) {
+          setPendingResult(data.lastResolvedRound);
           setLastAnimatedRoundId(data.lastResolvedRound.id);
-          animateWheelTo(Number(data.lastResolvedRound.winning_number));
+          animateWheelTo(data.lastResolvedRound);
         }
         setMessage("SQL senkronlu masa, geri sayım ve ortak çipler hazır.");
       })
@@ -319,12 +333,18 @@ export function TechRoulette() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const animateWheelTo = (winningNumber: number) => {
+  const animateWheelTo = (resolvedRound: RouletteResult) => {
     setWheelRotation((current) =>
-      wheelRotationForWinningNumber(winningNumber, current),
+      wheelRotationForWinningNumber(resolvedRound.winning_number, current),
     );
     setSpinning(true);
-    window.setTimeout(() => setSpinning(false), 3200);
+    setPendingResult(resolvedRound);
+    window.setTimeout(() => {
+      setSpinning(false);
+      setPendingResult(null);
+      setResult(resolvedRound);
+      playOffSound("win");
+    }, SPIN_ANIMATION_SECONDS * 1000);
     playOffSound("reel");
   };
 
@@ -350,9 +370,9 @@ export function TechRoulette() {
       if (!response.ok)
         throw new Error(data?.error || "Rulet bahsi tamamlanamadı.");
 
-      setWallet(Number(data.ekatechwallet || 0));
       setCurrentRound(data?.currentRound || currentRound);
       setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
+      setMyBets(Array.isArray(data?.myBets) ? data.myBets : []);
       setSecondsLeft(
         Math.max(0, Number(data?.currentRound?.secondsLeft || secondsLeft)),
       );
@@ -370,6 +390,38 @@ export function TechRoulette() {
     }
   };
 
+  const cancelBet = async (chip?: TableBet) => {
+    const ownBetId = Number(String(chip?.my_bet_ids || "").split(",")[0] || 0);
+    if (!ownBetId || spinning || secondsLeft <= 1) return;
+    setMessage("Çip geri çekiliyor ve bahis bakiyesi iade ediliyor...");
+    playOffSound("click");
+
+    try {
+      const response = await fetch("/api/tech-roulette", {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ betId: ownBetId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok)
+        throw new Error(data?.error || "Bahis geri çekilemedi.");
+
+      setTableBets(Array.isArray(data?.tableBets) ? data.tableBets : []);
+      setMyBets(Array.isArray(data?.myBets) ? data.myBets : []);
+      setInventory(Array.isArray(data?.inventory) ? data.inventory : []);
+      setMessage("Yanlış bahis masadan kaldırıldı; çip bakiyene/eşyana iade edildi.");
+      window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Bahis geri çekilemedi.");
+      playOffSound("error");
+    }
+  };
+
+  const visibleRecentNumbers = pendingResult
+    ? recentNumbers.filter((item) => item.id !== pendingResult.id)
+    : recentNumbers;
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#050806] px-4 pb-24 pt-28 text-white sm:px-6">
       <div className="absolute left-1/2 top-28 h-96 w-96 -translate-x-1/2 rounded-full bg-emerald-500/10 blur-3xl" />
@@ -380,10 +432,10 @@ export function TechRoulette() {
             <span className="shrink-0 font-semibold uppercase tracking-[0.18em] text-amber-100/80">
               Son sayılar
             </span>
-            {recentNumbers.length === 0 ? (
-              <span>Henüz sonuç yok</span>
+            {visibleRecentNumbers.length === 0 ? (
+              <span>{spinning ? "Top durunca açıklanacak" : "Henüz sonuç yok"}</span>
             ) : (
-              recentNumbers.map((item) => (
+              visibleRecentNumbers.map((item) => (
                 <span
                   key={item.id || `${item.winning_number}-${item.resolved_at}`}
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black text-white ${item.winning_color === "green" ? "bg-emerald-500" : item.winning_color === "red" ? "bg-red-600" : "bg-zinc-950 ring-1 ring-white/20"}`}
@@ -419,7 +471,10 @@ export function TechRoulette() {
                 <div className="absolute top-4 z-20 h-0 w-0 border-x-[13px] border-t-[24px] border-x-transparent border-t-amber-200 drop-shadow-[0_0_12px_rgba(251,191,36,0.9)]" />
                 <motion.div
                   animate={{ rotate: wheelRotation }}
-                  transition={{ duration: 2.4, ease: [0.2, 0.85, 0.2, 1] }}
+                  transition={{
+                    duration: SPIN_ANIMATION_SECONDS,
+                    ease: [0.12, 0.82, 0.18, 1],
+                  }}
                   className="relative aspect-square w-full max-w-[24rem] rounded-full border-[12px] border-amber-300 bg-zinc-950 shadow-2xl shadow-black before:absolute before:inset-[12%] before:rounded-full before:border before:border-white/15 before:bg-[radial-gradient(circle,#202020_0_38%,transparent_39%)] after:absolute after:inset-[43%] after:rounded-full after:bg-amber-100 after:shadow-[0_0_24px_rgba(251,191,36,0.8)]"
                   style={{ background: wheelGradient }}
                 >
@@ -430,9 +485,10 @@ export function TechRoulette() {
                     return (
                       <span
                         key={number}
-                        className="absolute left-1/2 top-1/2 z-10 flex h-5 w-5 origin-center -translate-x-1/2 -translate-y-1/2 items-center justify-center text-[0.56rem] font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
+                        className="absolute left-1/2 top-1/2 z-10 flex h-6 w-6 origin-center -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-[0.58rem] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
                         style={{
-                          transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-10.1rem) rotate(90deg)`,
+                          transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(clamp(-10.35rem, -42.5vw, -7.45rem)) rotate(${-angle}deg)`,
+                          transformOrigin: "center",
                         }}
                       >
                         {number}
@@ -444,7 +500,10 @@ export function TechRoulette() {
                   animate={{
                     rotate: -wheelRotation * BALL_ROTATION_MULTIPLIER,
                   }}
-                  transition={{ duration: 3.1, ease: [0.08, 0.72, 0.14, 1] }}
+                  transition={{
+                    duration: SPIN_ANIMATION_SECONDS,
+                    ease: [0.08, 0.72, 0.14, 1],
+                  }}
                   className="pointer-events-none absolute aspect-square w-[78%] max-w-[19rem] rounded-full"
                 >
                   <motion.span
@@ -467,12 +526,7 @@ export function TechRoulette() {
               </div>
 
               <div className="grid gap-4">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <StatCard
-                    icon={<CircleDollarSign className="h-4 w-4" />}
-                    label="ekatechwallet"
-                    value={`${formatTc(wallet, locale)} TC`}
-                  />
+                <div className="grid gap-3 sm:grid-cols-2">
                   <StatCard
                     icon={<Dice5 className="h-4 w-4" />}
                     label="Bahis"
@@ -509,7 +563,19 @@ export function TechRoulette() {
                   </div>
                 </div>
 
-                {result && (
+                {spinning ? (
+                  <div className="rounded-[1.5rem] border border-amber-300/25 bg-amber-300/10 p-5">
+                    <p className="text-xs uppercase tracking-[0.22em] text-white/45">
+                      Sonuç gizli
+                    </p>
+                    <p className="mt-3 text-lg font-semibold text-amber-50">
+                      Top {SPIN_ANIMATION_SECONDS} saniyelik turunu bitirince sayı açıklanacak.
+                    </p>
+                    <p className="mt-2 text-sm text-white/55">
+                      Kazanan numara top durmadan ekranda veya son sayılar şeridinde gösterilmez.
+                    </p>
+                  </div>
+                ) : result && (
                   <div className="rounded-[1.5rem] border border-amber-300/25 bg-amber-300/10 p-5">
                     <p className="text-xs uppercase tracking-[0.22em] text-white/45">
                       Son çıkan sayı
@@ -550,6 +616,9 @@ export function TechRoulette() {
               </div>
               <div className="rounded-2xl border border-amber-200/40 bg-black/25 px-4 py-3 text-sm text-amber-100">
                 Seçim: <strong>{selectedBetLabel}</strong>
+                {myBets.length > 0 ? (
+                  <span className="ml-2 text-amber-50/70">· {myBets.length} aktif çipin var</span>
+                ) : null}
               </div>
             </div>
 
@@ -559,6 +628,7 @@ export function TechRoulette() {
                 selectedValue={betValue}
                 betChips={betChips}
                 onSelect={selectBet}
+                onCancelBet={cancelBet}
               />
             </div>
 
@@ -869,11 +939,13 @@ function RouletteTable({
   selectedValue,
   betChips,
   onSelect,
+  onCancelBet,
 }: {
   selectedType: BetType;
   selectedValue?: number;
   betChips: Record<string, TableBet>;
   onSelect: (bet: BoardBet) => void;
+  onCancelBet: (chip?: TableBet) => void;
 }) {
   const isSelected = (type: BetType, value?: number) =>
     selectedType === type && (value === undefined || selectedValue === value);
@@ -896,7 +968,7 @@ function RouletteTable({
             className={`relative row-span-3 rounded-l-[1.3rem] border-2 text-2xl font-black transition-all ${isSelected("straight", 0) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-500 text-white hover:border-amber-200"}`}
           >
             0
-            <ChipPile chip={chipFor("straight", 0)} />
+            <ChipPile chip={chipFor("straight", 0)} onCancelBet={onCancelBet} />
           </button>
           {TABLE_ROWS.map((row, rowIndex) =>
             row
@@ -906,6 +978,7 @@ function RouletteTable({
                   number={number}
                   selected={isSelected("straight", number)}
                   chip={chipFor("straight", number)}
+                  onCancelBet={onCancelBet}
                   onClick={() =>
                     onSelect({
                       type: "straight",
@@ -931,7 +1004,7 @@ function RouletteTable({
                   className={`relative rounded-r-xl border-2 px-2 text-sm font-black transition-all ${isSelected("column", 3 - rowIndex) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-800 text-white hover:border-amber-200"}`}
                 >
                   2:1
-                  <ChipPile chip={chipFor("column", 3 - rowIndex)} />
+                  <ChipPile chip={chipFor("column", 3 - rowIndex)} onCancelBet={onCancelBet} />
                 </button>,
               ),
           )}
@@ -954,7 +1027,7 @@ function RouletteTable({
               className={`relative rounded-xl border-2 py-3 text-sm font-black transition-all ${isSelected("dozen", value) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-700 text-white hover:border-amber-200"}`}
             >
               {value === 1 ? "1-12" : value === 2 ? "13-24" : "25-36"}
-              <ChipPile chip={chipFor("dozen", value)} />
+              <ChipPile chip={chipFor("dozen", value)} onCancelBet={onCancelBet} />
             </button>
           ))}
           <div />
@@ -965,6 +1038,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("low")}
             chip={chipFor("low")}
+            onCancelBet={onCancelBet}
             onClick={() =>
               onSelect({ type: "low", label: "1-18", multiplier: "1:1" })
             }
@@ -974,6 +1048,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("even")}
             chip={chipFor("even")}
+            onCancelBet={onCancelBet}
             onClick={() =>
               onSelect({ type: "even", label: "Çift", multiplier: "1:1" })
             }
@@ -983,6 +1058,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("red")}
             chip={chipFor("red")}
+            onCancelBet={onCancelBet}
             tone="red"
             onClick={() =>
               onSelect({ type: "red", label: "Kırmızı", multiplier: "1:1" })
@@ -993,6 +1069,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("black")}
             chip={chipFor("black")}
+            onCancelBet={onCancelBet}
             tone="black"
             onClick={() =>
               onSelect({ type: "black", label: "Siyah", multiplier: "1:1" })
@@ -1003,6 +1080,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("odd")}
             chip={chipFor("odd")}
+            onCancelBet={onCancelBet}
             onClick={() =>
               onSelect({ type: "odd", label: "Tek", multiplier: "1:1" })
             }
@@ -1012,6 +1090,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("high")}
             chip={chipFor("high")}
+            onCancelBet={onCancelBet}
             onClick={() =>
               onSelect({ type: "high", label: "19-36", multiplier: "1:1" })
             }
@@ -1034,11 +1113,13 @@ function NumberCell({
   number,
   selected,
   chip,
+  onCancelBet,
   onClick,
 }: {
   number: number;
   selected: boolean;
   chip?: TableBet;
+  onCancelBet: (chip?: TableBet) => void;
   onClick: () => void;
 }) {
   const color = numberColor(number);
@@ -1049,7 +1130,7 @@ function NumberCell({
       className={`relative flex min-h-14 items-center justify-center rounded-lg border-2 text-lg font-black leading-none tabular-nums shadow-inner transition-all ${selected ? "border-amber-200 bg-amber-200 text-black shadow-amber-950/30" : color === "red" ? "border-white/25 bg-red-600 text-white hover:border-amber-200" : "border-white/25 bg-zinc-950 text-white hover:border-amber-200"}`}
     >
       {number}
-      <ChipPile chip={chip} />
+      <ChipPile chip={chip} onCancelBet={onCancelBet} />
     </button>
   );
 }
@@ -1058,12 +1139,14 @@ function OutsideBet({
   active,
   chip,
   tone = "green",
+  onCancelBet,
   onClick,
   children,
 }: {
   active: boolean;
   chip?: TableBet;
   tone?: "green" | "red" | "black";
+  onCancelBet: (chip?: TableBet) => void;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -1080,19 +1163,50 @@ function OutsideBet({
       className={`relative rounded-xl border-2 py-3 text-sm font-black transition-all ${active ? "border-amber-200 bg-amber-200 text-black" : `border-white/25 ${base} text-white hover:border-amber-200`}`}
     >
       {children}
-      <ChipPile chip={chip} />
+      <ChipPile chip={chip} onCancelBet={onCancelBet} />
     </button>
   );
 }
 
-function ChipPile({ chip }: { chip?: TableBet }) {
+function ChipPile({
+  chip,
+  onCancelBet,
+}: {
+  chip?: TableBet;
+  onCancelBet: (chip?: TableBet) => void;
+}) {
   if (!chip) return null;
+  const totalAmount = Number(chip.total_amount || 0);
+  const chipCount = Math.min(99, Number(chip.chip_count || 1));
+  const canCancel = Boolean(chip.my_bet_ids);
+  const chipTone =
+    totalAmount >= 5000
+      ? "from-fuchsia-200 via-violet-500 to-cyan-400"
+      : totalAmount >= 1000
+        ? "from-amber-100 via-orange-500 to-red-600"
+        : totalAmount >= 100
+          ? "from-cyan-100 via-sky-500 to-blue-700"
+          : "from-emerald-100 via-lime-500 to-emerald-700";
+
   return (
     <span
-      title={`${chip.users || "Oyuncular"} · ${formatTc(Number(chip.total_amount || 0), "tr-TR")} TC`}
-      className="pointer-events-none absolute -right-2 -top-2 z-20 flex min-w-9 items-center justify-center rounded-full border-2 border-amber-100 bg-[radial-gradient(circle_at_35%_30%,#fff7ad,#f59e0b_58%,#92400e)] px-2 py-1 text-[0.62rem] font-black text-black shadow-lg shadow-black/35 ring-2 ring-black/25"
+      role={canCancel ? "button" : undefined}
+      tabIndex={canCancel ? 0 : undefined}
+      title={`${chip.users || "Oyuncular"} · ${formatTc(totalAmount, "tr-TR")} TC${canCancel ? " · Geri çekmek için bas" : ""}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (canCancel) onCancelBet(chip);
+      }}
+      onKeyDown={(event) => {
+        if (!canCancel || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onCancelBet(chip);
+      }}
+      className={`absolute -right-3 -top-3 z-20 flex min-w-12 origin-bottom items-center justify-center rounded-full border-2 border-white/80 bg-gradient-to-br ${chipTone} px-2.5 py-1.5 text-[0.62rem] font-black text-white shadow-[0_8px_18px_rgba(0,0,0,0.42)] ring-2 ring-black/30 transition hover:scale-110 ${canCancel ? "cursor-pointer animate-[chip-pop_0.72s_cubic-bezier(0.2,1.2,0.2,1)]" : "pointer-events-none animate-[chip-land_1.6s_ease-in-out_infinite]"}`}
     >
-      {Math.min(99, Number(chip.chip_count || 1))}×
+      <span className="absolute inset-1 rounded-full border border-white/45" />
+      <span className="relative tabular-nums">{chipCount} chip</span>
     </span>
   );
 }
