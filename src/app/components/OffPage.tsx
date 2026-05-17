@@ -13,6 +13,7 @@ import {
   BarChart3,
   Building2,
   CircleDot,
+  Dice5,
   Gamepad2,
   Gift,
   Lock,
@@ -39,6 +40,7 @@ import { TechCoinMines } from "./TechCoinMines";
 import { EkaTowers } from "./EkaTowers";
 import { TechAviator } from "./tech-aviator/TechAviator";
 import { TechGallop } from "./TechGallop";
+import { TechDice } from "./TechDice";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
 
@@ -139,6 +141,7 @@ type GameKey =
   | "aviator"
   | "roulette"
   | "gallop"
+  | "dice"
   | "store";
 
 type TechStoreTlPackage = {
@@ -236,6 +239,9 @@ export function OffPage() {
         gallopTitle: "Tech Gallop",
         gallopDesc:
           "Fütüristik cyber at yarışı. Kazanan yarıştan önce gizli ve ağırlıklı RNG ile seçilir; sinematik koşu animasyonu sonucu birebir takip eder ve yalnızca Tech Coin kullanır.",
+        diceTitle: "Tech Dice",
+        diceDesc:
+          "0-100 slider ile Roll Over veya Roll Under seç; yeşil bölge şansı, çarpanı ve Tech Coin reward ihtimalini canlı gör.",
         minesRemoved:
           "EkaMines yerine gerçek para OFF, ana Tech Coin cüzdanına bağlı TechMines aktif.",
         walletTitle: "Tech Coin cüzdanı",
@@ -311,6 +317,9 @@ export function OffPage() {
         gallopTitle: "Tech Gallop",
         gallopDesc:
           "Futuristic cyber horse racing. A hidden weighted RNG picks the winner before the race, then the cinematic animation follows the locked result using only Tech Coin.",
+        diceTitle: "Tech Dice",
+        diceDesc:
+          "Choose Roll Over or Roll Under on a 0-100 slider; see the green zone chance, multiplier and Tech Coin reward live.",
         minesRemoved:
           "TechMines is active with real money OFF and the main Tech Coin wallet connected.",
         walletTitle: "Tech Coin wallet",
@@ -549,6 +558,8 @@ export function OffPage() {
           <TechAviator />
         ) : activeGame === "gallop" ? (
           <TechGallop />
+        ) : activeGame === "dice" ? (
+          <TechDice />
         ) : activeGame === "roulette" ? (
           <GameErrorBoundary
             gameName="Tech Roulette"
@@ -775,6 +786,20 @@ export function OffPage() {
             onClick={() => {
               playOffSound("bet");
               setActiveGame("roulette");
+            }}
+          />
+          <GameCard
+            icon={<Dice5 className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.diceTitle}
+            description={copy.diceDesc}
+            accent="cyan"
+            buttonLabel={copy.open}
+            visual={<DiceSliderVisual />}
+            badge="Tech Coin"
+            onClick={() => {
+              playOffSound("bet");
+              setActiveGame("dice");
             }}
           />
           <GameCard
@@ -1206,6 +1231,8 @@ function GameCard({
   accent,
   buttonLabel,
   locked = false,
+  visual,
+  badge,
   onClick,
 }: {
   icon: ReactNode;
@@ -1215,6 +1242,8 @@ function GameCard({
   accent: "cyan" | "purple" | "amber";
   buttonLabel?: string;
   locked?: boolean;
+  visual?: ReactNode;
+  badge?: string;
   onClick?: () => void;
 }) {
   const accentClasses = {
@@ -1249,6 +1278,8 @@ function GameCard({
         </span>
       </div>
       <h2 className="mt-5 text-2xl font-medium text-white">{title}</h2>
+      {visual ? <div className="mt-4">{visual}</div> : null}
+      {badge ? <span className="mt-4 inline-flex rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-semibold text-emerald-100">{badge} support</span> : null}
       <p className="mt-3 min-h-24 text-sm leading-6 text-white/50">
         {description}
       </p>
@@ -1270,5 +1301,26 @@ function GameCard({
         </button>
       )}
     </motion.div>
+  );
+}
+
+
+function DiceSliderVisual() {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
+      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+        <span>Roll Under</span>
+        <span>Roll Over</span>
+      </div>
+      <div className="mt-3 h-4 overflow-hidden rounded-full bg-white/10 shadow-[0_0_26px_rgba(34,211,238,0.18)]">
+        <div className="grid h-full grid-cols-2">
+          <div className="bg-emerald-400/90" />
+          <div className="bg-red-400/90" />
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-center gap-2 text-sm text-cyan-100">
+        <Dice5 className="h-4 w-4" /> 0-100 target slider
+      </div>
+    </div>
   );
 }
