@@ -283,6 +283,8 @@ export async function onRequestDelete(context: any) {
 
     if (!bet || bet.status !== "pending" || bet.round_status !== "betting")
       throw new Error("Sadece açık turdaki bekleyen çip geri çekilebilir.");
+    if ((bet.stake_type || "coin") === "item")
+      throw new Error("Racon eşyası masaya koyulduktan sonra geri kaldırılamaz.");
     if (Number(bet.spins_at || 0) <= nowSeconds() + 1)
       throw new Error("Tur kapanırken çip geri çekilemez.");
 

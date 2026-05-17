@@ -92,6 +92,13 @@ type TableBet = {
   my_bet_ids?: string | null;
 };
 
+type PayoutHighlight = {
+  won: boolean;
+  multiplier: number;
+  payout: number;
+  profit: number;
+};
+
 type MyRouletteBet = {
   id: number;
   bet_type: BetType;
@@ -204,6 +211,42 @@ function describeBet(type: BetType, value?: number) {
   if (type === "high") return "19-36";
   if (type === "column") return `${value}. Sütun`;
   return `${value}. 12'li`;
+}
+
+function oddsMultiplierForBet(type: BetType) {
+  if (type === "straight") return 35;
+  if (type === "column" || type === "dozen") return 2;
+  return 1;
+}
+
+function isWinningTableBet(bet: Pick<TableBet, "bet_type" | "bet_value">, winningNumber: number) {
+  const value = Number(bet.bet_value);
+  if (bet.bet_type === "straight") return value === winningNumber;
+  if (winningNumber === 0) return false;
+  if (bet.bet_type === "red") return RED_NUMBERS.has(winningNumber);
+  if (bet.bet_type === "black") return !RED_NUMBERS.has(winningNumber);
+  if (bet.bet_type === "odd") return winningNumber % 2 === 1;
+  if (bet.bet_type === "even") return winningNumber % 2 === 0;
+  if (bet.bet_type === "low") return winningNumber >= 1 && winningNumber <= 18;
+  if (bet.bet_type === "high") return winningNumber >= 19 && winningNumber <= 36;
+  if (bet.bet_type === "column") return ((winningNumber - 1) % 3) + 1 === value;
+  if (bet.bet_type === "dozen") return Math.ceil(winningNumber / 12) === value;
+  return false;
+}
+
+function buildPayoutHighlights(bets: TableBet[], winningNumber: number) {
+  return bets.reduce<Record<string, PayoutHighlight>>((highlights, bet) => {
+    const multiplier = oddsMultiplierForBet(bet.bet_type);
+    const won = isWinningTableBet(bet, winningNumber);
+    const totalAmount = Number(bet.total_amount || 0);
+    highlights[tableBetKey(bet.bet_type, bet.bet_value)] = {
+      won,
+      multiplier,
+      payout: won ? totalAmount * (multiplier + 1) : 0,
+      profit: won ? totalAmount * multiplier : -totalAmount,
+    };
+    return highlights;
+  }, {});
 }
 
 function wheelSectorCenterForNumber(winningNumber: number) {
@@ -623,12 +666,15 @@ export function TechRoulette() {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [pendingResult, setPendingResult] = useState<RouletteResult | null>(null);
+  const [payoutHighlights, setPayoutHighlights] = useState<Record<string, PayoutHighlight>>({});
+  const [payoutReveal, setPayoutReveal] = useState(false);
   const [trajectoryPlan, setTrajectoryPlan] =
     useState<RouletteTrajectoryPlan | null>(null);
   const [trajectoryFrame, setTrajectoryFrame] =
     useState<RouletteTrajectoryFrame>(() => initialTrajectoryFrame());
   const [wheelPhiDegrees, setWheelPhiDegrees] = useState(WHEEL_ZERO_REFERENCE_DEGREES);
   const animationFrameRef = useRef<number | null>(null);
+  const payoutClearTimeoutRef = useRef<number | null>(null);
   const spinningRef = useRef(false);
   const lastAnimatedRoundIdRef = useRef<number | null>(null);
   const [spinSequence, setSpinSequence] = useState(0);
@@ -760,12 +806,21 @@ export function TechRoulette() {
     return () => {
       if (animationFrameRef.current != null)
         window.cancelAnimationFrame(animationFrameRef.current);
+      if (payoutClearTimeoutRef.current != null)
+        window.clearTimeout(payoutClearTimeoutRef.current);
     };
   }, []);
 
   const animateWheelTo = (resolvedRound: RouletteResult) => {
     if (animationFrameRef.current != null)
       window.cancelAnimationFrame(animationFrameRef.current);
+    if (payoutClearTimeoutRef.current != null) {
+      window.clearTimeout(payoutClearTimeoutRef.current);
+      payoutClearTimeoutRef.current = null;
+    }
+    setPayoutReveal(false);
+    setPayoutHighlights({});
+    const tableBetsSnapshot = [...tableBets];
     const plan = createRouletteTrajectoryPlan(
       resolvedRound.winning_number,
       SPIN_ANIMATION_SECONDS,
@@ -780,8 +835,6 @@ export function TechRoulette() {
     setSpinning(true);
     setPendingResult(resolvedRound);
     setCurrentRound(null);
-    setTableBets([]);
-    setMyBets([]);
     setSecondsLeft(0);
 
     const tick = (timestamp: number) => {
@@ -806,8 +859,21 @@ export function TechRoulette() {
       setSpinning(false);
       setPendingResult(null);
       setResult(resolvedRound);
+      setPayoutHighlights(
+        buildPayoutHighlights(
+          tableBetsSnapshot.length > 0 ? tableBetsSnapshot : tableBets,
+          resolvedRound.winning_number,
+        ),
+      );
+      setPayoutReveal(true);
       playOffSound("win");
-      window.setTimeout(loadState, 150);
+      payoutClearTimeoutRef.current = window.setTimeout(() => {
+        setPayoutReveal(false);
+        setPayoutHighlights({});
+        setTableBets([]);
+        setMyBets([]);
+        loadState();
+      }, 4200);
     };
 
     animationFrameRef.current = window.requestAnimationFrame(tick);
@@ -857,6 +923,12 @@ export function TechRoulette() {
   };
 
   const cancelBet = async (chip?: TableBet) => {
+    const hasItemStake = String(chip?.item_labels || "").trim().length > 0;
+    if (hasItemStake) {
+      setMessage("Racon eşyası masaya koyulduktan sonra geri kaldırılamaz; tur sonucunu bekle.");
+      playOffSound("error");
+      return;
+    }
     const ownBetId = Number(String(chip?.my_bet_ids || "").split(",")[0] || 0);
     if (!ownBetId || !bettingOpen) return;
     setMessage("Çip geri çekiliyor ve bahis bakiyesi iade ediliyor...");
@@ -891,6 +963,7 @@ export function TechRoulette() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#050806] px-4 pb-24 pt-28 text-white sm:px-6">
+      <RaconItemEffects tableBets={tableBets} active={tableBets.some((bet) => String(bet.item_labels || "").trim())} />
       <div className="absolute left-1/2 top-28 h-96 w-96 -translate-x-1/2 rounded-full bg-emerald-500/10 blur-3xl" />
       <div className="absolute right-0 top-80 h-80 w-80 rounded-full bg-red-500/10 blur-3xl" />
       <div className="relative mx-auto max-w-7xl space-y-6">
@@ -1123,6 +1196,7 @@ export function TechRoulette() {
                 selectedType={betType}
                 selectedValue={betValue}
                 betChips={betChips}
+                payoutHighlights={payoutReveal ? payoutHighlights : {}}
                 onSelect={selectBet}
                 onCancelBet={cancelBet}
               />
@@ -1439,12 +1513,14 @@ function RouletteTable({
   selectedType,
   selectedValue,
   betChips,
+  payoutHighlights,
   onSelect,
   onCancelBet,
 }: {
   selectedType: BetType;
   selectedValue?: number;
   betChips: Record<string, TableBet>;
+  payoutHighlights: Record<string, PayoutHighlight>;
   onSelect: (bet: BoardBet) => void;
   onCancelBet: (chip?: TableBet) => void;
 }) {
@@ -1452,6 +1528,8 @@ function RouletteTable({
     selectedType === type && (value === undefined || selectedValue === value);
   const chipFor = (type: BetType, value?: number) =>
     betChips[tableBetKey(type, value)];
+  const payoutFor = (type: BetType, value?: number) =>
+    payoutHighlights[tableBetKey(type, value)];
   return (
     <div className="min-w-0 overflow-x-auto pb-2">
       <div className="min-w-[48rem] select-none">
@@ -1469,7 +1547,7 @@ function RouletteTable({
             className={`relative row-span-3 rounded-l-[1.3rem] border-2 text-2xl font-black transition-all ${isSelected("straight", 0) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-500 text-white hover:border-amber-200"}`}
           >
             0
-            <ChipPile chip={chipFor("straight", 0)} onCancelBet={onCancelBet} />
+            <ChipPile chip={chipFor("straight", 0)} payout={payoutFor("straight", 0)} onCancelBet={onCancelBet} />
           </button>
           {TABLE_ROWS.map((row, rowIndex) =>
             row
@@ -1479,6 +1557,7 @@ function RouletteTable({
                   number={number}
                   selected={isSelected("straight", number)}
                   chip={chipFor("straight", number)}
+                  payout={payoutFor("straight", number)}
                   onCancelBet={onCancelBet}
                   onClick={() =>
                     onSelect({
@@ -1505,7 +1584,7 @@ function RouletteTable({
                   className={`relative rounded-r-xl border-2 px-2 text-sm font-black transition-all ${isSelected("column", 3 - rowIndex) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-800 text-white hover:border-amber-200"}`}
                 >
                   2:1
-                  <ChipPile chip={chipFor("column", 3 - rowIndex)} onCancelBet={onCancelBet} />
+                  <ChipPile chip={chipFor("column", 3 - rowIndex)} payout={payoutFor("column", 3 - rowIndex)} onCancelBet={onCancelBet} />
                 </button>,
               ),
           )}
@@ -1528,7 +1607,7 @@ function RouletteTable({
               className={`relative rounded-xl border-2 py-3 text-sm font-black transition-all ${isSelected("dozen", value) ? "border-amber-200 bg-amber-200 text-black" : "border-white/25 bg-emerald-700 text-white hover:border-amber-200"}`}
             >
               {value === 1 ? "1-12" : value === 2 ? "13-24" : "25-36"}
-              <ChipPile chip={chipFor("dozen", value)} onCancelBet={onCancelBet} />
+              <ChipPile chip={chipFor("dozen", value)} payout={payoutFor("dozen", value)} onCancelBet={onCancelBet} />
             </button>
           ))}
           <div />
@@ -1539,6 +1618,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("low")}
             chip={chipFor("low")}
+            payout={payoutFor("low")}
             onCancelBet={onCancelBet}
             onClick={() =>
               onSelect({ type: "low", label: "1-18", multiplier: "1:1" })
@@ -1549,6 +1629,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("even")}
             chip={chipFor("even")}
+            payout={payoutFor("even")}
             onCancelBet={onCancelBet}
             onClick={() =>
               onSelect({ type: "even", label: "Çift", multiplier: "1:1" })
@@ -1559,6 +1640,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("red")}
             chip={chipFor("red")}
+            payout={payoutFor("red")}
             onCancelBet={onCancelBet}
             tone="red"
             onClick={() =>
@@ -1570,6 +1652,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("black")}
             chip={chipFor("black")}
+            payout={payoutFor("black")}
             onCancelBet={onCancelBet}
             tone="black"
             onClick={() =>
@@ -1581,6 +1664,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("odd")}
             chip={chipFor("odd")}
+            payout={payoutFor("odd")}
             onCancelBet={onCancelBet}
             onClick={() =>
               onSelect({ type: "odd", label: "Tek", multiplier: "1:1" })
@@ -1591,6 +1675,7 @@ function RouletteTable({
           <OutsideBet
             active={isSelected("high")}
             chip={chipFor("high")}
+            payout={payoutFor("high")}
             onCancelBet={onCancelBet}
             onClick={() =>
               onSelect({ type: "high", label: "19-36", multiplier: "1:1" })
@@ -1614,12 +1699,14 @@ function NumberCell({
   number,
   selected,
   chip,
+  payout,
   onCancelBet,
   onClick,
 }: {
   number: number;
   selected: boolean;
   chip?: TableBet;
+  payout?: PayoutHighlight;
   onCancelBet: (chip?: TableBet) => void;
   onClick: () => void;
 }) {
@@ -1631,7 +1718,7 @@ function NumberCell({
       className={`relative flex min-h-14 items-center justify-center rounded-lg border-2 text-lg font-black leading-none tabular-nums shadow-inner transition-all ${selected ? "border-amber-200 bg-amber-200 text-black shadow-amber-950/30" : color === "red" ? "border-white/25 bg-red-600 text-white hover:border-amber-200" : "border-white/25 bg-zinc-950 text-white hover:border-amber-200"}`}
     >
       {number}
-      <ChipPile chip={chip} onCancelBet={onCancelBet} />
+      <ChipPile chip={chip} payout={payout} onCancelBet={onCancelBet} />
     </button>
   );
 }
@@ -1639,6 +1726,7 @@ function NumberCell({
 function OutsideBet({
   active,
   chip,
+  payout,
   tone = "green",
   onCancelBet,
   onClick,
@@ -1646,6 +1734,7 @@ function OutsideBet({
 }: {
   active: boolean;
   chip?: TableBet;
+  payout?: PayoutHighlight;
   tone?: "green" | "red" | "black";
   onCancelBet: (chip?: TableBet) => void;
   onClick: () => void;
@@ -1664,26 +1753,28 @@ function OutsideBet({
       className={`relative rounded-xl border-2 py-3 text-sm font-black transition-all ${active ? "border-amber-200 bg-amber-200 text-black" : `border-white/25 ${base} text-white hover:border-amber-200`}`}
     >
       {children}
-      <ChipPile chip={chip} onCancelBet={onCancelBet} />
+      <ChipPile chip={chip} payout={payout} onCancelBet={onCancelBet} />
     </button>
   );
 }
 
 function ChipPile({
   chip,
+  payout,
   onCancelBet,
 }: {
   chip?: TableBet;
+  payout?: PayoutHighlight;
   onCancelBet: (chip?: TableBet) => void;
 }) {
   if (!chip) return null;
   const totalAmount = Number(chip.total_amount || 0);
-  const canCancel = Boolean(chip.my_bet_ids);
   const itemLabels = String(chip.item_labels || "")
     .split(",")
     .map((label) => label.trim())
     .filter(Boolean);
   const uniqueItemLabels = [...new Set(itemLabels)];
+  const canCancel = Boolean(chip.my_bet_ids) && uniqueItemLabels.length === 0 && !payout;
   const primaryItemLabel = uniqueItemLabels[0] || "";
   const [itemEmojiPart, ...itemNameParts] = primaryItemLabel.split(/\s+/);
   const primaryItemEmoji = itemEmojiPart || "💎";
@@ -1694,7 +1785,7 @@ function ChipPile({
       <span
         role={canCancel ? "button" : undefined}
         tabIndex={canCancel ? 0 : undefined}
-        title={`${chip.users || "Oyuncular"} · ${uniqueItemLabels.join(", ")} · ${formatTc(totalAmount, "tr-TR")} TC${canCancel ? " · Geri çekmek için bas" : ""}`}
+        title={`${chip.users || "Oyuncular"} · ${uniqueItemLabels.join(", ")} · ${formatTc(totalAmount, "tr-TR")} TC${canCancel ? " · Geri çekmek için bas" : uniqueItemLabels.length > 0 ? " · Racon geri kaldırılamaz" : ""}`}
         onClick={(event) => {
           event.stopPropagation();
           if (canCancel) onCancelBet(chip);
@@ -1721,6 +1812,7 @@ function ChipPile({
             {uniqueItemLabels.length > 1 ? ` · +${uniqueItemLabels.length - 1}` : ""}
           </span>
         </span>
+        {payout ? <PayoutBadge payout={payout} /> : null}
       </span>
     );
   }
@@ -1765,8 +1857,92 @@ function ChipPile({
       <span className="relative whitespace-nowrap tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
         {formatTc(totalAmount, "tr-TR")} TC
       </span>
+      {payout ? <PayoutBadge payout={payout} /> : null}
     </span>
   );
+}
+
+function PayoutBadge({ payout }: { payout: PayoutHighlight }) {
+  return (
+    <span
+      className={`tech-roulette-payout-badge absolute -left-4 -top-8 z-40 rounded-full border px-2.5 py-1 text-[0.58rem] font-black shadow-2xl ${
+        payout.won
+          ? "border-emerald-100 bg-emerald-300 text-emerald-950 shadow-emerald-300/40"
+          : "border-red-100 bg-red-500 text-white shadow-red-500/35"
+      }`}
+    >
+      {payout.won
+        ? `x${payout.multiplier + 1} · +${formatTc(payout.profit, "tr-TR")} TC`
+        : "Yandı"}
+    </span>
+  );
+}
+
+function RaconItemEffects({
+  tableBets,
+  active,
+}: {
+  tableBets: TableBet[];
+  active: boolean;
+}) {
+  const labels = tableBets
+    .flatMap((bet) =>
+      String(bet.item_labels || "")
+        .split(",")
+        .map((label) => label.trim())
+        .filter(Boolean),
+    )
+    .slice(0, 8);
+  const uniqueLabels = [...new Set(labels)];
+  if (!active || uniqueLabels.length === 0) return null;
+
+  return (
+    <div className="pointer-events-none fixed inset-0 z-20 overflow-hidden" aria-hidden="true">
+      {uniqueLabels.map((label, index) => {
+        const [emoji = "💎"] = label.split(/\s+/);
+        const effect = itemEffectForLabel(label);
+        return (
+          <div
+            key={`${label}-${index}`}
+            className={`tech-roulette-screen-item-effect tech-roulette-screen-item-effect--${effect}`}
+            style={
+              {
+                "--effect-left": `${8 + ((index * 17) % 84)}%`,
+                "--effect-delay": `${index * 0.42}s`,
+                "--effect-duration": `${3.6 + (index % 3) * 0.7}s`,
+              } as CSSProperties
+            }
+          >
+            {Array.from({ length: effect === "rain" ? 8 : 5 }, (_, dropIndex) => (
+              <span
+                key={dropIndex}
+                style={
+                  {
+                    "--drop-x": `${(dropIndex - 2) * 1.6}rem`,
+                    "--drop-delay": `${dropIndex * 0.18}s`,
+                  } as CSSProperties
+                }
+              >
+                {emoji}
+              </span>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function itemEffectForLabel(label: string) {
+  const normalized = label.toLocaleLowerCase("tr-TR");
+  if (/tesbih|📿|boncuk/.test(normalized)) return "orbit";
+  if (/çakı|bıçak|🔪|🗡️|⚔️/.test(normalized)) return "slash";
+  if (/yüzük|💍|taç|👑/.test(normalized)) return "glow";
+  if (/sigara|puro|🚬|duman/.test(normalized)) return "smoke";
+  let hash = 0;
+  for (let index = 0; index < label.length; index += 1)
+    hash = (hash + label.charCodeAt(index) * (index + 3)) % 997;
+  return ["rain", "orbit", "slash", "glow", "smoke"][hash % 5];
 }
 
 function StatCard({

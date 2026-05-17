@@ -281,3 +281,147 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+@keyframes tech-roulette-payout-pop {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.5) rotate(-8deg);
+  }
+  28% {
+    opacity: 1;
+    transform: translate3d(0, -8px, 0) scale(1.22) rotate(4deg);
+  }
+  66% {
+    opacity: 1;
+    transform: translate3d(0, -2px, 0) scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -26px, 0) scale(0.92) rotate(0deg);
+  }
+}
+
+@keyframes tech-roulette-emoji-rain {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--drop-x, 0), -18vh, 0) rotate(-24deg) scale(0.78);
+  }
+  16% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--drop-x, 0) + 2.5rem), 112vh, 0) rotate(380deg) scale(1.18);
+  }
+}
+
+@keyframes tech-roulette-emoji-orbit {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--drop-x, 0), 68vh, 0) rotate(0deg) translateX(0) scale(0.72);
+  }
+  20%,
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--drop-x, 0) + 2rem), 8vh, 0) rotate(720deg) translateX(4rem) scale(1.12);
+  }
+}
+
+@keyframes tech-roulette-emoji-slash {
+  0% {
+    opacity: 0;
+    transform: translate3d(-18vw, calc(82vh + var(--drop-x, 0)), 0) rotate(-38deg) scale(0.88);
+  }
+  15%,
+  55% {
+    opacity: 1;
+    filter: drop-shadow(0 0 16px rgba(255,255,255,.9));
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(112vw, calc(10vh + var(--drop-x, 0)), 0) rotate(28deg) scale(1.2);
+  }
+}
+
+@keyframes tech-roulette-emoji-glow {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--drop-x, 0), 104vh, 0) scale(0.5) rotate(0deg);
+  }
+  25%,
+  72% {
+    opacity: 1;
+    filter: drop-shadow(0 0 22px rgba(253,224,71,.95));
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--drop-x, 0) - 1.5rem), 18vh, 0) scale(1.45) rotate(260deg);
+  }
+}
+
+@keyframes tech-roulette-emoji-smoke {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--drop-x, 0), 96vh, 0) scale(0.66) rotate(-8deg);
+    filter: blur(0);
+  }
+  24%,
+  70% {
+    opacity: .72;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--drop-x, 0) + 3rem), 18vh, 0) scale(1.8) rotate(18deg);
+    filter: blur(5px);
+  }
+}
+
+.tech-roulette-payout-badge {
+  animation: tech-roulette-payout-pop 4.1s cubic-bezier(0.2, 1.12, 0.2, 1) both;
+  white-space: nowrap;
+}
+
+.tech-roulette-screen-item-effect {
+  left: var(--effect-left, 50%);
+  position: absolute;
+  top: 0;
+}
+
+.tech-roulette-screen-item-effect span {
+  animation: tech-roulette-emoji-rain var(--effect-duration, 4s) linear infinite;
+  animation-delay: calc(var(--effect-delay, 0s) + var(--drop-delay, 0s));
+  display: block;
+  font-size: clamp(1.7rem, 4vw, 3.7rem);
+  line-height: 1;
+  opacity: 0;
+  position: absolute;
+  text-shadow: 0 0 24px rgba(255, 255, 255, 0.45);
+  will-change: transform, opacity, filter;
+}
+
+.tech-roulette-screen-item-effect--orbit span {
+  animation-name: tech-roulette-emoji-orbit;
+}
+
+.tech-roulette-screen-item-effect--slash span {
+  animation-name: tech-roulette-emoji-slash;
+}
+
+.tech-roulette-screen-item-effect--glow span {
+  animation-name: tech-roulette-emoji-glow;
+}
+
+.tech-roulette-screen-item-effect--smoke span {
+  animation-name: tech-roulette-emoji-smoke;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tech-roulette-payout-badge,
+  .tech-roulette-screen-item-effect span {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
