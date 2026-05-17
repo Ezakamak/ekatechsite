@@ -58,7 +58,6 @@ export function TechDice() {
   const [markerPosition, setMarkerPosition] = useState(50);
   const [markerLanded, setMarkerLanded] = useState(false);
   const [result, setResult] = useState<DiceResult | null>(null);
-  const [resultModalOpen, setResultModalOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [recent, setRecent] = useState<DiceLog[]>([]);
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
@@ -122,7 +121,6 @@ export function TechDice() {
     setRolling(true);
     setMarkerLanded(false);
     setMessage("");
-    setResultModalOpen(false);
     setResult(null);
     playOffSound("bet");
 
@@ -144,7 +142,6 @@ export function TechDice() {
       setRecent(Array.isArray(data?.recent) ? sanitizeRecent(data.recent) : []);
       setMarkerPosition(nextResult.rolledNumber);
       setResult(nextResult);
-      setResultModalOpen(true);
       setMessage(nextResult.won ? "Successful Roll" : "Missed Roll");
       recordSessionBet(nextResult.amount);
       recordSessionResult(nextResult.net);
@@ -177,7 +174,6 @@ export function TechDice() {
           {successToasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale={locale} onClose={removeSuccessToast} />)}
         </div>
       ) : null}
-      {result && resultModalOpen ? <ResultModal result={result} locale={locale} onClose={() => setResultModalOpen(false)} /> : null}
       <div className="absolute left-1/2 top-20 h-96 w-96 -translate-x-1/2 rounded-full bg-cyan-500/10 blur-3xl" />
       <div className="absolute right-0 top-64 h-80 w-80 rounded-full bg-purple-500/10 blur-3xl" />
       <div className="relative mx-auto max-w-7xl space-y-6">
@@ -303,28 +299,6 @@ export function TechDice() {
         @keyframes tech-dice-land { 0% { transform: translateX(-50%) translateY(-0.42rem) scale(0.96); } 55% { transform: translateX(-50%) translateY(0.18rem) scale(1.08); } 100% { transform: translateX(-50%) translateY(0) scale(1); } }
       `}</style>
     </main>
-  );
-}
-
-function ResultModal({ result, locale, onClose }: { result: DiceResult; locale: string; onClose: () => void }) {
-  const title = result.won ? "Successful Roll" : "Missed Roll";
-  const amount = result.won ? `+${formatNumber(result.rewardAmount, locale)} TC` : `-${formatNumber(result.lossAmount, locale)} TC`;
-  return (
-    <button type="button" onClick={onClose} className="fixed inset-x-4 top-24 z-50 mx-auto max-w-md rounded-[2rem] border border-white/12 bg-[#07111a]/95 p-5 text-left shadow-2xl shadow-black/50 ring-1 ring-cyan-300/10 backdrop-blur-xl">
-      <div className={`rounded-[1.5rem] border p-5 ${result.won ? "border-emerald-300/25 bg-emerald-300/10" : "border-red-300/25 bg-red-300/10"}`}>
-        <p className="text-xs font-black uppercase tracking-[0.24em] text-white/45">Session Result</p>
-        <h2 className="mt-2 text-3xl font-black text-white">{title}</h2>
-        <p className={`mt-3 text-5xl font-black ${result.won ? "text-emerald-200" : "text-red-200"}`}>{amount}</p>
-        <div className="mt-4 grid gap-2 text-sm text-white/70">
-          <ResultLine label="Roll" value={result.rolledNumber.toFixed(2)} />
-          <ResultLine label="Target" value={result.target.toFixed(2)} />
-          <ResultLine label="Mode" value={result.mode === "over" ? "Roll Over" : "Roll Under"} />
-          <ResultLine label="Multiplier" value={`${result.multiplier.toFixed(2)}x`} />
-          <ResultLine label="Reward" value={result.won ? `${formatNumber(result.rewardAmount, locale)} TC` : "0 TC"} />
-        </div>
-        <p className="mt-4 text-xs text-white/40">Click to close.</p>
-      </div>
-    </button>
   );
 }
 
