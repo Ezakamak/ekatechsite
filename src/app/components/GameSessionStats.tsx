@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Coins, TrendingUp } from "lucide-react";
 
-export type SessionStatsGameKey = "tech-mines" | "eka-towers" | "tech-aviator";
+export type SessionStatsGameKey = "tech-mines" | "eka-towers" | "tech-aviator" | "tech-dice";
 
 type SessionStats = {
   netGain: number;

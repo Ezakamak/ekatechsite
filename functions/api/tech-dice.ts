@@ -1,8 +1,8 @@
 import { awardGameExp, expForGame } from "../_levels";
 
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
-const TARGET_MIN = 2;
-const TARGET_MAX = 98;
+const TARGET_MIN = 0.01;
+const TARGET_MAX = 99.99;
 const AMOUNT_LIMITS = { min: 1, max: 10_000 };
 const RTP = 0.96;
 
@@ -119,9 +119,7 @@ export async function onRequestPost(context: any) {
         rewardAmount: won ? potentialReward : 0,
         lossAmount: won ? 0 : amount,
         net,
-        message: won
-          ? "Success — Roll landed in the green zone."
-          : "Missed — Roll landed in the red zone.",
+        message: won ? "Successful Roll" : "Missed Roll",
       },
     });
   } catch (error) {
@@ -137,7 +135,7 @@ async function buildState(context: any, userId: number) {
       FROM tech_dice_rolls
       WHERE user_id = ?
       ORDER BY id DESC
-      LIMIT 20
+      LIMIT 60
     `,
   )
     .bind(userId)
@@ -153,8 +151,10 @@ async function buildState(context: any, userId: number) {
 }
 
 function diceMath(mode: DiceMode, target: number) {
-  const winChance = mode === "over" ? (100 - target) / 100 : target / 100;
-  const multiplier = Number((RTP / winChance).toFixed(2));
+  const safeTarget = clampTarget(target);
+  const rawChance = mode === "over" ? (100 - safeTarget) / 100 : safeTarget / 100;
+  const winChance = Math.max(0.0001, Math.min(0.9999, rawChance));
+  const multiplier = Number(Math.max(0.01, Math.min(9600, RTP / winChance)).toFixed(2));
   return { winChance: Number(winChance.toFixed(4)), multiplier };
 }
 
