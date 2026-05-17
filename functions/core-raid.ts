@@ -126,6 +126,42 @@ const TASKS: Record<string, RaidTask> = {
     damage: 220,
     scope: "event",
   },
+  miner_claim_today: {
+    label: "Miner kazancını aktar",
+    description: "Bugün TechCoin Miner'dan en az 1 coin aktar veya otomatik kazanç al.",
+    damage: 90,
+    scope: "daily",
+  },
+  roulette_bet_today: {
+    label: "Tech Roulette masasına gir",
+    description: "Bugün Tech Roulette'te en az 1 bahis koy.",
+    damage: 95,
+    scope: "daily",
+  },
+  market_trade_today: {
+    label: "InvestSim işlemi yap",
+    description: "Bugün Eka InvestSim içinde 1 alım/satım işlemi tamamla.",
+    damage: 85,
+    scope: "daily",
+  },
+  shop_item_today: {
+    label: "Tech Store raconu al",
+    description: "Bugün Tech Store'dan en az 1 racon eşyası edin.",
+    damage: 110,
+    scope: "daily",
+  },
+  earn_250_tc_today: {
+    label: "250 Tech Coin kazan",
+    description: "Bugün oyunlardan veya sistem ödüllerinden toplam 250 TC kazan.",
+    damage: 130,
+    scope: "daily",
+  },
+  level_gain_today: {
+    label: "EXP kas",
+    description: "Bugün OFF level sisteminde en az 50 EXP kazan.",
+    damage: 115,
+    scope: "daily",
+  },
 };
 
 export async function onRequestGet(context: any) {
@@ -413,7 +449,76 @@ async function getTaskStatus(context: any, eventId: number, userId: number, task
     return { completed: progress >= 5, claimed, progress, target: 5 };
   }
 
+  if (taskKey === "miner_claim_today") {
+    const progress = await sumPositiveTransactions(context, userId, "TechCoin Miner");
+    return { completed: progress >= 1, claimed, progress, target: 1 };
+  }
+
+  if (taskKey === "roulette_bet_today") {
+    const progress = await countTodayRows(context, "tech_roulette_bets", "user_id", userId);
+    return { completed: progress >= 1, claimed, progress, target: 1 };
+  }
+
+  if (taskKey === "market_trade_today") {
+    const progress = await countTodayRows(context, "market_transactions", "user_id", userId);
+    return { completed: progress >= 1, claimed, progress, target: 1 };
+  }
+
+  if (taskKey === "shop_item_today") {
+    const progress = await countTodayRows(context, "off_shop_inventory", "user_id", userId, "acquired_at");
+    return { completed: progress >= 1, claimed, progress, target: 1 };
+  }
+
+  if (taskKey === "earn_250_tc_today") {
+    const progress = await sumPositiveTransactions(context, userId);
+    return { completed: progress >= 250, claimed, progress, target: 250 };
+  }
+
+  if (taskKey === "level_gain_today") {
+    const progress = await sumTodayExp(context, userId);
+    return { completed: progress >= 50, claimed, progress, target: 50 };
+  }
+
   return { completed: false, claimed, progress: 0, target: 1 };
+}
+
+async function countTodayRows(context: any, table: string, userColumn: string, userId: number, dateColumn = "created_at") {
+  try {
+    const row = await context.env.DB
+      .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${userColumn} = ? AND date(${dateColumn}) = date(?)`)
+      .bind(userId, todayKey())
+      .first();
+    return Number(row?.count || 0);
+  } catch {
+    return 0;
+  }
+}
+
+async function sumPositiveTransactions(context: any, userId: number, reasonPrefix = "") {
+  try {
+    const reasonClause = reasonPrefix ? "AND reason LIKE ?" : "";
+    const statement = context.env.DB.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM coin_transactions WHERE user_id = ? AND amount > 0 AND date(created_at) = date(?) ${reasonClause}`,
+    );
+    const row = reasonPrefix
+      ? await statement.bind(userId, todayKey(), `${reasonPrefix}%`).first()
+      : await statement.bind(userId, todayKey()).first();
+    return Math.floor(Number(row?.total || 0));
+  } catch {
+    return 0;
+  }
+}
+
+async function sumTodayExp(context: any, userId: number) {
+  try {
+    const row = await context.env.DB
+      .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM user_exp_events WHERE user_id = ? AND date(created_at) = date(?)")
+      .bind(userId, todayKey())
+      .first();
+    return Math.floor(Number(row?.total || 0));
+  } catch {
+    return 0;
+  }
 }
 
 async function markVisit(context: any, eventId: number, userId: number) {

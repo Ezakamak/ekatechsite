@@ -1,4 +1,13 @@
+import { awardGameExp, getLevelProgress } from "../_levels";
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
+
+type TechStorePackage = {
+  slug: string;
+  name: string;
+  priceTl: string;
+  techCoin: number;
+  exp: number;
+};
 
 type ShopItem = {
   slug: string;
@@ -9,6 +18,12 @@ type ShopItem = {
   roulette_value: number;
   rarity: string;
 };
+
+const TL_PACKAGES: TechStorePackage[] = [
+  { slug: "neon-kayip-cuzdan", name: "Neon Kayıp Cüzdan", priceTl: "49,99 TL", techCoin: 5000, exp: 500 },
+  { slug: "fuzyon-paketi", name: "Füzyon Paketi", priceTl: "129,99 TL", techCoin: 14000, exp: 2000 },
+  { slug: "kuantum-paketi", name: "Kuantum Paketi", priceTl: "299,99 TL", techCoin: 35000, exp: 5000 },
+];
 
 const SHOP_CATALOG: ShopItem[] = [
   {
@@ -88,8 +103,10 @@ export async function onRequestGet(context: any) {
     return Response.json({
       ok: true,
       catalog: SHOP_CATALOG,
+      tlPackages: TL_PACKAGES,
       inventory,
       wallet,
+      level: await getLevelProgress(context, auth.user.id),
     });
   } catch (error) {
     return Response.json({ error: readableError(error) }, { status: 500 });
@@ -103,6 +120,42 @@ export async function onRequestPost(context: any) {
 
   const body = await context.request.json().catch(() => null);
   const slug = String(body?.slug || "");
+  const purchaseType = String(body?.type || "item");
+
+  if (purchaseType === "tl-package") {
+    const pack = TL_PACKAGES.find((entry) => entry.slug === slug);
+    if (!pack) return Response.json({ error: "Tech Store paketi bulunamadı." }, { status: 400 });
+
+    try {
+      await ensureShopTables(context);
+      await ensureWallet(context, auth.user.id);
+      await context.env.DB.prepare(
+        `UPDATE coin_wallets SET balance = COALESCE(balance, 0) + ?, lifetime_earned = COALESCE(lifetime_earned, 0) + ?, updated_at = datetime('now') WHERE user_id = ?`,
+      )
+        .bind(pack.techCoin, pack.techCoin, auth.user.id)
+        .run();
+      await context.env.DB.prepare(
+        `INSERT INTO coin_transactions (user_id, amount, reason, created_at) VALUES (?, ?, ?, datetime('now'))`,
+      )
+        .bind(auth.user.id, pack.techCoin, `Tech Store TL paketi: ${pack.name} (${pack.priceTl})`)
+        .run();
+      const level = await awardGameExp(context, auth.user.id, pack.exp, `Tech Store TL paketi: ${pack.name}`, "store");
+      const [wallet, inventory] = await Promise.all([
+        getWallet(context, auth.user.id),
+        loadInventory(context, auth.user.id),
+      ]);
+      return Response.json({
+        ok: true,
+        message: `${pack.name} aktif edildi: +${pack.techCoin.toLocaleString("tr-TR")} TC, +${pack.exp.toLocaleString("tr-TR")} EXP.`,
+        wallet,
+        inventory,
+        level,
+      });
+    } catch (error) {
+      return Response.json({ error: readableError(error) }, { status: 500 });
+    }
+  }
+
   const item = SHOP_CATALOG.find((entry) => entry.slug === slug);
   if (!item)
     return Response.json(

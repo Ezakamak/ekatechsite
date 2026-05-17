@@ -88,6 +88,7 @@ type TableBet = {
   user_colors?: string | null;
   primary_user_color?: string | null;
   item_labels?: string | null;
+  item_values?: string | null;
   bet_ids?: string | null;
   my_bet_ids?: string | null;
 };
@@ -1756,6 +1757,18 @@ function OutsideBet({
   );
 }
 
+function itemValueTier(value: number) {
+  if (value >= 75000) return "mythic";
+  if (value >= 50000) return "epic";
+  if (value >= 25000) return "rare";
+  return "common";
+}
+
+function parseItemParts(label: string) {
+  const [emoji = "💎", ...nameParts] = label.split(/\s+/);
+  return { emoji, name: nameParts.join(" ").trim() || "Racon eşyası" };
+}
+
 function ChipPile({
   chip,
   payout,
@@ -1773,10 +1786,14 @@ function ChipPile({
     .filter(Boolean);
   const uniqueItemLabels = [...new Set(itemLabels)];
   const canCancel = Boolean(chip.my_bet_ids) && uniqueItemLabels.length === 0 && !payout;
+  const itemValues = String(chip.item_values || "")
+    .split(",")
+    .map((value) => Number(value.trim()) || 0);
   const primaryItemLabel = uniqueItemLabels[0] || "";
-  const [itemEmojiPart, ...itemNameParts] = primaryItemLabel.split(/\s+/);
-  const primaryItemEmoji = itemEmojiPart || "💎";
-  const primaryItemName = itemNameParts.join(" ").trim();
+  const { emoji: primaryItemEmoji, name: primaryItemName } = parseItemParts(primaryItemLabel);
+  const highestItemValue = Math.max(totalAmount, ...itemValues, 0);
+  const valueTier = itemValueTier(highestItemValue);
+  const itemTone = itemEffectForLabel(primaryItemLabel);
 
   if (uniqueItemLabels.length > 0) {
     return (
@@ -1794,7 +1811,7 @@ function ChipPile({
           event.stopPropagation();
           onCancelBet(chip);
         }}
-        className={`tech-roulette-item-bet absolute -right-5 -top-6 z-30 flex min-w-[7.25rem] origin-bottom items-center gap-1.5 rounded-[1.15rem] border-2 border-amber-100/95 bg-[linear-gradient(135deg,rgba(255,247,178,0.98),rgba(251,146,60,0.95),rgba(168,85,247,0.92))] px-2.5 py-2 text-left text-[0.58rem] font-black text-black shadow-[0_0_26px_rgba(251,191,36,0.9),0_12px_28px_rgba(0,0,0,0.55)] ring-4 ring-amber-300/30 transition hover:scale-110 ${canCancel ? "cursor-pointer" : "pointer-events-none"}`}
+        className={`tech-roulette-item-bet tech-roulette-item-bet--${itemTone} tech-roulette-item-bet--${valueTier} absolute -right-5 -top-6 z-30 flex min-w-[7.25rem] origin-bottom items-center gap-1.5 rounded-[1.15rem] border-2 border-amber-100/95 bg-[linear-gradient(135deg,rgba(255,247,178,0.98),rgba(251,146,60,0.95),rgba(168,85,247,0.92))] px-2.5 py-2 text-left text-[0.58rem] font-black text-black shadow-[0_0_26px_rgba(251,191,36,0.9),0_12px_28px_rgba(0,0,0,0.55)] ring-4 ring-amber-300/30 transition hover:scale-110 ${canCancel ? "cursor-pointer" : "pointer-events-none"}`}
       >
         <span className="tech-roulette-item-burst" aria-hidden="true" />
         <span className="tech-roulette-item-burst tech-roulette-item-burst-delayed" aria-hidden="true" />
@@ -1902,36 +1919,52 @@ function RaconItemEffects({
   tableBets: TableBet[];
   active: boolean;
 }) {
-  const labels = tableBets
-    .flatMap((bet) =>
-      String(bet.item_labels || "")
-        .split(",")
-        .map((label) => label.trim())
-        .filter(Boolean),
-    )
-    .slice(0, 6);
-  const uniqueLabels = [...new Set(labels)];
-  if (!active || uniqueLabels.length === 0) return null;
+  const items = tableBets.flatMap((bet) => {
+    const labels = String(bet.item_labels || "")
+      .split(",")
+      .map((label) => label.trim())
+      .filter(Boolean);
+    const values = String(bet.item_values || "")
+      .split(",")
+      .map((value) => Number(value.trim()) || 0);
+    return labels.map((label, index) => ({
+      label,
+      value: values[index] || Math.floor(Number(bet.total_amount || 0) / Math.max(1, labels.length)),
+    }));
+  });
+  const uniqueItems = Array.from(
+    items
+      .reduce((map, item) => {
+        const current = map.get(item.label);
+        if (!current || item.value > current.value) map.set(item.label, item);
+        return map;
+      }, new Map<string, { label: string; value: number }>())
+      .values(),
+  ).slice(0, 6);
+  if (!active || uniqueItems.length === 0) return null;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-20 overflow-hidden" aria-hidden="true">
       <div className="tech-roulette-gift-stage">
         <div className="tech-roulette-gift-spotlight tech-roulette-gift-spotlight--left" />
         <div className="tech-roulette-gift-spotlight tech-roulette-gift-spotlight--right" />
-        {uniqueLabels.map((label, index) => {
-          const [emoji = "💎", ...nameParts] = label.split(/\s+/);
-          const giftName = nameParts.join(" ") || "Raconu Koydu!";
-          const tone = itemEffectForLabel(label);
+        {uniqueItems.map((item, index) => {
+          const { emoji, name } = parseItemParts(item.label);
+          const giftName = name || "Raconu Koydu!";
+          const tone = itemEffectForLabel(item.label);
+          const tier = itemValueTier(item.value);
+          const intensity = tier === "mythic" ? 1.75 : tier === "epic" ? 1.45 : tier === "rare" ? 1.2 : 1;
           const pathOffset = (index * 5) % TIKTOK_GIFT_PATHS.length;
           return (
             <div
-              key={`${label}-${index}`}
-              className={`tech-roulette-gift-pack tech-roulette-gift-pack--${tone}`}
+              key={`${item.label}-${index}`}
+              className={`tech-roulette-gift-pack tech-roulette-gift-pack--${tone} tech-roulette-gift-pack--${tier}`}
               style={
                 {
                   "--pack-delay": `${index * 0.34}s`,
                   "--pack-x": `${50 + ((index % 3) - 1) * 18}vw`,
                   "--pack-y": `${44 + (index % 2) * 13}vh`,
+                  "--gift-intensity": intensity,
                 } as CSSProperties
               }
             >
@@ -1942,7 +1975,7 @@ function RaconItemEffects({
                   <small>{giftName}</small>
                 </span>
               </div>
-              {TIKTOK_GIFT_PATHS.slice(0, 12).map((_, burstIndex) => {
+              {TIKTOK_GIFT_PATHS.slice(0, Math.round(10 * intensity)).map((_, burstIndex) => {
                 const path = TIKTOK_GIFT_PATHS[(pathOffset + burstIndex) % TIKTOK_GIFT_PATHS.length];
                 return (
                   <span
@@ -1957,7 +1990,7 @@ function RaconItemEffects({
                         "--gift-rotate": path.r,
                         "--gift-delay": `${index * 0.16 + burstIndex * 0.105}s`,
                         "--gift-duration": `${2.2 + (burstIndex % 4) * 0.24}s`,
-                        "--gift-size": `${2.1 + (burstIndex % 5) * 0.22}rem`,
+                        "--gift-size": `${(2.1 + (burstIndex % 5) * 0.22) * intensity}rem`,
                       } as CSSProperties
                     }
                   >
@@ -1965,7 +1998,7 @@ function RaconItemEffects({
                   </span>
                 );
               })}
-              {Array.from({ length: 10 }, (_, sparkleIndex) => (
+              {Array.from({ length: Math.round(9 * intensity) }, (_, sparkleIndex) => (
                 <i
                   key={sparkleIndex}
                   className="tech-roulette-gift-spark"

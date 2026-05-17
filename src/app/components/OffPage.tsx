@@ -139,6 +139,14 @@ type GameKey =
   | "roulette"
   | "store";
 
+type TechStoreTlPackage = {
+  slug: string;
+  name: string;
+  priceTl: string;
+  techCoin: number;
+  exp: number;
+};
+
 type ShopCatalogItem = {
   slug: string;
   name: string;
@@ -170,6 +178,7 @@ export function OffPage() {
   const [loading, setLoading] = useState(true);
   const [activeGame, setActiveGame] = useState<GameKey>("hub");
   const [shopCatalog, setShopCatalog] = useState<ShopCatalogItem[]>([]);
+  const [tlPackages, setTlPackages] = useState<TechStoreTlPackage[]>([]);
   const [shopInventory, setShopInventory] = useState<ShopInventoryItem[]>([]);
   const [shopMessage, setShopMessage] = useState("");
   const [buyingSlug, setBuyingSlug] = useState<string | null>(null);
@@ -238,6 +247,9 @@ export function OffPage() {
         buy: "Satın al",
         inventory: "Racon envanteri",
         onlyRoulette: "Sadece rulette bahis değeri",
+        tlPackages: "TL paketleri",
+        tlPackageDesc: "Tech Store TL üzerinden satın alım alanı. Ödeme entegrasyonu bağlanana kadar buton paketi hesaba güvenli şekilde işler.",
+        packageIncludes: "Paket içeriği",
         levelTitle: "OFF Level",
         expToNext: "sonraki levele",
         verifiedName: "Level 5+ mavi tik",
@@ -306,6 +318,9 @@ export function OffPage() {
         buy: "Buy",
         inventory: "Swagger inventory",
         onlyRoulette: "Roulette stake only",
+        tlPackages: "TRY packages",
+        tlPackageDesc: "Tech Store purchase area in Turkish Lira. Until payment integration is connected, the button safely credits the package to the account.",
+        packageIncludes: "Package includes",
         levelTitle: "OFF Level",
         expToNext: "to next level",
         verifiedName: "Level 5+ blue check",
@@ -379,6 +394,7 @@ export function OffPage() {
         .then((data) => {
           if (!active || !data) return;
           setShopCatalog(Array.isArray(data.catalog) ? data.catalog : []);
+          setTlPackages(Array.isArray(data.tlPackages) ? data.tlPackages : []);
           setShopInventory(Array.isArray(data.inventory) ? data.inventory : []);
         })
         .catch(() => {
@@ -393,7 +409,7 @@ export function OffPage() {
     };
   }, [user?.id]);
 
-  const buyShopItem = async (slug: string) => {
+  const buyShopItem = async (slug: string, type: "item" | "tl-package" = "item") => {
     setBuyingSlug(slug);
     setShopMessage("");
     try {
@@ -401,12 +417,12 @@ export function OffPage() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug }),
+        body: JSON.stringify({ slug, type }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Ürün alınamadı.");
       setShopInventory(Array.isArray(data.inventory) ? data.inventory : []);
-      if (data.wallet) setWallet(data.wallet);
+      if (data.wallet) setWallet((current) => ({ ...data.wallet, level: data.level || current?.level }));
       setShopMessage(data?.message || "Ürün envantere eklendi.");
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
       playOffSound("coin");
@@ -529,6 +545,7 @@ export function OffPage() {
         ) : activeGame === "store" ? (
           <OffShopApp
             catalog={shopCatalog}
+            tlPackages={tlPackages}
             inventory={shopInventory}
             message={shopMessage}
             buyingSlug={buyingSlug}
@@ -762,6 +779,7 @@ export function OffPage() {
 
 function OffShopApp({
   catalog,
+  tlPackages,
   inventory,
   message,
   buyingSlug,
@@ -770,12 +788,13 @@ function OffShopApp({
   onBuy,
 }: {
   catalog: ShopCatalogItem[];
+  tlPackages: TechStoreTlPackage[];
   inventory: ShopInventoryItem[];
   message: string;
   buyingSlug: string | null;
   copy: any;
   locale: string;
-  onBuy: (slug: string) => void;
+  onBuy: (slug: string, type?: "item" | "tl-package") => void;
 }) {
   return (
     <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
@@ -801,6 +820,7 @@ function OffShopApp({
 
         <OffShopPanel
           catalog={catalog}
+          tlPackages={tlPackages}
           inventory={inventory}
           message={message}
           buyingSlug={buyingSlug}
@@ -815,6 +835,7 @@ function OffShopApp({
 
 function OffShopPanel({
   catalog,
+  tlPackages,
   inventory,
   message,
   buyingSlug,
@@ -823,12 +844,13 @@ function OffShopPanel({
   onBuy,
 }: {
   catalog: ShopCatalogItem[];
+  tlPackages: TechStoreTlPackage[];
   inventory: ShopInventoryItem[];
   message: string;
   buyingSlug: string | null;
   copy: any;
   locale: string;
-  onBuy: (slug: string) => void;
+  onBuy: (slug: string, type?: "item" | "tl-package") => void;
 }) {
   const availableInventory = inventory.filter(
     (item) => item.status === "available",
@@ -865,6 +887,36 @@ function OffShopPanel({
           </p>
         </div>
       </div>
+      <div className="mt-6 rounded-[1.75rem] border border-cyan-200/20 bg-cyan-300/[0.07] p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="text-2xl font-semibold text-white">{copy.tlPackages}</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">{copy.tlPackageDesc}</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {tlPackages.map((pack) => (
+            <div key={pack.slug} className="rounded-[1.4rem] border border-white/10 bg-black/35 p-4 shadow-xl shadow-cyan-950/20">
+              <p className="text-xs uppercase tracking-[0.2em] text-cyan-100/65">{copy.packageIncludes}</p>
+              <h4 className="mt-2 text-xl font-semibold text-white">{pack.name}</h4>
+              <p className="mt-3 text-3xl font-black text-cyan-100">{pack.priceTl}</p>
+              <div className="mt-4 space-y-2 text-sm text-white/70">
+                <div className="flex justify-between gap-3"><span>Tech Coin</span><strong className="text-white">{new Intl.NumberFormat(locale).format(pack.techCoin)} TC</strong></div>
+                <div className="flex justify-between gap-3"><span>EXP</span><strong className="text-white">{new Intl.NumberFormat(locale).format(pack.exp)} EXP</strong></div>
+              </div>
+              <button
+                type="button"
+                disabled={buyingSlug === pack.slug}
+                onClick={() => onBuy(pack.slug, "tl-package")}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-cyan-100 px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Sparkles className="h-4 w-4" /> {buyingSlug === pack.slug ? "..." : copy.buy}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {catalog.map((item) => (
           <div
