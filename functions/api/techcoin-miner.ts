@@ -1,5 +1,6 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const SESSION_MINUTES = 60;
+const DAILY_SERVER_MINUTES = 180;
 const COINS_PER_MINUTE = 1;
 const COOLDOWN_DIVISOR = 5;
 
@@ -46,12 +47,17 @@ export async function onRequestPost(context: any) {
       const serverCooldown = await getActiveCooldownForServer(context, serverId);
       if (serverCooldown) return json({ error: "Bu server soğuma modunda. Geri sayım bitince tekrar kullanılabilir." }, 409);
 
+      const dailyUsage = await getDailyUsageSeconds(context, auth.user.id);
+      const remainingDailySeconds = Math.max(0, DAILY_SERVER_MINUTES * 60 - dailyUsage.usedSeconds);
+      if (remainingDailySeconds <= 0) return json({ error: "Günlük TechCoin Miner server kullanım hakkın doldu. Günlük maksimum 3 saat." }, 429);
+      const sessionSeconds = Math.min(SESSION_MINUTES * 60, remainingDailySeconds);
+
       await context.env.DB
         .prepare(`
           INSERT INTO techcoin_miner_sessions (server_id, user_id, status, started_at, last_claimed_at, expires_at, total_claimed)
-          VALUES (?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, datetime('now', '+60 minutes'), 0)
+          VALUES (?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, datetime('now', '+' || ? || ' seconds'), 0)
         `)
-        .bind(serverId, auth.user.id)
+        .bind(serverId, auth.user.id, sessionSeconds)
         .run();
 
       await writeAuditLog(context, {
@@ -63,7 +69,7 @@ export async function onRequestPost(context: any) {
         details: `${auth.user.name} ${serverId} üzerinde TechCoin Miner başlattı.`,
       });
 
-      return json(await buildMinerState(context, auth.user.id, "Miner server bağlandı. Her dakika Tech Coin üretmeye başladı."));
+      return json(await buildMinerState(context, auth.user.id, sessionSeconds < SESSION_MINUTES * 60 ? "Miner server bağlandı. Bugünkü 3 saatlik hakkından kalan süre kadar çalışacak." : "Miner server bağlandı. Her dakika Tech Coin üretmeye başladı."));
     }
 
     if (action === "claim") {
@@ -194,6 +200,7 @@ async function buildMinerState(context: any, userId: number, message = "") {
     .all())?.results || [];
 
   const wallet: any = await context.env.DB.prepare(`SELECT balance, lifetime_earned, updated_at FROM coin_wallets WHERE user_id = ?`).bind(userId).first();
+  const dailyUsage = await getDailyUsageSeconds(context, userId);
   const currentSession = (sessions as any[]).find((session) => Number(session.user_id) === Number(userId)) || null;
   const servers = MINER_SERVERS.map((server) => {
     const active = (sessions as any[]).find((session) => session.server_id === server.id) || null;
@@ -214,6 +221,9 @@ async function buildMinerState(context: any, userId: number, message = "") {
       sessionMinutes: SESSION_MINUTES,
       coinsPerMinute: COINS_PER_MINUTE,
       maxCoinsPerSession: SESSION_MINUTES * COINS_PER_MINUTE,
+      dailyServerMinutes: DAILY_SERVER_MINUTES,
+      dailyUsedSeconds: dailyUsage.usedSeconds,
+      dailyRemainingSeconds: Math.max(0, DAILY_SERVER_MINUTES * 60 - dailyUsage.usedSeconds),
       cooldownDivisor: COOLDOWN_DIVISOR,
     },
     wallet: {
@@ -278,6 +288,26 @@ function calculateCooldown(session: any, endMs: number) {
     cooldownSeconds,
     cooldownUntilMs: safeEndMs + cooldownSeconds * 1000,
   };
+}
+
+async function getDailyUsageSeconds(context: any, userId: number) {
+  const rows = (await context.env.DB
+    .prepare(`
+      SELECT started_at, COALESCE(ended_at, expires_at) AS ended_at, expires_at, status
+      FROM techcoin_miner_sessions
+      WHERE user_id = ? AND date(started_at) = date('now')
+    `)
+    .bind(userId)
+    .all())?.results || [];
+
+  const nowMs = Date.now();
+  const usedSeconds = (rows as any[]).reduce((sum, session) => {
+    const startedMs = toMs(session.started_at);
+    const endSource = session.status === "active" ? Math.min(nowMs, toMs(session.expires_at)) : toMs(session.ended_at || session.expires_at);
+    return sum + Math.max(0, Math.floor((endSource - startedMs) / 1000));
+  }, 0);
+
+  return { usedSeconds: Math.min(DAILY_SERVER_MINUTES * 60, usedSeconds) };
 }
 
 async function getActiveSessionForUser(context: any, userId: number) {

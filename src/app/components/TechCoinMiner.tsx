@@ -44,6 +44,9 @@ type MinerState = {
     sessionMinutes: number;
     coinsPerMinute: number;
     maxCoinsPerSession: number;
+    dailyServerMinutes?: number;
+    dailyUsedSeconds?: number;
+    dailyRemainingSeconds?: number;
     cooldownDivisor?: number;
   };
   wallet: {
@@ -73,7 +76,7 @@ export function TechCoinMiner() {
       ? {
           eyebrow: "OFF pasif kazanç alanı",
           title: "TechCoin Miner",
-          subtitle: "3 miner server var. Her kullanıcı aynı anda sadece 1 server kullanabilir. Server seç, 1 saat boyunca dakikada küçük miktar Tech Coin üret.",
+          subtitle: "3 miner server var. Her kullanıcı aynı anda sadece 1 server kullanabilir. Günlük toplam 3 saat server hakkın vardır; oturumlar en fazla 1 saat sürer.",
           refresh: "Yenile",
           connect: "Server'a bağlan",
           claim: "Biriken Coinleri Cüzdana Aktar",
@@ -93,10 +96,10 @@ export function TechCoinMiner() {
           cooldownRuleValue: "Kullanım süresinin 1/5'i",
           rate: "Kazanç hızı",
           rateValue: "1 Tech Coin / dakika",
-          maxSession: "Maksimum oturum",
-          maxSessionValue: "60 dakika",
+          maxSession: "Günlük / oturum",
+          maxSessionValue: "3 saat / 60 dk",
           wallet: "Tech Coin cüzdanı",
-          rule: "1 saatin sonunda server otomatik boşalır, ardından kullanım süresinin 1/5’i kadar soğuma moduna girer.",
+          rule: "Günlük maksimum 3 saat server kullanılabilir. Her oturum 1 saatin sonunda veya günlük hakkın bitince otomatik boşalır, ardından kullanım süresinin 1/5’i kadar soğuma moduna girer.",
           empty: "Bu server boşta. Bağlanırsan diğer serverlara aynı anda bağlanamazsın.",
           cooldownText: "Server soğuma modunda. Geri sayım bitince tekrar kullanılabilir.",
           autoClaimNote: "Aktarmazsan coinlerin kaybolmaz; süre sonunda otomatik cüzdana eklenir.",
@@ -106,7 +109,7 @@ export function TechCoinMiner() {
       : {
           eyebrow: "OFF passive earning area",
           title: "TechCoin Miner",
-          subtitle: "There are 3 miner servers. Each user can use only 1 server at a time. Pick a server and earn a small amount of Tech Coin every minute for 1 hour.",
+          subtitle: "There are 3 miner servers. Each user can use only 1 server at a time. You have 3 total server hours per day; sessions last up to 1 hour.",
           refresh: "Refresh",
           connect: "Connect to server",
           claim: "Transfer Earned Coins to Wallet",
@@ -126,10 +129,10 @@ export function TechCoinMiner() {
           cooldownRuleValue: "1/5 of used time",
           rate: "Earning rate",
           rateValue: "1 Tech Coin / minute",
-          maxSession: "Max session",
-          maxSessionValue: "60 minutes",
+          maxSession: "Daily / session",
+          maxSessionValue: "3 hours / 60 min",
           wallet: "Tech Coin wallet",
-          rule: "After 1 hour, the server is released automatically, then enters cooldown for 1/5 of the used time.",
+          rule: "Server use is capped at 3 hours per day. Each session is released after 1 hour or when your daily quota ends, then cooldown is 1/5 of used time.",
           empty: "This server is available. If you connect, you cannot use another server at the same time.",
           cooldownText: "Server is cooling down. It can be used again when the countdown ends.",
           autoClaimNote: "Coins are not lost if you do not transfer them; they are automatically added to your wallet when the session ends.",

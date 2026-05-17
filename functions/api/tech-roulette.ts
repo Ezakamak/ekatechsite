@@ -553,6 +553,7 @@ async function loadRoundBets(context: any, roundId: number, userId: number) {
       users: [] as string[],
       user_colors: [] as string[],
       item_labels: [] as string[],
+      item_values: [] as string[],
       bet_ids: [] as string[],
       my_bet_ids: [] as string[],
     };
@@ -565,7 +566,10 @@ async function loadRoundBets(context: any, roundId: number, userId: number) {
     if (!existing.users.includes(userLabel)) existing.users.push(userLabel);
     if (!existing.user_colors.includes(userColor))
       existing.user_colors.push(userColor);
-    if (row.stake_item_label) existing.item_labels.push(row.stake_item_label);
+    if (row.stake_item_label) {
+      existing.item_labels.push(row.stake_item_label);
+      existing.item_values.push(String(Math.floor(Number(row.bet_amount || 0))));
+    }
     existing.bet_ids.push(String(row.id));
     if (Number(row.user_id) === Number(userId))
       existing.my_bet_ids.push(String(row.id));
@@ -582,6 +586,7 @@ async function loadRoundBets(context: any, roundId: number, userId: number) {
       user_colors: bet.user_colors.join(","),
       primary_user_color: bet.user_colors[0] || rouletteUserColor(userId),
       item_labels: bet.item_labels.join(", "),
+      item_values: bet.item_values.join(","),
       bet_ids: bet.bet_ids.join(","),
       my_bet_ids: bet.my_bet_ids.join(","),
     }));

@@ -266,6 +266,22 @@ function buildRangeValues(
   return sampled.length > 1 ? sampled : [last, last];
 }
 
+
+function buildRangePointTimes(count: number, range: ChartRange) {
+  const total = Math.max(2, count);
+  const now = Date.now();
+  const spanMs =
+    range === "hourly"
+      ? 60 * 60_000
+      : range === "daily"
+        ? 24 * 60 * 60_000
+        : 7 * 24 * 60 * 60_000;
+  return Array.from({ length: count }, (_, index) => {
+    const ratio = total <= 1 ? 1 : index / (total - 1);
+    return new Date(now - spanMs + spanMs * ratio).toISOString();
+  });
+}
+
 function getRangeChange(values: number[]) {
   const first = values[0] || 0;
   const last = values[values.length - 1] || first;
@@ -1488,6 +1504,10 @@ function StockDetailView(props: {
     stock.price,
     range,
   );
+  const pointTimes = useMemo(
+    () => buildRangePointTimes(history.length, range),
+    [history.length, range],
+  );
   const rangeChange = getRangeChange(history);
   const positive = rangeChange.diff >= 0;
   const owned = safeNumber(state.holdings[stock.symbol]);
@@ -1570,6 +1590,8 @@ function StockDetailView(props: {
               key={`${range}-${history.join("-")}`}
               values={history}
               positive={positive}
+              range={range}
+              pointTimes={pointTimes}
             />
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <InfoBox
@@ -1703,25 +1725,33 @@ function MiniSparkline({
 function LargeSparkline({
   values,
   positive,
+  range: chartRange,
+  pointTimes,
 }: {
   values: number[];
   positive: boolean;
+  range?: ChartRange;
+  pointTimes?: string[];
 }) {
   const safeValues =
     values.length > 1 ? values : [values[0] || 1, values[0] || 1];
   const min = Math.min(...safeValues);
   const max = Math.max(...safeValues);
-  const range = max - min || 1;
+  const valueRange = max - min || 1;
   const points = safeValues
     .map(
       (value, index) =>
-        `${(index / Math.max(1, safeValues.length - 1)) * 100},${160 - ((value - min) / range) * 130}`,
+        `${(index / Math.max(1, safeValues.length - 1)) * 100},${160 - ((value - min) / valueRange) * 130}`,
     )
     .join(" ");
   const lastY =
-    160 - (((safeValues[safeValues.length - 1] || min) - min) / range) * 130;
+    160 - (((safeValues[safeValues.length - 1] || min) - min) / valueRange) * 130;
   return (
-    <div className="eka-range-panel mt-6 overflow-hidden rounded-[2rem] border border-white/10 bg-black/30 p-4">
+    <div
+      className="eka-range-panel mt-6 overflow-hidden rounded-[2rem] border border-white/10 bg-black/30 p-4"
+      data-chart-range={chartRange}
+      data-chart-timestamps={pointTimes?.join("|") || ""}
+    >
       <svg
         viewBox="0 0 100 180"
         preserveAspectRatio="none"

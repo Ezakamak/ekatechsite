@@ -98,7 +98,9 @@ function extractChartBounds(card: HTMLElement) {
   };
 }
 
-function detectChartRange(card: HTMLElement) {
+function detectChartRange(card: HTMLElement, panel?: HTMLElement | null) {
+  const datasetRange = panel?.dataset.chartRange;
+  if (datasetRange === "daily" || datasetRange === "weekly" || datasetRange === "hourly") return datasetRange;
   const activeButton = Array.from(card.querySelectorAll("button")).find((button) => {
     const text = button.textContent || "";
     return /Saatlik|Hourly|Günlük|Daily|Haftalık|Weekly/i.test(text) && button.className.includes("bg-white");
@@ -109,12 +111,23 @@ function detectChartRange(card: HTMLElement) {
   return "hourly";
 }
 
-function getPointDate(index: number, total: number, range: string) {
+function getPointDate(index: number, total: number, range: string, panel?: HTMLElement | null) {
+  const timestamps = String(panel?.dataset.chartTimestamps || "")
+    .split("|")
+    .filter(Boolean);
+  const stampedDate = timestamps[index] ? new Date(timestamps[index]) : null;
+  if (stampedDate && Number.isFinite(stampedDate.getTime())) return stampedDate;
+
   const date = new Date();
   const distance = Math.max(0, total - 1 - index);
-  if (range === "weekly") date.setDate(date.getDate() - distance * 7);
-  else if (range === "daily") date.setDate(date.getDate() - distance);
-  else date.setHours(date.getHours() - distance);
+  const spanMs =
+    range === "weekly"
+      ? 7 * 24 * 60 * 60_000
+      : range === "daily"
+        ? 24 * 60 * 60_000
+        : 60 * 60_000;
+  const stepMs = total > 1 ? spanMs / (total - 1) : 0;
+  date.setTime(date.getTime() - distance * stepMs);
   return date;
 }
 
@@ -149,8 +162,8 @@ function InvestSimChartPointInspector() {
       const high = bounds.high ?? 0;
       const low = bounds.low ?? high;
       const value = high !== low ? low + ((160 - nearest.point.y) / 130) * (high - low) : high;
-      const range = detectChartRange(card);
-      const date = getPointDate(nearest.index, points.length, range);
+      const range = detectChartRange(card, panel);
+      const date = getPointDate(nearest.index, points.length, range, panel);
       const locale = language === "tr" ? "tr-TR" : "en-US";
       const dateText = new Intl.DateTimeFormat(locale, {
         day: "2-digit",
