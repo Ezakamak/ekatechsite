@@ -1140,7 +1140,7 @@ export function TechRoulette() {
                       Top Durduğunda Sonuç Açıklanacaktır. Lütfen Bekleyiniz...
                     </p>
                     <p className="mt-2 text-sm text-white/55">
-                      Biliyor muysun? Birçok enayi birey tüm parasının kırmızıya koyuyor.
+                      Biliyor musun? Birçok insan parasının tamamını kırmızıya koyarak kazanabileceğine inanıyor.
                     </p>
                   </div>
                 ) : result && (
