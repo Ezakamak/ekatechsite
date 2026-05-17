@@ -85,7 +85,6 @@ type TableBet = {
   chip_count: number;
   total_amount: number;
   users?: string | null;
-  user_ids?: string | null;
   item_labels?: string | null;
   bet_ids?: string | null;
   my_bet_ids?: string | null;
@@ -119,47 +118,6 @@ type RouletteChatMessage = {
   message: string;
   created_at?: string;
 };
-
-
-const USER_CHIP_COLORS = [
-  "from-cyan-100 via-sky-500 to-blue-700",
-  "from-fuchsia-100 via-pink-500 to-rose-700",
-  "from-emerald-100 via-lime-500 to-green-700",
-  "from-amber-100 via-orange-500 to-red-600",
-  "from-violet-100 via-purple-500 to-indigo-700",
-  "from-teal-100 via-cyan-500 to-emerald-700",
-  "from-rose-100 via-red-500 to-orange-700",
-  "from-blue-100 via-indigo-500 to-violet-700",
-  "from-lime-100 via-green-500 to-teal-700",
-  "from-yellow-100 via-amber-500 to-orange-700",
-];
-
-const USER_NAME_COLORS = [
-  "text-cyan-100",
-  "text-pink-100",
-  "text-lime-100",
-  "text-orange-100",
-  "text-violet-100",
-  "text-teal-100",
-  "text-rose-100",
-  "text-indigo-100",
-  "text-emerald-100",
-  "text-amber-100",
-];
-
-function userColorIndex(userId?: number | string | null) {
-  const numericId = Math.abs(Math.floor(Number(userId || 0)));
-  if (!numericId) return 0;
-  return (numericId * 2654435761) % USER_CHIP_COLORS.length;
-}
-
-function chipColorForUser(userId?: number | string | null) {
-  return USER_CHIP_COLORS[userColorIndex(userId)];
-}
-
-function nameColorForUser(userId?: number | string | null) {
-  return USER_NAME_COLORS[userColorIndex(userId)];
-}
 
 const QUICK_BETS = [
   { label: "10", value: 10 },
@@ -1013,26 +971,26 @@ export function TechRoulette() {
                     })}
                     <div className="pointer-events-none absolute inset-[3.5%] rounded-full border-[3px] border-yellow-100/60 shadow-[inset_0_0_18px_rgba(253,224,71,0.35)]" />
                     <div className="pointer-events-none absolute inset-[22%] rounded-full border-[10px] border-amber-900/80 bg-[radial-gradient(circle,#3a210f_0_36%,#120a05_37%_60%,transparent_61%)] shadow-[inset_0_0_24px_rgba(0,0,0,0.9),0_0_18px_rgba(245,158,11,0.25)]" />
+                    {settledResult ? (
+                      <div
+                        aria-hidden="true"
+                        className="tech-roulette-settled-ball-orbit pointer-events-none absolute inset-0 z-30 rounded-full"
+                        style={{
+                          transform: `rotate(${wheelSectorCenterForNumber(settledResult.winning_number)}deg)`,
+                        }}
+                      >
+                        <span
+                          className="tech-roulette-settled-ball absolute left-1/2 top-1/2 h-4 w-4 rounded-full border border-white bg-white shadow-[inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
+                          style={{
+                            transform:
+                              "translate(-50%, -50%) translateY(clamp(-8.7rem, -36vw, -6.3rem))",
+                          }}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                   <div className="pointer-events-none absolute inset-[5%] z-10 rounded-full border-4 border-black/50" />
                   <div className="pointer-events-none absolute inset-[15%] z-10 rounded-full border border-white/10" />
-                  {settledResult ? (
-                    <div
-                      aria-hidden="true"
-                      className="tech-roulette-settled-ball-orbit pointer-events-none absolute inset-0 z-30 rounded-full"
-                      style={{
-                        transform: `rotate(${wheelSectorCenterForNumber(settledResult.winning_number)}deg)`,
-                      }}
-                    >
-                      <span
-                        className="tech-roulette-settled-ball absolute left-1/2 top-1/2 h-4 w-4 rounded-full border border-white bg-white shadow-[inset_-3px_-4px_5px_rgba(0,0,0,0.35)]"
-                        style={{
-                          transform:
-                            "translate(-50%, -50%) translateY(clamp(-8.62rem, -35.1vw, -6.44rem)) scale(0.982)",
-                        }}
-                      />
-                    </div>
-                  ) : null}
                   {pendingResult ? (
                     <div
                       key={`orbit-${spinSequence}-${pendingResult.id || pendingResult.winning_number}`}
@@ -1424,7 +1382,7 @@ function RouletteLiveChat() {
               className="rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3"
             >
               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-white/38">
-                <span className={`inline-flex items-center gap-1 font-semibold ${nameColorForUser(item.user_id)}`}>
+                <span className="inline-flex items-center gap-1 font-semibold text-cyan-100/80">
                   {item.user_name}
                   {Number(item.user_level || 1) >= 5 ? (
                     <BadgeCheck className="h-3.5 w-3.5 fill-blue-500 text-white" />
@@ -1714,18 +1672,22 @@ function ChipPile({
 }) {
   if (!chip) return null;
   const totalAmount = Number(chip.total_amount || 0);
+  const chipCount = Math.min(99, Number(chip.chip_count || 1));
   const canCancel = Boolean(chip.my_bet_ids);
-  const userIds = String(chip.user_ids || "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-  const displayUserIds = userIds.length > 0 ? userIds.slice(0, 4) : [null];
+  const chipTone =
+    totalAmount >= 5000
+      ? "from-fuchsia-200 via-violet-500 to-cyan-400"
+      : totalAmount >= 1000
+        ? "from-amber-100 via-orange-500 to-red-600"
+        : totalAmount >= 100
+          ? "from-cyan-100 via-sky-500 to-blue-700"
+          : "from-emerald-100 via-lime-500 to-emerald-700";
 
   return (
     <span
       role={canCancel ? "button" : undefined}
       tabIndex={canCancel ? 0 : undefined}
-      title={`${chip.users || "Oyuncular"} · ${formatTc(totalAmount, "tr-TR")} chips${canCancel ? " · Geri çekmek için bas" : ""}`}
+      title={`${chip.users || "Oyuncular"} · ${formatTc(totalAmount, "tr-TR")} TC${canCancel ? " · Geri çekmek için bas" : ""}`}
       onClick={(event) => {
         event.stopPropagation();
         if (canCancel) onCancelBet(chip);
@@ -1736,22 +1698,10 @@ function ChipPile({
         event.stopPropagation();
         onCancelBet(chip);
       }}
-      className={`absolute -right-3 -top-3 z-20 flex min-w-16 origin-bottom items-center justify-center rounded-full border-2 border-white/80 bg-black/40 px-2.5 py-1.5 text-[0.62rem] font-black text-white shadow-[0_8px_18px_rgba(0,0,0,0.42)] ring-2 ring-black/30 transition hover:scale-110 ${canCancel ? "cursor-pointer animate-[chip-pop_0.72s_cubic-bezier(0.2,1.2,0.2,1)]" : "pointer-events-none animate-[chip-land_1.6s_ease-in-out_infinite]"}`}
+      className={`absolute -right-3 -top-3 z-20 flex min-w-12 origin-bottom items-center justify-center rounded-full border-2 border-white/80 bg-gradient-to-br ${chipTone} px-2.5 py-1.5 text-[0.62rem] font-black text-white shadow-[0_8px_18px_rgba(0,0,0,0.42)] ring-2 ring-black/30 transition hover:scale-110 ${canCancel ? "cursor-pointer animate-[chip-pop_0.72s_cubic-bezier(0.2,1.2,0.2,1)]" : "pointer-events-none animate-[chip-land_1.6s_ease-in-out_infinite]"}`}
     >
-      <span className="absolute inset-0 rounded-full bg-black/25" />
-      <span className="absolute inset-1 rounded-full border border-white/35" />
-      <span className="absolute -top-1.5 left-2 flex -space-x-1">
-        {displayUserIds.map((userId, index) => (
-          <span
-            key={`${userId || "fallback"}-${index}`}
-            className={`h-4 w-4 rounded-full border border-white/80 bg-gradient-to-br ${chipColorForUser(userId)} shadow-sm`}
-            style={{ zIndex: displayUserIds.length - index }}
-          />
-        ))}
-      </span>
-      <span className="relative mt-1 tabular-nums">
-        {formatTc(totalAmount, "tr-TR")} chips
-      </span>
+      <span className="absolute inset-1 rounded-full border border-white/45" />
+      <span className="relative tabular-nums">{chipCount} chip</span>
     </span>
   );
 }

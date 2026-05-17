@@ -523,7 +523,6 @@ function loadRoundBets(context: any, roundId: number, userId: number) {
       SELECT bet_type, bet_value, COUNT(*) AS chip_count, SUM(bet_amount) AS total_amount,
              MAX(created_at) AS last_bet_at,
              GROUP_CONCAT(substr(user_name, 1, 14), ', ') AS users,
-             GROUP_CONCAT(user_id, ',') AS user_ids,
              GROUP_CONCAT(stake_item_label, ', ') AS item_labels,
              GROUP_CONCAT(id, ',') AS bet_ids,
              GROUP_CONCAT(CASE WHEN user_id = ? THEN id END, ',') AS my_bet_ids
