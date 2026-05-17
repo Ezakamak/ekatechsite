@@ -301,126 +301,222 @@
   }
 }
 
-@keyframes tech-roulette-emoji-rain {
+@keyframes tech-roulette-gift-fly {
   0% {
     opacity: 0;
-    transform: translate3d(var(--drop-x, 0), -18vh, 0) rotate(-24deg) scale(0.78);
+    transform: translate3d(var(--gift-start-x), var(--gift-start-y), 0) scale(0.36)
+      rotate(calc(var(--gift-rotate, 0deg) - 38deg));
+    filter: blur(2px) drop-shadow(0 0 0 rgba(255, 255, 255, 0));
   }
-  16% {
+  12% {
     opacity: 1;
+    filter: blur(0) drop-shadow(0 0 18px rgba(255, 255, 255, 0.72));
   }
-  100% {
-    opacity: 0;
-    transform: translate3d(calc(var(--drop-x, 0) + 2.5rem), 112vh, 0) rotate(380deg) scale(1.18);
+  46% {
+    opacity: 1;
+    transform: translate3d(var(--gift-end-x), var(--gift-end-y), 0) scale(1.18)
+      rotate(var(--gift-rotate, 0deg));
+    filter: blur(0) drop-shadow(0 0 28px rgba(253, 224, 71, 0.72));
   }
-}
-
-@keyframes tech-roulette-emoji-orbit {
-  0% {
-    opacity: 0;
-    transform: translate3d(var(--drop-x, 0), 68vh, 0) rotate(0deg) translateX(0) scale(0.72);
-  }
-  20%,
   72% {
+    opacity: 0.98;
+    transform: translate3d(
+        calc(var(--gift-end-x) + 2.8vw),
+        calc(var(--gift-end-y) - 8vh),
+        0
+      )
+      scale(0.92) rotate(calc(var(--gift-rotate, 0deg) + 24deg));
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(
+        calc(var(--gift-end-x) - 1.8vw),
+        calc(var(--gift-end-y) - 18vh),
+        0
+      )
+      scale(0.18) rotate(calc(var(--gift-rotate, 0deg) + 80deg));
+    filter: blur(3px) drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  }
+}
+
+@keyframes tech-roulette-gift-card-pop {
+  0%, 10% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.42) rotate(-8deg);
+  }
+  24% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.18) rotate(4deg);
+  }
+  42%, 70% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -68%) scale(0.74) rotate(7deg);
+  }
+}
+
+@keyframes tech-roulette-gift-spark-burst {
+  0%, 14% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--spark-angle)) translateX(0) scale(0.2);
+  }
+  28% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translate3d(calc(var(--drop-x, 0) + 2rem), 8vh, 0) rotate(720deg) translateX(4rem) scale(1.12);
+    transform: translate(-50%, -50%) rotate(var(--spark-angle)) translateX(9.5rem) scale(1);
   }
 }
 
-@keyframes tech-roulette-emoji-slash {
+@keyframes tech-roulette-gift-spotlight-sweep {
   0% {
     opacity: 0;
-    transform: translate3d(-18vw, calc(82vh + var(--drop-x, 0)), 0) rotate(-38deg) scale(0.88);
+    transform: translateY(20vh) rotate(-18deg) scaleY(0.6);
   }
-  15%,
-  55% {
-    opacity: 1;
-    filter: drop-shadow(0 0 16px rgba(255,255,255,.9));
+  22%, 68% {
+    opacity: 0.52;
   }
   100% {
     opacity: 0;
-    transform: translate3d(112vw, calc(10vh + var(--drop-x, 0)), 0) rotate(28deg) scale(1.2);
+    transform: translateY(-18vh) rotate(18deg) scaleY(1.15);
   }
 }
 
-@keyframes tech-roulette-emoji-glow {
-  0% {
-    opacity: 0;
-    transform: translate3d(var(--drop-x, 0), 104vh, 0) scale(0.5) rotate(0deg);
-  }
-  25%,
-  72% {
-    opacity: 1;
-    filter: drop-shadow(0 0 22px rgba(253,224,71,.95));
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(calc(var(--drop-x, 0) - 1.5rem), 18vh, 0) scale(1.45) rotate(260deg);
-  }
-}
-
-@keyframes tech-roulette-emoji-smoke {
-  0% {
-    opacity: 0;
-    transform: translate3d(var(--drop-x, 0), 96vh, 0) scale(0.66) rotate(-8deg);
-    filter: blur(0);
-  }
-  24%,
-  70% {
-    opacity: .72;
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(calc(var(--drop-x, 0) + 3rem), 18vh, 0) scale(1.8) rotate(18deg);
-    filter: blur(5px);
-  }
-}
-
-.tech-roulette-payout-badge {
-  animation: tech-roulette-payout-pop 4.1s cubic-bezier(0.2, 1.12, 0.2, 1) both;
-  white-space: nowrap;
-}
-
-.tech-roulette-screen-item-effect {
-  left: var(--effect-left, 50%);
+.tech-roulette-gift-stage {
+  inset: 0;
   position: absolute;
-  top: 0;
 }
 
-.tech-roulette-screen-item-effect span {
-  animation: tech-roulette-emoji-rain var(--effect-duration, 4s) linear infinite;
-  animation-delay: calc(var(--effect-delay, 0s) + var(--drop-delay, 0s));
-  display: block;
-  font-size: clamp(1.7rem, 4vw, 3.7rem);
+.tech-roulette-gift-pack {
+  --gift-accent: rgba(253, 224, 71, 0.95);
+  inset: 0;
+  position: absolute;
+}
+
+.tech-roulette-gift-pack--orbit {
+  --gift-accent: rgba(34, 211, 238, 0.95);
+}
+
+.tech-roulette-gift-pack--slash {
+  --gift-accent: rgba(248, 113, 113, 0.95);
+}
+
+.tech-roulette-gift-pack--glow {
+  --gift-accent: rgba(253, 224, 71, 0.98);
+}
+
+.tech-roulette-gift-pack--smoke {
+  --gift-accent: rgba(216, 180, 254, 0.92);
+}
+
+.tech-roulette-gift-flyer {
+  animation: tech-roulette-gift-fly var(--gift-duration, 2.6s) cubic-bezier(0.16, 0.9, 0.22, 1)
+    infinite;
+  animation-delay: calc(var(--pack-delay, 0s) + var(--gift-delay, 0s));
+  font-size: var(--gift-size, 2.4rem);
+  left: 0;
   line-height: 1;
   opacity: 0;
   position: absolute;
-  text-shadow: 0 0 24px rgba(255, 255, 255, 0.45);
+  top: 0;
+  transform-origin: center;
   will-change: transform, opacity, filter;
 }
 
-.tech-roulette-screen-item-effect--orbit span {
-  animation-name: tech-roulette-emoji-orbit;
+.tech-roulette-gift-card {
+  animation: tech-roulette-gift-card-pop 3.4s cubic-bezier(0.19, 1, 0.22, 1) infinite;
+  animation-delay: var(--pack-delay, 0s);
+  align-items: center;
+  background: linear-gradient(135deg, rgba(8, 13, 22, 0.9), rgba(0, 0, 0, 0.62));
+  border: 1px solid color-mix(in srgb, var(--gift-accent) 60%, transparent);
+  border-radius: 9999px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.14) inset,
+    0 18px 54px color-mix(in srgb, var(--gift-accent) 24%, transparent),
+    0 0 70px rgba(255, 255, 255, 0.14);
+  display: inline-flex;
+  gap: 0.72rem;
+  left: var(--pack-x, 50vw);
+  opacity: 0;
+  padding: 0.62rem 1rem 0.62rem 0.72rem;
+  position: absolute;
+  top: var(--pack-y, 48vh);
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
 }
 
-.tech-roulette-screen-item-effect--slash span {
-  animation-name: tech-roulette-emoji-slash;
+.tech-roulette-gift-card-emoji {
+  display: grid;
+  filter: drop-shadow(0 0 18px var(--gift-accent));
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1;
+  place-items: center;
 }
 
-.tech-roulette-screen-item-effect--glow span {
-  animation-name: tech-roulette-emoji-glow;
+.tech-roulette-gift-card-copy {
+  display: grid;
+  gap: 0.12rem;
+  text-align: left;
 }
 
-.tech-roulette-screen-item-effect--smoke span {
-  animation-name: tech-roulette-emoji-smoke;
+.tech-roulette-gift-card-copy strong {
+  color: white;
+  font-size: clamp(0.68rem, 1.8vw, 0.82rem);
+  letter-spacing: 0.16em;
+}
+
+.tech-roulette-gift-card-copy small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: clamp(0.66rem, 1.8vw, 0.78rem);
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tech-roulette-gift-spark {
+  animation: tech-roulette-gift-spark-burst 1.7s ease-out infinite;
+  animation-delay: calc(var(--pack-delay, 0s) + var(--spark-delay, 0s));
+  background: linear-gradient(90deg, transparent, var(--gift-accent), white, transparent);
+  border-radius: 9999px;
+  height: 0.16rem;
+  left: var(--pack-x, 50vw);
+  opacity: 0;
+  position: absolute;
+  top: var(--pack-y, 48vh);
+  transform-origin: left center;
+  width: 1.8rem;
+}
+
+.tech-roulette-gift-spotlight {
+  animation: tech-roulette-gift-spotlight-sweep 4.2s ease-in-out infinite;
+  background: linear-gradient(to top, transparent, rgba(253, 224, 71, 0.16), transparent);
+  bottom: -18vh;
+  height: 92vh;
+  opacity: 0;
+  position: absolute;
+  width: 18vw;
+}
+
+.tech-roulette-gift-spotlight--left {
+  left: 8vw;
+}
+
+.tech-roulette-gift-spotlight--right {
+  animation-delay: 0.7s;
+  right: 8vw;
+  transform: rotate(18deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tech-roulette-payout-badge,
-  .tech-roulette-screen-item-effect span {
+  .tech-roulette-gift-flyer,
+  .tech-roulette-gift-card,
+  .tech-roulette-gift-spark,
+  .tech-roulette-gift-spotlight {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
   }
