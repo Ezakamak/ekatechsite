@@ -38,6 +38,7 @@ import { DropTech } from "./DropTech";
 import { TechCoinMines } from "./TechCoinMines";
 import { EkaTowers } from "./EkaTowers";
 import { TechAviator } from "./tech-aviator/TechAviator";
+import { TechGallop } from "./TechGallop";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
 
@@ -137,6 +138,7 @@ type GameKey =
   | "towers"
   | "aviator"
   | "roulette"
+  | "gallop"
   | "store";
 
 type TechStoreTlPackage = {
@@ -231,6 +233,9 @@ export function OffPage() {
         rouletteTitle: "Tech Roulette",
         rouletteDesc:
           "OFF Hub cüzdanına bağlı Avrupa ruleti. Halıdan sayı/dış bahis seç, kendi TC miktarını yaz; SQL ekatechwallet kilidi, backend RNG ve log tablosu sonucu korur.",
+        gallopTitle: "Tech Gallop",
+        gallopDesc:
+          "Fütüristik cyber at yarışı. Kazanan yarıştan önce gizli ve ağırlıklı RNG ile seçilir; sinematik koşu animasyonu sonucu birebir takip eder ve yalnızca Tech Coin kullanır.",
         minesRemoved:
           "EkaMines yerine gerçek para OFF, ana Tech Coin cüzdanına bağlı TechMines aktif.",
         walletTitle: "Tech Coin cüzdanı",
@@ -303,6 +308,9 @@ export function OffPage() {
         rouletteTitle: "Tech Roulette",
         rouletteDesc:
           "European roulette connected to the OFF Hub wallet. Tap the table for number/outside bets, enter your own TC amount, and let SQL locking, backend RNG and logs protect every round.",
+        gallopTitle: "Tech Gallop",
+        gallopDesc:
+          "Futuristic cyber horse racing. A hidden weighted RNG picks the winner before the race, then the cinematic animation follows the locked result using only Tech Coin.",
         minesRemoved:
           "TechMines is active with real money OFF and the main Tech Coin wallet connected.",
         walletTitle: "Tech Coin wallet",
@@ -539,6 +547,8 @@ export function OffPage() {
           <EkaTowers />
         ) : activeGame === "aviator" ? (
           <TechAviator />
+        ) : activeGame === "gallop" ? (
+          <TechGallop />
         ) : activeGame === "roulette" ? (
           <GameErrorBoundary
             gameName="Tech Roulette"
@@ -741,6 +751,18 @@ export function OffPage() {
             onClick={() => {
               playOffSound("bet");
               setActiveGame("aviator");
+            }}
+          />
+          <GameCard
+            icon={<Award className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.gallopTitle}
+            description={copy.gallopDesc}
+            accent="cyan"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("ready");
+              setActiveGame("gallop");
             }}
           />
           <GameCard
