@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Coins, Gem, Info, ShieldCheck, Sparkles } from "lucide-react";
 import { useLanguage } from "../i18n";
 import { playOffSound } from "./OffSoundEngine";
+import { ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
 
 type Tile = { id: number; isMine: boolean; isRevealed: boolean };
 type Notice = { type: "success" | "error" | "info"; text: string } | null;
@@ -93,6 +94,7 @@ export function TechCoinMines() {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const [notice, setNotice] = useState<Notice>(null);
   const [boardPulse, setBoardPulse] = useState<"shake" | "success" | null>(null);
+  const [successToast, setSuccessToast] = useState<ToastNoFactionSuccessPayload | null>(null);
 
   const copy = useMemo(() => tr ? {
     eyebrow: "Verified and approved by Stake.",
@@ -243,6 +245,14 @@ export function TechCoinMines() {
     window.setTimeout(() => setBoardPulse(null), 650);
   }
 
+  function showCashoutSuccessToast(amount: number, multiplier: number) {
+    setSuccessToast({
+      amount: roundTc(amount),
+      multiplier: Number.isFinite(multiplier) ? multiplier : 1,
+      currency: "TechCoin",
+    });
+  }
+
   async function startRound() {
     const betAmount = roundTc(gameState.betAmount);
     if (betAmount < 1) {
@@ -266,6 +276,7 @@ export function TechCoinMines() {
     const data = await runMinesAction({ action: "cashout" });
     if (!data) return;
     setNotice({ type: "success", text: copy.cashed });
+    showCashoutSuccessToast(data.payout || cashoutAmount, Number(data.round?.currentMultiplier || gameState.currentMultiplier || 1));
     playOffSound("cashout");
     flashBoard("success");
   }
@@ -287,6 +298,7 @@ export function TechCoinMines() {
 
     if (data.message === "perfect") {
       setNotice({ type: "success", text: copy.perfect });
+      showCashoutSuccessToast(data.payout || 0, Number(data.round?.currentMultiplier || gameState.currentMultiplier || 1));
       playOffSound("win");
       flashBoard("success");
       return;
@@ -298,6 +310,7 @@ export function TechCoinMines() {
 
   return (
     <main className="min-h-screen bg-[#0f212e] px-4 pb-24 pt-28 text-white sm:px-6">
+      {successToast ? <ToastNoFactionSuccess {...successToast} locale={locale} onClose={() => setSuccessToast(null)} /> : null}
       <style>{`
         @keyframes minesShake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-8px); } 40%, 60% { transform: translateX(8px); } }
         @keyframes minesSuccess { 0%, 100% { box-shadow: 0 0 0 rgba(0,230,118,0); } 45% { box-shadow: 0 0 42px rgba(0,230,118,0.34); } }
