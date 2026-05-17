@@ -316,7 +316,7 @@ export function TechBlackjack() {
     setActiveHandIndex(0);
     setMessage(resultLabel);
     settled.forEach((hand) => recordSessionResult(Math.round(hand.resultNet || 0)));
-    pushToast(totalPayout, totalEntryAmount);
+    if (totalNet >= 0) pushToast(totalPayout, totalEntryAmount);
     setHistory((current) => [
       ...settled.map((hand) => ({ id: uniqueId("result"), resultType: hand.status, playerScore: handValue(hand.cards).total, dealerScore: dealerTotal, betAmount: hand.bet, netAmount: Math.round(hand.resultNet || 0) })),
       ...current,
@@ -343,7 +343,7 @@ export function TechBlackjack() {
   function pushToast(totalReturn: number, entryAmount: number) {
     const safeTotalReturn = Math.max(0, Number(totalReturn) || 0);
     const safeEntryAmount = Math.max(0, Number(entryAmount) || 0);
-    if (safeEntryAmount <= 0) return;
+    if (safeEntryAmount <= 0 || safeTotalReturn <= 0) return;
 
     const multiplier = safeTotalReturn / safeEntryAmount;
     const multiplierLabel = formatMultiplier(multiplier);
