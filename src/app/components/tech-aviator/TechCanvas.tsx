@@ -60,18 +60,18 @@ export function TechCanvas({ multiplier, status, countdown, crashPoint }: TechCa
 
       <div className="relative z-10 flex min-h-[460px] flex-col items-center justify-center px-6 text-center">
         <p className="mb-4 flex items-center gap-2 rounded-full border border-cyan-300/20 bg-black/40 px-4 py-2 text-xs uppercase tracking-[0.4em] text-cyan-100/80">
-          <RadioTower className="h-4 w-4 text-emerald-300" /> {tr ? "Kanıtlanabilir Adil SHA-256 Uçuş" : "Provably Fair SHA-256 Flight"}
+          <RadioTower className="h-4 w-4 text-emerald-300" /> {tr ? "SHA-256 ile Doğrulanabilir Uçuş" : "SHA-256 Verifiable Flight"}
         </p>
         <h1 className={`font-mono text-7xl font-black sm:text-8xl ${isCrashed ? "text-red-400 drop-shadow-[0_0_26px_rgba(248,113,113,0.9)]" : "text-emerald-300 drop-shadow-[0_0_30px_rgba(16,185,129,0.9)]"}`}>
           {multiplier.toFixed(2)}x
         </h1>
         {status === "STATUS_BETTING" ? (
-          <p className="mt-6 text-2xl font-bold text-white">{tr ? "Bahis dönemi" : "Betting period"}: {countdown}s</p>
+          <p className="mt-6 text-2xl font-bold text-white">{tr ? "Katılım dönemi" : "Join period"}: {countdown}s</p>
         ) : null}
         {isCrashed ? (
-          <p className="mt-6 text-3xl font-black uppercase tracking-[0.2em] text-red-300">{tr ? "TECH CRASH / UÇTU" : "TECH CRASH / FLEW AWAY"}</p>
+          <p className="mt-6 text-3xl font-black uppercase tracking-[0.2em] text-red-300">{tr ? "UÇUŞ SONA ERDİ" : "FLIGHT ENDED"}</p>
         ) : null}
-        {crashPoint ? <p className="mt-3 text-sm text-zinc-400">{tr ? "Son doğrulanan crash noktası" : "Last verified crash point"}: {crashPoint.toFixed(2)}x</p> : null}
+        {crashPoint ? <p className="mt-3 text-sm text-zinc-400">{tr ? "Son doğrulanan düşüş noktası" : "Last verified drop point"}: {crashPoint.toFixed(2)}x</p> : null}
       </div>
     </section>
   );
