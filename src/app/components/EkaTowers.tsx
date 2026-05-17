@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bomb, Coins, Gem, Info, RotateCcw, ShieldCheck, Sparkles, Star, Trophy, Wallet, Zap } from "lucide-react";
-import { ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
+import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
 
 const STORAGE_KEY = "ekatech:eka-towers:v2";
 const LEVELS = 9;
@@ -88,7 +88,7 @@ export function EkaTowers() {
   const [actionLoading, setActionLoading] = useState(false);
   const [shake, setShake] = useState(false);
   const [lastWin, setLastWin] = useState(0);
-  const [successToast, setSuccessToast] = useState<ToastNoFactionSuccessPayload | null>(null);
+  const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
 
   const difficulty = useMemo(() => getDifficulty(round?.difficultyKey || difficultyKey), [difficultyKey, round?.difficultyKey]);
   const isPlaying = Boolean(round?.isRoundActive);
@@ -178,12 +178,20 @@ export function EkaTowers() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  const removeCashoutSuccessToast = useCallback((id: string) => {
+    setSuccessToasts((current) => current.filter((toast) => toast.id !== id));
+  }, []);
+
   function showCashoutSuccessToast(amount: number, multiplier: number) {
-    setSuccessToast({
-      amount: roundTc(amount),
-      multiplier: Number.isFinite(multiplier) ? multiplier : 1,
-      currency: "TechCoin",
-    });
+    setSuccessToasts((current) => ([
+      ...current,
+      {
+        id: createToastNoFactionSuccessId("toast-eka-towers"),
+        amount: roundTc(amount),
+        multiplier: Number.isFinite(multiplier) ? multiplier : 1,
+        currency: "TechCoin",
+      },
+    ]));
   }
 
   async function startGame() {
@@ -254,7 +262,11 @@ export function EkaTowers() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#0f212e] px-3 pb-10 pt-24 text-white sm:px-5">
-      {successToast ? <ToastNoFactionSuccess {...successToast} locale="tr-TR" onClose={() => setSuccessToast(null)} /> : null}
+      {successToasts.length ? (
+        <div className="toast-nofaction-success-stack" aria-live="polite">
+          {successToasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale="tr-TR" onClose={removeCashoutSuccessToast} />)}
+        </div>
+      ) : null}
       <div className="pointer-events-none fixed inset-0 opacity-70">
         <div className="absolute left-1/2 top-10 h-96 w-96 -translate-x-1/2 rounded-full bg-cyan-400/10 blur-3xl" />
         <div className="absolute bottom-20 right-0 h-96 w-96 rounded-full bg-emerald-400/10 blur-3xl" />
