@@ -18,14 +18,16 @@ type BlackjackToast = ToastNoFactionSuccessPayload & { displayAmount?: string; v
 const SUITS: Suit[] = ["C", "D", "H", "S"];
 const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 const STORAGE_KEY = "ekatech:tech-blackjack:v1";
-const CARD_BACK = makeCardSvg("OFF", "#67e8f9", "TECH");
+const DEFAULT_BET = 25;
+const EKA_LOGO_SRC = "/og-image.svg";
+const DEBUG_BLACKJACK = import.meta.env.DEV;
 
 export function TechBlackjack() {
   const mountedRef = useRef(true);
   const [wallet, setWallet] = useState<WalletState | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [betAmount, setBetAmount] = useState(25);
+  const [betAmount, setBetAmount] = useState(DEFAULT_BET);
   const [deck, setDeck] = useState<Card[]>([]);
   const [dealerCards, setDealerCards] = useState<Card[]>([]);
   const [hideDealerHole, setHideDealerHole] = useState(true);
@@ -38,16 +40,20 @@ export function TechBlackjack() {
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-blackjack");
 
   const balance = Math.max(0, Math.floor(Number(wallet?.balance || 0)));
-  const safeBet = useMemo(() => sanitizeBet(betAmount, Math.max(1, balance || 1)), [betAmount, balance]);
-  const activeHand = hands[activeHandIndex];
-  const dealerVisibleCards = hideDealerHole && dealerCards.length > 1 ? [dealerCards[0]] : dealerCards;
+  const safeBet = useMemo(() => sanitizeBet(betAmount ?? DEFAULT_BET, Math.max(1, balance || 1)), [betAmount, balance]);
+  const safeDeck = useMemo(() => sanitizeCards(deck), [deck]);
+  const dealerHand = useMemo(() => sanitizeCards(dealerCards), [dealerCards]);
+  const playerHands = useMemo(() => sanitizeHands(hands), [hands]);
+  const activeHandIndexSafe = Math.min(Math.max(0, activeHandIndex || 0), Math.max(0, playerHands.length - 1));
+  const activeHand = playerHands[activeHandIndexSafe];
+  const dealerVisibleCards = hideDealerHole && dealerHand.length > 1 ? dealerHand.slice(0, 1) : dealerHand;
   const dealerScore = handValue(dealerVisibleCards).total;
-  const dealerActualScore = handValue(dealerCards).total;
+  const dealerActualScore = handValue(dealerHand).total;
   const canPlay = phase === "playing" && Boolean(activeHand) && activeHand.status === "playing" && !actionLoading;
-  const isFirstDecision = canPlay && activeHand.cards.length === 2 && !activeHand.doubled;
-  const canDouble = isFirstDecision && balance >= activeHand.bet;
-  const canSplit = isFirstDecision && activeHand.cards.length === 2 && cardValue(activeHand.cards[0]) === cardValue(activeHand.cards[1]) && balance >= activeHand.bet && hands.length < 2;
-  const dealerShowsAce = phase === "playing" && dealerCards[0]?.rank === "A";
+  const isFirstDecision = canPlay && safeCards(activeHand?.cards).length === 2 && !activeHand?.doubled;
+  const canDouble = isFirstDecision && balance >= safeAmount(activeHand?.bet, DEFAULT_BET);
+  const canSplit = isFirstDecision && cardValue(activeHand?.cards?.[0]) === cardValue(activeHand?.cards?.[1]) && balance >= safeAmount(activeHand?.bet, DEFAULT_BET) && playerHands.length < 2;
+  const dealerShowsAce = phase === "playing" && dealerHand[0]?.rank === "A";
 
   const loadState = useCallback(async () => {
     setWalletLoading(true);
@@ -59,6 +65,7 @@ export function TechBlackjack() {
       setWallet(sanitizeWallet(data.wallet));
       if (Array.isArray(data.recent)) setHistory(sanitizeServerHistory(data.recent));
     } catch (error) {
+      debugBlackjack("caught error", { message: error instanceof Error ? error.message : String(error) });
       if (mountedRef.current) setMessage(error instanceof Error ? error.message : "Tech Blackjack wallet unavailable.");
     } finally {
       if (mountedRef.current) setWalletLoading(false);
@@ -67,13 +74,13 @@ export function TechBlackjack() {
 
   useEffect(() => {
     mountedRef.current = true;
-    const saved = window.localStorage.getItem(STORAGE_KEY);
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as { betAmount?: number };
         setBetAmount(sanitizeBet(parsed.betAmount, 1_000_000));
       } catch {
-        setBetAmount(25);
+        setBetAmount(DEFAULT_BET);
       }
     }
     loadState();
@@ -85,7 +92,8 @@ export function TechBlackjack() {
   }, [loadState]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ betAmount: safeBet }));
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ betAmount: safeBet || DEFAULT_BET }));
   }, [safeBet]);
 
   async function runWalletAction(payload: Record<string, unknown>) {
@@ -103,6 +111,7 @@ export function TechBlackjack() {
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
       return data;
     } catch (error) {
+      debugBlackjack("caught error", { message: error instanceof Error ? error.message : String(error) });
       if (mountedRef.current) setMessage(error instanceof Error ? error.message : "Tech Blackjack action failed.");
       playOffSound("error");
       return null;
@@ -112,7 +121,8 @@ export function TechBlackjack() {
   }
 
   async function startRound() {
-    const amount = sanitizeBet(betAmount, balance);
+    const amount = sanitizeBet(betAmount ?? DEFAULT_BET, balance);
+    debugBlackjack("round start", { amount, balance, phase, deckLength: safeDeck.length, playerHandLength: activeHand?.cards?.length || 0, dealerHandLength: dealerHand.length });
     if (phase !== "betting" && phase !== "settled") return;
     if (amount < 1 || amount > balance) {
       setMessage("Enter a valid Tech Coin bet within your wallet balance.");
@@ -125,8 +135,8 @@ export function TechBlackjack() {
 
     const nextDeck = shuffleDeck(createDeck());
     const deal = drawCards(nextDeck, 4);
-    const playerCards = [deal.cards[0], deal.cards[2]];
-    const nextDealerCards = [deal.cards[1], deal.cards[3]];
+    const playerCards = safeCards([deal.cards[0], deal.cards[2]]);
+    const nextDealerCards = safeCards([deal.cards[1], deal.cards[3]]);
     const openingStatus = isBlackjack(playerCards) ? "blackjack" : "playing";
 
     setDeck(deal.deck);
@@ -148,58 +158,66 @@ export function TechBlackjack() {
 
   function hit() {
     if (!canPlay) return;
-    const drawn = drawCards(deck, 1);
+    debugBlackjack("current action", { action: "hit", activeHandIndex: activeHandIndexSafe, deckLength: safeDeck.length });
+    const drawn = drawCards(safeDeck, 1);
     const card = drawn.cards[0];
     if (!card) return;
-    const nextHands = hands.map((hand, index) => {
-      if (index !== activeHandIndex) return hand;
-      const cards = [...hand.cards, card];
+    const nextHands = playerHands.map((hand, index) => {
+      if (index !== activeHandIndexSafe) return hand;
+      const cards = [...safeCards(hand.cards), card];
       return { ...hand, cards, status: handValue(cards).total > 21 ? "bust" : hand.status };
     });
     setDeck(drawn.deck);
     setHands(nextHands);
     playOffSound("card");
-    const nextHand = nextHands[activeHandIndex];
-    if (nextHand.status === "bust") advanceOrSettle(nextHands, drawn.deck, dealerCards, `Bust -${formatTc(nextHand.bet)} TC`);
+    const nextHand = nextHands[activeHandIndexSafe];
+    if (nextHand?.status === "bust") advanceOrSettle(nextHands, drawn.deck, dealerHand, `Bust -${formatTc(nextHand.bet)} TC`);
   }
 
   function stand() {
     if (!canPlay) return;
-    const nextHands = hands.map((hand, index) => (index === activeHandIndex ? { ...hand, status: "stood" as HandStatus } : hand));
+    debugBlackjack("current action", { action: "stand", activeHandIndex: activeHandIndexSafe });
+    const nextHands = playerHands.map((hand, index) => (index === activeHandIndexSafe ? { ...hand, cards: safeCards(hand.cards), status: "stood" as HandStatus } : hand));
     playOffSound("click");
-    advanceOrSettle(nextHands, deck, dealerCards, "Standing.");
+    advanceOrSettle(nextHands, safeDeck, dealerHand, "Standing.");
   }
 
   async function doubleDown() {
     if (!canDouble || !activeHand) return;
-    const debited = await runWalletAction({ action: "debit", amount: activeHand.bet, reason: "Tech Blackjack double" });
+    const activeBet = safeAmount(activeHand.bet, DEFAULT_BET);
+    debugBlackjack("current action", { action: "double", activeHandIndex: activeHandIndexSafe, activeBet });
+    const debited = await runWalletAction({ action: "debit", amount: activeBet, reason: "Tech Blackjack double" });
     if (!debited) return;
-    recordSessionBet(activeHand.bet);
-    const drawn = drawCards(deck, 1);
+    recordSessionBet(activeBet);
+    const drawn = drawCards(safeDeck, 1);
     const card = drawn.cards[0];
     if (!card) return;
-    const nextHands = hands.map((hand, index) => {
-      if (index !== activeHandIndex) return hand;
-      const cards = [...hand.cards, card];
-      return { ...hand, cards, bet: hand.bet * 2, doubled: true, status: handValue(cards).total > 21 ? "bust" : "stood" };
+    const nextHands = playerHands.map((hand, index) => {
+      if (index !== activeHandIndexSafe) return hand;
+      const cards = [...safeCards(hand.cards), card];
+      const nextBet = safeAmount(hand.bet, activeBet) * 2;
+      return { ...hand, cards, bet: nextBet, doubled: true, status: handValue(cards).total > 21 ? "bust" : "stood" };
     });
     setDeck(drawn.deck);
     setHands(nextHands);
     playOffSound("bet");
-    advanceOrSettle(nextHands, drawn.deck, dealerCards, "Double locked. One card dealt.");
+    advanceOrSettle(nextHands, drawn.deck, dealerHand, "Double locked. One card dealt.");
   }
 
   async function split() {
     if (!canSplit || !activeHand) return;
-    const debited = await runWalletAction({ action: "debit", amount: activeHand.bet, reason: "Tech Blackjack split" });
+    const activeBet = safeAmount(activeHand.bet, DEFAULT_BET);
+    debugBlackjack("current action", { action: "split", activeHandIndex: activeHandIndexSafe, activeBet });
+    const debited = await runWalletAction({ action: "debit", amount: activeBet, reason: "Tech Blackjack split" });
     if (!debited) return;
-    recordSessionBet(activeHand.bet);
-    const drawn = drawCards(deck, 2);
+    recordSessionBet(activeBet);
+    const drawn = drawCards(safeDeck, 2);
     if (drawn.cards.length < 2) return;
-    const [first, second] = activeHand.cards;
+    const [first, second] = safeCards(activeHand.cards);
+    if (!first || !second) return;
     const nextHands: PlayerHand[] = [
-      { id: uniqueId("split-a"), cards: [first, drawn.cards[0]], bet: activeHand.bet, status: "playing" },
-      { id: uniqueId("split-b"), cards: [second, drawn.cards[1]], bet: activeHand.bet, status: "playing" },
+      { id: uniqueId("split-a"), cards: safeCards([first, drawn.cards[0]]), bet: activeBet, status: "playing" },
+      { id: uniqueId("split-b"), cards: safeCards([second, drawn.cards[1]]), bet: activeBet, status: "playing" },
     ];
     setDeck(drawn.deck);
     setHands(nextHands);
@@ -209,24 +227,28 @@ export function TechBlackjack() {
   }
 
   function advanceOrSettle(nextHands: PlayerHand[], nextDeck: Card[], nextDealerCards: Card[], nextMessage: string) {
-    setHands(nextHands);
-    const nextIndex = nextHands.findIndex((hand, index) => index > activeHandIndex && hand.status === "playing");
+    const safeNextHands = sanitizeHands(nextHands);
+    debugBlackjack("current action", { action: "advance-or-settle", activeHandIndex: activeHandIndexSafe, handLengths: safeNextHands.map((hand) => hand.cards.length) });
+    setHands(safeNextHands);
+    const nextIndex = safeNextHands.findIndex((hand, index) => index > activeHandIndexSafe && hand.status === "playing");
     if (nextIndex >= 0) {
       setActiveHandIndex(nextIndex);
       setMessage("Next split hand is active.");
       return;
     }
-    const anyLiveHand = nextHands.some((hand) => hand.status !== "bust");
+    const anyLiveHand = safeNextHands.some((hand) => hand.status !== "bust");
     setMessage(anyLiveHand ? nextMessage : "All hands busted.");
-    settleDealer(nextHands, nextDeck, nextDealerCards);
+    settleDealer(safeNextHands, nextDeck, nextDealerCards);
   }
 
   async function settleDealer(roundHands: PlayerHand[], currentDeck: Card[], currentDealerCards: Card[]) {
     setPhase("dealer");
     setHideDealerHole(false);
-    let finalDeck = currentDeck;
-    let finalDealerCards = [...currentDealerCards];
-    const needsDealerDraw = roundHands.some((hand) => hand.status !== "bust");
+    const safeRoundHands = sanitizeHands(roundHands);
+    debugBlackjack("round end", { status: "dealer-settle-start", playerHandLength: safeRoundHands.map((hand) => hand.cards.length), dealerHandLength: safeCards(currentDealerCards).length, deckLength: safeCards(currentDeck).length });
+    let finalDeck = safeCards(currentDeck);
+    let finalDealerCards = safeCards(currentDealerCards);
+    const needsDealerDraw = safeRoundHands.some((hand) => hand.status !== "bust");
     if (needsDealerDraw) {
       while (handValue(finalDealerCards).total < 17) {
         const drawn = drawCards(finalDeck, 1);
@@ -239,10 +261,10 @@ export function TechBlackjack() {
 
     const dealerTotal = handValue(finalDealerCards).total;
     const dealerBj = isBlackjack(finalDealerCards);
-    const settled = roundHands.map((hand) => settleHand(hand, dealerTotal, dealerBj));
+    const settled = safeRoundHands.map((hand) => settleHand(hand, dealerTotal, dealerBj));
     const totalCredit = settled.reduce((sum, hand) => sum + payoutForHand(hand), 0);
     const totalNet = settled.reduce((sum, hand) => sum + Math.round(hand.resultNet || 0), 0);
-    const primary = settled[0] || roundHands[0];
+    const primary = settled[0] || safeRoundHands[0];
     const resultLabel = toastLabel(settled, totalNet);
 
     setDeck(finalDeck);
@@ -268,6 +290,7 @@ export function TechBlackjack() {
       netAmount: totalNet,
       payoutAmount: totalCredit,
     });
+    debugBlackjack("round end", { status: "settled", totalNet, totalCredit, playerHandLength: settled.map((hand) => hand.cards.length), dealerHandLength: finalDealerCards.length, deckLength: finalDeck.length });
     playOffSound(totalNet >= 0 ? "success" : "error");
   }
 
@@ -304,23 +327,23 @@ export function TechBlackjack() {
 
         <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
           <div className="relative overflow-hidden rounded-[2.25rem] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_34%),linear-gradient(180deg,rgba(4,16,18,0.96),rgba(2,8,12,0.98))] p-4 shadow-2xl shadow-black/40 sm:p-6">
-            <div className="absolute right-5 top-5 grid place-items-center rounded-2xl border border-white/10 bg-black/45 p-3 text-cyan-100 shadow-xl"><Layers className="h-8 w-8" /><span className="text-[10px] font-black uppercase tracking-[0.16em]">Deck {deck.length || 52}</span></div>
+            <div className="absolute right-5 top-5 grid place-items-center rounded-2xl border border-white/10 bg-black/45 p-3 text-cyan-100 shadow-xl"><Layers className="h-8 w-8" /><span className="text-[10px] font-black uppercase tracking-[0.16em]">Deck {safeDeck.length || 52}</span></div>
             <div className="min-h-[11rem] pt-2">
-              <ScoreBadge label="Dealer" score={dealerScore} hidden={hideDealerHole && dealerCards.length > 1} />
-              <CardFan cards={dealerCards} hideSecond={hideDealerHole} />
+              <ScoreBadge label="Dealer" score={dealerScore} hidden={hideDealerHole && dealerHand.length > 1} />
+              <CardFan cards={dealerHand} hideSecond={hideDealerHole} />
             </div>
             <div className="my-3 flex flex-wrap items-center justify-center gap-3 text-center">
               <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-amber-100">Blackjack pays 3 to 2</span>
               {dealerShowsAce ? <button type="button" className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100">Insurance</button> : null}
             </div>
             <div className="min-h-[13rem]">
-              {hands.map((hand, index) => (
-                <div key={hand.id} className={`mb-3 rounded-[1.5rem] border p-3 transition ${index === activeHandIndex && phase === "playing" ? "border-emerald-300/35 bg-emerald-300/[0.06]" : "border-white/10 bg-white/[0.025]"}`}>
-                  <ScoreBadge label={hands.length > 1 ? `Player hand ${index + 1}` : "Player"} score={handValue(hand.cards).total} status={hand.status} />
+              {playerHands.map((hand, index) => (
+                <div key={hand.id} className={`mb-3 rounded-[1.5rem] border p-3 transition ${index === activeHandIndexSafe && phase === "playing" ? "border-emerald-300/35 bg-emerald-300/[0.06]" : "border-white/10 bg-white/[0.025]"}`}>
+                  <ScoreBadge label={playerHands.length > 1 ? `Player hand ${index + 1}` : "Player"} score={handValue(hand.cards).total} status={hand.status} />
                   <CardFan cards={hand.cards} />
                 </div>
               ))}
-              {!hands.length ? <div className="grid min-h-[10rem] place-items-center rounded-[1.5rem] border border-dashed border-white/10 text-sm text-white/35">Cards appear here after betting.</div> : null}
+              {!playerHands.length ? <div className="grid min-h-[10rem] place-items-center rounded-[1.5rem] border border-dashed border-white/10 text-sm text-white/35">Cards appear here after betting.</div> : null}
             </div>
             <p className="mt-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/65">{message}</p>
 
@@ -363,14 +386,109 @@ function ScoreBadge({ label, score, hidden, status }: { label: string; score: nu
   return <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-white/70"><span>{label}</span><span className="rounded-full bg-white/10 px-2 py-0.5 text-emerald-100">{hidden ? "?" : score}</span>{status ? <span className="text-white/35">{status}</span> : null}</div>;
 }
 
-function CardFan({ cards, hideSecond = false }: { cards: Card[]; hideSecond?: boolean }) {
-  return <div className="flex justify-center pl-8">{cards.map((card, index) => <img key={card.id} src={hideSecond && index === 1 ? CARD_BACK : cardImage(card)} alt={hideSecond && index === 1 ? "Hidden card" : cardAlt(card)} onError={(event) => { event.currentTarget.src = cardSvg(card); }} className="h-32 w-[5.8rem] rounded-xl object-cover shadow-2xl shadow-black/45 ring-1 ring-black/25 transition sm:h-40 sm:w-[7.2rem]" style={{ marginLeft: index === 0 ? 0 : "-2rem", zIndex: index + 1 }} />)}</div>;
+function CardFan({ cards, hideSecond = false }: { cards?: Card[]; hideSecond?: boolean }) {
+  const safeHand = safeCards(cards);
+  return (
+    <div className="flex justify-center pl-8 [perspective:900px]">
+      {safeHand.map((card, index) => (
+        <motion.div
+          key={card.id || `${card.code}-${index}`}
+          initial={{ opacity: 0, y: -18, rotateY: hideSecond && index === 1 ? 180 : 10, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, rotateY: 0, scale: 1 }}
+          transition={{ duration: 0.36, delay: index * 0.08, ease: [0.2, 0.8, 0.2, 1] }}
+          className="relative h-32 w-[5.8rem] shrink-0 sm:h-40 sm:w-[7.2rem]"
+          style={{ marginLeft: index === 0 ? 0 : "-2rem", zIndex: index + 1 }}
+        >
+          {hideSecond && index === 1 ? (
+            <PremiumCardBack />
+          ) : (
+            <img
+              src={cardImage(card)}
+              alt={cardAlt(card)}
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = cardSvg(card);
+              }}
+              className="h-full w-full rounded-xl object-cover shadow-2xl shadow-black/45 ring-1 ring-black/25 transition duration-300 hover:-translate-y-1 sm:rounded-2xl"
+            />
+          )}
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function PremiumCardBack() {
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  return (
+    <div className="group relative h-full w-full overflow-hidden rounded-xl border border-cyan-200/25 bg-[radial-gradient(circle_at_48%_38%,rgba(34,211,238,0.24),transparent_30%),radial-gradient(circle_at_58%_58%,rgba(168,85,247,0.2),transparent_38%),linear-gradient(145deg,#020617,#06111f_52%,#020308)] shadow-2xl shadow-cyan-950/35 ring-1 ring-white/10 backdrop-blur-xl sm:rounded-2xl">
+      <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] [background-size:18px_18px]" />
+      <div className="absolute -left-8 top-8 h-24 w-24 rounded-full bg-cyan-300/25 blur-2xl" />
+      <div className="absolute -right-10 bottom-8 h-28 w-28 rounded-full bg-purple-500/25 blur-2xl" />
+      <div className="absolute inset-[7px] rounded-[0.7rem] border border-white/10 bg-white/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] sm:rounded-[0.9rem]" />
+      <div className="absolute left-3 top-3 h-5 w-5 border-l border-t border-cyan-200/45" />
+      <div className="absolute right-3 top-3 h-5 w-5 border-r border-t border-purple-200/45" />
+      <div className="absolute bottom-3 left-3 h-5 w-5 border-b border-l border-purple-200/40" />
+      <div className="absolute bottom-3 right-3 h-5 w-5 border-b border-r border-cyan-200/40" />
+      <div className="absolute left-4 right-4 top-1/2 h-px bg-gradient-to-r from-transparent via-cyan-200/25 to-transparent" />
+      <div className="absolute inset-0 translate-x-[-55%] bg-gradient-to-r from-transparent via-white/12 to-transparent opacity-0 transition duration-700 group-hover:translate-x-[55%] group-hover:opacity-100" />
+      <div className="relative flex h-full flex-col items-center justify-center px-3 text-center">
+        <div className="relative grid h-16 w-16 place-items-center overflow-hidden rounded-2xl border border-white/12 bg-black/25 shadow-2xl shadow-cyan-400/20 sm:h-20 sm:w-20">
+          <div className="absolute inset-0 rounded-2xl bg-cyan-300/10 blur-md" />
+          {logoFailed ? (
+            <span className="relative text-2xl font-black tracking-tighter text-cyan-100 sm:text-3xl">EK</span>
+          ) : (
+            <img src={EKA_LOGO_SRC} alt="EkaTech logo" className="relative h-full w-full object-cover" onError={() => setLogoFailed(true)} />
+          )}
+        </div>
+        <span className="mt-3 text-[9px] font-black uppercase tracking-[0.34em] text-cyan-100/75 sm:text-[10px]">EkaTech</span>
+        <span className="mt-1 h-px w-12 bg-gradient-to-r from-transparent via-purple-200/70 to-transparent" />
+      </div>
+    </div>
+  );
 }
 
 function HistoryRow({ item }: { item: ResultHistory }) {
   const positive = item.netAmount > 0;
   const neutral = item.netAmount === 0;
   return <div className="grid grid-cols-[1fr_auto] gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm"><div><p className="font-black capitalize text-white">{item.resultType}</p><p className="mt-1 text-xs text-white/40">Player {item.playerScore} · Dealer {item.dealerScore} · Bet {formatTc(item.betAmount)} TC</p></div><p className={`font-black ${positive ? "text-emerald-200" : neutral ? "text-white/60" : "text-red-200"}`}>{neutral ? "±" : positive ? "+" : "-"}{formatTc(Math.abs(item.netAmount))}</p></div>;
+}
+
+function isCard(value: unknown): value is Card {
+  const card = value as Partial<Card> | null | undefined;
+  return Boolean(card && SUITS.includes(card.suit as Suit) && RANKS.includes(card.rank as Rank) && typeof card.code === "string");
+}
+
+function safeCards(cards?: Array<Card | null | undefined> | null): Card[] {
+  return Array.isArray(cards) ? cards.filter(isCard) : [];
+}
+
+function safeAmount(value: unknown, fallback = 0) {
+  const amount = Math.floor(Number(value));
+  return Number.isFinite(amount) ? Math.max(0, amount) : fallback;
+}
+
+function sanitizeHands(value?: Array<PlayerHand | null | undefined> | null): PlayerHand[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(Boolean).map((hand, index) => ({
+    id: typeof hand?.id === "string" && hand.id ? hand.id : uniqueId(`hand-${index}`),
+    cards: safeCards(hand?.cards),
+    bet: safeAmount(hand?.bet, DEFAULT_BET) || DEFAULT_BET,
+    status: isHandStatus(hand?.status) ? hand.status : "playing",
+    natural: Boolean(hand?.natural),
+    doubled: Boolean(hand?.doubled),
+    resultNet: Number.isFinite(Number(hand?.resultNet)) ? Math.round(Number(hand?.resultNet)) : undefined,
+  }));
+}
+
+function isHandStatus(value: unknown): value is HandStatus {
+  return ["playing", "stood", "bust", "blackjack", "win", "loss", "push"].includes(String(value));
+}
+
+function debugBlackjack(message: string, payload?: Record<string, unknown>) {
+  if (!DEBUG_BLACKJACK) return;
+  console.debug(`[TechBlackjack] ${message}`, payload || {});
 }
 
 function createDeck(): Card[] {
@@ -384,9 +502,11 @@ function shuffleDeck(cards: Card[]) {
   }
   return deck;
 }
-function drawCards(currentDeck: Card[], count: number) {
-  const source = currentDeck.length >= count ? [...currentDeck] : shuffleDeck(createDeck());
-  return { cards: source.slice(0, count), deck: source.slice(count) };
+function drawCards(currentDeck: Card[] | null | undefined, count: number) {
+  const requestedCount = Math.max(0, Math.floor(Number(count) || 0));
+  const safeCurrentDeck = safeCards(currentDeck);
+  const source = safeCurrentDeck.length >= requestedCount ? [...safeCurrentDeck] : shuffleDeck(createDeck());
+  return { cards: safeCards(source.slice(0, requestedCount)), deck: safeCards(source.slice(requestedCount)) };
 }
 function cardValue(card?: Card) {
   if (!card) return 0;
@@ -394,28 +514,32 @@ function cardValue(card?: Card) {
   if (["K", "Q", "J"].includes(card.rank)) return 10;
   return Number(card.rank) || 0;
 }
-function handValue(cards: Card[]) {
-  let total = cards.reduce((sum, card) => sum + cardValue(card), 0);
-  let aces = cards.filter((card) => card.rank === "A").length;
+function handValue(cards?: Card[] | null) {
+  const safeHand = safeCards(cards);
+  let total = safeHand.reduce((sum, card) => sum + cardValue(card), 0);
+  let aces = safeHand.filter((card) => card.rank === "A").length;
   while (total > 21 && aces > 0) { total -= 10; aces -= 1; }
   return { total, soft: aces > 0 };
 }
-function isBlackjack(cards: Card[]) { return cards.length === 2 && handValue(cards).total === 21; }
+function isBlackjack(cards?: Card[] | null) { return safeCards(cards).length === 2 && handValue(cards).total === 21; }
 function settleHand(hand: PlayerHand, dealerTotal: number, dealerBj: boolean): PlayerHand {
-  const playerTotal = handValue(hand.cards).total;
-  if (playerTotal > 21) return { ...hand, status: "loss", resultNet: -hand.bet };
-  if (hand.natural && !dealerBj) return { ...hand, status: "blackjack", resultNet: Math.floor(hand.bet * 1.5) };
-  if (dealerBj && !hand.natural) return { ...hand, status: "loss", resultNet: -hand.bet };
-  if (dealerTotal > 21 || playerTotal > dealerTotal) return { ...hand, status: "win", resultNet: hand.bet };
-  if (playerTotal === dealerTotal) return { ...hand, status: "push", resultNet: 0 };
-  return { ...hand, status: "loss", resultNet: -hand.bet };
+  const safeHand = sanitizeHands([hand])[0] || { ...hand, cards: [], bet: DEFAULT_BET, status: "loss" as HandStatus };
+  const bet = safeAmount(safeHand.bet, DEFAULT_BET);
+  const playerTotal = handValue(safeHand.cards).total;
+  if (playerTotal > 21) return { ...safeHand, status: "loss", resultNet: -bet };
+  if (safeHand.natural && !dealerBj) return { ...safeHand, status: "blackjack", resultNet: Math.floor(bet * 1.5) };
+  if (dealerBj && !safeHand.natural) return { ...safeHand, status: "loss", resultNet: -bet };
+  if (dealerTotal > 21 || playerTotal > dealerTotal) return { ...safeHand, status: "win", resultNet: bet };
+  if (playerTotal === dealerTotal) return { ...safeHand, status: "push", resultNet: 0 };
+  return { ...safeHand, status: "loss", resultNet: -bet };
 }
-function payoutForHand(hand: PlayerHand) { return Math.max(0, hand.bet + Math.round(hand.resultNet || 0)); }
+function payoutForHand(hand: PlayerHand) { return Math.max(0, safeAmount(hand?.bet, DEFAULT_BET) + Math.round(Number(hand?.resultNet || 0))); }
 function toastLabel(hands: PlayerHand[], totalNet: number) {
-  if (hands.length === 1 && hands[0].status === "blackjack") return `Blackjack! +${formatTc(Math.max(0, totalNet))} TC`;
+  const safeHands = sanitizeHands(hands);
+  if (safeHands.length === 1 && safeHands[0]?.status === "blackjack") return `Blackjack! +${formatTc(Math.max(0, totalNet))} TC`;
   if (totalNet > 0) return `You Win +${formatTc(totalNet)} TC`;
   if (totalNet === 0) return "Push — Bet Returned";
-  return hands.some((hand) => hand.status === "loss" && handValue(hand.cards).total > 21) ? `Bust -${formatTc(Math.abs(totalNet))} TC` : `Dealer Wins -${formatTc(Math.abs(totalNet))} TC`;
+  return safeHands.some((hand) => hand.status === "loss" && handValue(hand.cards).total > 21) ? `Bust -${formatTc(Math.abs(totalNet))} TC` : `Dealer Wins -${formatTc(Math.abs(totalNet))} TC`;
 }
 function sanitizeBet(value: unknown, max: number) {
   const amount = Math.floor(Number(value));
