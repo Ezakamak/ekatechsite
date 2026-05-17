@@ -11,6 +11,18 @@ type SessionStats = {
   points: number[];
 };
 
+type ChartDot = {
+  x: number;
+  y: number;
+  value: number;
+};
+
+const CHART_WIDTH = 320;
+const CHART_HEIGHT = 128;
+const MIN_VISIBLE_POINTS = 36;
+const TARGET_STARTER_POINTS = 44;
+const MAX_SESSION_POINTS = 60;
+
 const EMPTY_STATS: SessionStats = {
   netGain: 0,
   amount: 0,
@@ -32,7 +44,7 @@ function sanitizeStats(value: unknown): SessionStats {
     amount: Math.max(0, Number(parsed.amount) || 0),
     wins: Math.max(0, Math.floor(Number(parsed.wins) || 0)),
     losses: Math.max(0, Math.floor(Number(parsed.losses) || 0)),
-    points: points.slice(-40),
+    points: points.slice(-MAX_SESSION_POINTS),
   };
 }
 
@@ -65,13 +77,16 @@ export function useGameSessionStats(gameKey: SessionStatsGameKey) {
   const recordResult = useCallback((netGain: number) => {
     const safeNet = Math.round(Number(netGain) || 0);
     setStats((current) => {
-      const nextNetGain = current.netGain + safeNet;
+      const previousNetGain = current.netGain;
+      const nextNetGain = previousNetGain + safeNet;
+      const sessionTrail = buildOrganicSessionTrail(current.points, previousNetGain, nextNetGain, safeNet);
+
       return {
         ...current,
         netGain: nextNetGain,
         wins: safeNet > 0 ? current.wins + 1 : current.wins,
         losses: safeNet < 0 ? current.losses + 1 : current.losses,
-        points: [...current.points, nextNetGain].slice(-40),
+        points: sessionTrail,
       };
     });
   }, []);
@@ -85,9 +100,21 @@ export function GameSessionStatsPanel({ gameName, stats, onReset }: { gameName: 
   const netPositive = stats.netGain >= 0;
   const chart = useMemo(() => buildChart(stats.points), [stats.points]);
   const chartId = useMemo(() => gameName.toLowerCase().replace(/[^a-z0-9]+/g, "-"), [gameName]);
+  const lastPoint = stats.points.at(-1) ?? 0;
 
   return (
-    <section className="relative overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#07111a]/92 p-4 shadow-2xl shadow-black/35 ring-1 ring-emerald-300/10 backdrop-blur-xl">
+    <section className="relative overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#07111a]/92 p-3 shadow-2xl shadow-black/35 ring-1 ring-emerald-300/10 backdrop-blur-xl sm:p-4">
+      <style>{`
+        @keyframes session-chart-draw-${chartId} {
+          from { stroke-dashoffset: 1; opacity: 0.45; transform: translateX(8px); }
+          to { stroke-dashoffset: 0; opacity: 1; transform: translateX(0); }
+        }
+        .session-chart-line-${chartId} {
+          stroke-dasharray: 1;
+          animation: session-chart-draw-${chartId} 720ms cubic-bezier(.2,.8,.2,1) both;
+          transition: stroke 240ms ease, filter 240ms ease;
+        }
+      `}</style>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.16),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(244,63,94,0.13),transparent_32%)]" />
       <div className="relative flex items-start justify-between gap-3">
         <div>
@@ -105,24 +132,41 @@ export function GameSessionStatsPanel({ gameName, stats, onReset }: { gameName: 
         <Metric label="Losses" value={String(stats.losses)} tone="negative" />
       </div>
 
-      <div className="relative mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/35 p-3">
-        <div className="absolute left-3 right-3 top-1/2 h-px bg-white/18" />
-        <svg viewBox="0 0 320 116" className="h-36 w-full overflow-visible" role="img" aria-label={`${gameName} session profit chart`}>
+      <div className="relative mt-4 overflow-hidden rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(7,17,26,0.92),rgba(2,6,12,0.96))] p-2 shadow-inner shadow-black/40 sm:p-3">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_25%_0%,rgba(16,185,129,0.12),transparent_34%),radial-gradient(circle_at_70%_100%,rgba(248,113,113,0.12),transparent_30%)]" />
+        <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="relative h-36 w-full max-w-full overflow-visible sm:h-40" role="img" aria-label={`${gameName} session profit chart`} preserveAspectRatio="none">
           <defs>
             <linearGradient id={`profit-${chartId}`} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(52,211,153,0.34)" />
-              <stop offset="100%" stopColor="rgba(52,211,153,0.02)" />
+              <stop offset="0%" stopColor="rgba(52,211,153,0.58)" />
+              <stop offset="62%" stopColor="rgba(16,185,129,0.24)" />
+              <stop offset="100%" stopColor="rgba(16,185,129,0.03)" />
             </linearGradient>
             <linearGradient id={`loss-${chartId}`} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(248,113,113,0.02)" />
-              <stop offset="100%" stopColor="rgba(248,113,113,0.34)" />
+              <stop offset="0%" stopColor="rgba(248,113,113,0.03)" />
+              <stop offset="45%" stopColor="rgba(248,113,113,0.22)" />
+              <stop offset="100%" stopColor="rgba(239,68,68,0.56)" />
             </linearGradient>
+            <filter id={`glow-${chartId}`} x="-15%" y="-40%" width="130%" height="180%">
+              <feGaussianBlur stdDeviation="3.4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <clipPath id={`profit-clip-${chartId}`}>
+              <rect x="0" y="0" width={CHART_WIDTH} height={chart.zeroY} />
+            </clipPath>
+            <clipPath id={`loss-clip-${chartId}`}>
+              <rect x="0" y={chart.zeroY} width={CHART_WIDTH} height={CHART_HEIGHT - chart.zeroY} />
+            </clipPath>
           </defs>
-          <rect x="0" y="0" width="320" height={chart.zeroY} fill={`url(#profit-${chartId})`} opacity="0.8" />
-          <rect x="0" y={chart.zeroY} width="320" height={116 - chart.zeroY} fill={`url(#loss-${chartId})`} opacity="0.8" />
-          <line x1="0" y1={chart.zeroY} x2="320" y2={chart.zeroY} stroke="rgba(255,255,255,0.28)" strokeDasharray="5 5" />
-          <polyline points={chart.polyline} fill="none" stroke={netPositive ? "#34d399" : "#f87171"} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" filter="drop-shadow(0 0 8px rgba(52,211,153,0.45))" />
-          {chart.dots.map((dot, index) => <circle key={`${dot.x}-${dot.y}-${index}`} cx={dot.x} cy={dot.y} r="3" fill={dot.value >= 0 ? "#34d399" : "#f87171"} />)}
+          <path d={chart.areaPath} fill={`url(#profit-${chartId})`} clipPath={`url(#profit-clip-${chartId})`} opacity="0.95" />
+          <path d={chart.areaPath} fill={`url(#loss-${chartId})`} clipPath={`url(#loss-clip-${chartId})`} opacity="0.95" />
+          <line x1="0" y1={chart.zeroY} x2={CHART_WIDTH} y2={chart.zeroY} stroke="rgba(255,255,255,0.36)" strokeWidth="1" strokeDasharray="4 6" />
+          <path d={chart.linePath} fill="none" stroke="rgba(52,211,153,0.22)" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" filter={`url(#glow-${chartId})`} clipPath={`url(#profit-clip-${chartId})`} />
+          <path d={chart.linePath} fill="none" stroke="rgba(248,113,113,0.24)" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" filter={`url(#glow-${chartId})`} clipPath={`url(#loss-clip-${chartId})`} />
+          <path key={`${chart.linePath}-${lastPoint}`} d={chart.linePath} pathLength="1" className={`session-chart-line-${chartId}`} fill="none" stroke="#39ff9f" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" filter={`url(#glow-${chartId})`} clipPath={`url(#profit-clip-${chartId})`} />
+          <path key={`loss-${chart.linePath}-${lastPoint}`} d={chart.linePath} pathLength="1" className={`session-chart-line-${chartId}`} fill="none" stroke="#ff5f6d" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" filter={`url(#glow-${chartId})`} clipPath={`url(#loss-clip-${chartId})`} />
         </svg>
       </div>
     </section>
@@ -139,14 +183,118 @@ function Metric({ label, value, tone = "neutral", icon }: { label: string; value
   );
 }
 
-function buildChart(points: number[]) {
-  const safePoints = points.length > 1 ? points : [0, 0];
-  const maxAbs = Math.max(1, ...safePoints.map((point) => Math.abs(point)));
-  const zeroY = 58;
-  const dots = safePoints.map((value, index) => {
-    const x = safePoints.length === 1 ? 0 : (index / (safePoints.length - 1)) * 320;
-    const y = zeroY - (value / maxAbs) * 50;
-    return { x, y: Math.max(6, Math.min(110, y)), value };
+function buildOrganicSessionTrail(points: number[], previousNetGain: number, nextNetGain: number, result: number) {
+  const startingTrail = points.length ? points : [previousNetGain];
+  const previousPoint = startingTrail.at(-1) ?? previousNetGain;
+  const delta = nextNetGain - previousPoint;
+  const magnitude = Math.max(1, Math.abs(delta));
+  const steps = Math.min(14, Math.max(8, Math.ceil(Math.sqrt(magnitude) / 3) + 7));
+  const direction = delta >= 0 ? 1 : -1;
+  const volatility = Math.min(magnitude * 0.22, Math.max(2, magnitude * 0.08 + Math.abs(result) * 0.04));
+  const segment = Array.from({ length: steps }, (_, index) => {
+    const progress = (index + 1) / steps;
+    if (index === steps - 1) return nextNetGain;
+
+    const eased = progress * progress * (3 - 2 * progress);
+    const wave = Math.sin((progress * Math.PI * 2.4) + (direction > 0 ? 0.8 : 2.1));
+    const counterMove = Math.sin(progress * Math.PI * 5.1) * 0.45;
+    const taper = Math.sin(progress * Math.PI);
+    const jitter = (wave + counterMove) * volatility * taper;
+    const value = previousPoint + delta * eased + jitter;
+    const overshootLimit = magnitude * 0.18 + 2;
+    const min = Math.min(previousPoint, nextNetGain) - overshootLimit;
+    const max = Math.max(previousPoint, nextNetGain) + overshootLimit;
+
+    return Math.round(Math.max(min, Math.min(max, value)));
   });
-  return { zeroY, dots, polyline: dots.map((dot) => `${dot.x.toFixed(2)},${dot.y.toFixed(2)}`).join(" ") };
+
+  return [...startingTrail, ...segment].slice(-MAX_SESSION_POINTS);
+}
+
+function buildChart(points: number[]) {
+  const visiblePoints = normalizeVisiblePoints(points);
+  const rawMax = Math.max(...visiblePoints, 0);
+  const rawMin = Math.min(...visiblePoints, 0);
+  const rangePadding = Math.max(8, (rawMax - rawMin) * 0.16);
+  const maxValue = Math.max(rawMax + rangePadding, 10);
+  const minValue = Math.min(rawMin - rangePadding, -10);
+  const valueRange = Math.max(1, maxValue - minValue);
+  const zeroY = Math.max(18, Math.min(CHART_HEIGHT - 18, ((maxValue - 0) / valueRange) * CHART_HEIGHT));
+  const dots: ChartDot[] = visiblePoints.map((value, index) => {
+    const x = visiblePoints.length === 1 ? 0 : (index / (visiblePoints.length - 1)) * CHART_WIDTH;
+    const y = ((maxValue - value) / valueRange) * CHART_HEIGHT;
+    return { x, y: Math.max(8, Math.min(CHART_HEIGHT - 8, y)), value };
+  });
+  const linePath = buildSmoothPath(dots);
+  const first = dots[0];
+  const last = dots.at(-1) ?? first;
+  const areaPath = first && last ? `M ${first.x.toFixed(2)} ${zeroY.toFixed(2)} L ${linePath.slice(2)} L ${last.x.toFixed(2)} ${zeroY.toFixed(2)} Z` : "";
+
+  return { zeroY, linePath, areaPath };
+}
+
+function normalizeVisiblePoints(points: number[]) {
+  const safePoints = points.length ? points.map((point) => Math.round(Number(point) || 0)) : [0];
+  if (safePoints.length <= 1 && safePoints[0] === 0) return buildStarterPoints();
+  const trimmed = safePoints.slice(-MAX_SESSION_POINTS);
+  if (trimmed.length >= MIN_VISIBLE_POINTS) return trimmed;
+  return densifyPoints(trimmed, MIN_VISIBLE_POINTS);
+}
+
+function buildStarterPoints() {
+  return Array.from({ length: TARGET_STARTER_POINTS }, (_, index) => {
+    const progress = index / (TARGET_STARTER_POINTS - 1);
+    const pulse = Math.sin(progress * Math.PI * 7.6) * 4.2;
+    const drift = Math.sin(progress * Math.PI * 2.2 + 0.7) * 2.4;
+    const settle = (1 - progress) * -1.5 + progress * 1.5;
+    return Math.round((pulse + drift + settle) * (0.75 + Math.sin(progress * Math.PI) * 0.28));
+  });
+}
+
+function densifyPoints(points: number[], targetCount: number) {
+  if (points.length <= 1) return buildStarterPoints();
+  const result: number[] = [];
+  const segments = points.length - 1;
+  const subdivisions = Math.max(2, Math.ceil((targetCount - 1) / segments));
+
+  for (let segmentIndex = 0; segmentIndex < segments; segmentIndex += 1) {
+    const start = points[segmentIndex];
+    const end = points[segmentIndex + 1];
+    const delta = end - start;
+    const volatility = Math.min(Math.max(Math.abs(delta) * 0.12, 1), Math.max(2, Math.abs(delta) * 0.2));
+    if (segmentIndex === 0) result.push(start);
+
+    for (let step = 1; step <= subdivisions; step += 1) {
+      const progress = step / subdivisions;
+      if (segmentIndex === segments - 1 && step === subdivisions) {
+        result.push(end);
+        continue;
+      }
+      const eased = progress * progress * (3 - 2 * progress);
+      const jitter = Math.sin((segmentIndex + 1) * 1.7 + progress * Math.PI * 3.2) * volatility * Math.sin(progress * Math.PI);
+      result.push(Math.round(start + delta * eased + jitter));
+    }
+  }
+
+  return result.slice(-MAX_SESSION_POINTS);
+}
+
+function buildSmoothPath(dots: ChartDot[]) {
+  if (!dots.length) return "";
+  if (dots.length === 1) return `M ${dots[0].x.toFixed(2)} ${dots[0].y.toFixed(2)}`;
+
+  return dots.reduce((path, dot, index) => {
+    if (index === 0) return `M ${dot.x.toFixed(2)} ${dot.y.toFixed(2)}`;
+
+    const previous = dots[index - 1];
+    const next = dots[index + 1] ?? dot;
+    const previousPrevious = dots[index - 2] ?? previous;
+    const smoothing = 0.18;
+    const cp1x = previous.x + (dot.x - previousPrevious.x) * smoothing;
+    const cp1y = previous.y + (dot.y - previousPrevious.y) * smoothing;
+    const cp2x = dot.x - (next.x - previous.x) * smoothing;
+    const cp2y = dot.y - (next.y - previous.y) * smoothing;
+
+    return `${path} C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${dot.x.toFixed(2)} ${dot.y.toFixed(2)}`;
+  }, "");
 }
