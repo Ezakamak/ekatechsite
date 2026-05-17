@@ -100,7 +100,7 @@ export function GameSessionStatsPanel({ gameName, stats, onReset }: { gameName: 
   const netPositive = stats.netGain >= 0;
   const chart = useMemo(() => buildChart(stats.points), [stats.points]);
   const chartId = useMemo(() => gameName.toLowerCase().replace(/[^a-z0-9]+/g, "-"), [gameName]);
-  const lastPoint = stats.points.at(-1) ?? 0;
+  const lastPoint = lastItem(stats.points) ?? 0;
 
   return (
     <section className="relative overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#07111a]/92 p-3 shadow-2xl shadow-black/35 ring-1 ring-emerald-300/10 backdrop-blur-xl sm:p-4">
@@ -183,9 +183,13 @@ function Metric({ label, value, tone = "neutral", icon }: { label: string; value
   );
 }
 
+function lastItem<T>(items: T[]) {
+  return items.length ? items[items.length - 1] : undefined;
+}
+
 function buildOrganicSessionTrail(points: number[], previousNetGain: number, nextNetGain: number, result: number) {
   const startingTrail = points.length ? points : [previousNetGain];
-  const previousPoint = startingTrail.at(-1) ?? previousNetGain;
+  const previousPoint = lastItem(startingTrail) ?? previousNetGain;
   const delta = nextNetGain - previousPoint;
   const magnitude = Math.max(1, Math.abs(delta));
   const steps = Math.min(14, Math.max(8, Math.ceil(Math.sqrt(magnitude) / 3) + 7));
@@ -227,7 +231,7 @@ function buildChart(points: number[]) {
   });
   const linePath = buildSmoothPath(dots);
   const first = dots[0];
-  const last = dots.at(-1) ?? first;
+  const last = lastItem(dots) ?? first;
   const areaPath = first && last ? `M ${first.x.toFixed(2)} ${zeroY.toFixed(2)} L ${linePath.slice(2)} L ${last.x.toFixed(2)} ${zeroY.toFixed(2)} Z` : "";
 
   return { zeroY, linePath, areaPath };

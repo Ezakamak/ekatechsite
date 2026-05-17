@@ -73,6 +73,12 @@ class GameErrorBoundary extends Component<
     console.error(`${this.props.gameName} açılırken hata oluştu`, error, info);
   }
 
+  componentDidUpdate(previousProps: GameErrorBoundaryProps) {
+    if (this.state.hasError && previousProps.gameName !== this.props.gameName) {
+      this.setState({ hasError: false });
+    }
+  }
+
   render() {
     if (!this.state.hasError) return this.props.children;
 
@@ -476,6 +482,8 @@ export function OffPage() {
   const canAccess =
     user?.role === "off" || user?.role === "admin" || user?.role === "owner";
 
+  const handleGameBoundaryBack = () => setActiveGame("hub");
+
   if (loading) {
     return (
       <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-20 pt-32 sm:px-6">
@@ -539,32 +547,50 @@ export function OffPage() {
           <TechCoinWalletBadge />
         </div>
         {activeGame === "duel" ? (
-          <>
+          <GameErrorBoundary gameName="Tech Duel" onBack={handleGameBoundaryBack}>
             <TechDuelSync />
             <TechDuelBotAssist />
-          </>
+          </GameErrorBoundary>
         ) : activeGame === "cipher" ? (
-          <CipherBreak />
+          <GameErrorBoundary gameName="Cipher Break" onBack={handleGameBoundaryBack}>
+            <CipherBreak />
+          </GameErrorBoundary>
         ) : activeGame === "raid" ? (
-          <CoreRaid />
+          <GameErrorBoundary gameName="Core Raid" onBack={handleGameBoundaryBack}>
+            <CoreRaid />
+          </GameErrorBoundary>
         ) : activeGame === "miner" ? (
-          <TechCoinMiner />
+          <GameErrorBoundary gameName="Tech Coin Miner" onBack={handleGameBoundaryBack}>
+            <TechCoinMiner />
+          </GameErrorBoundary>
         ) : activeGame === "droptech" ? (
-          <DropTech />
+          <GameErrorBoundary gameName="DropTech" onBack={handleGameBoundaryBack}>
+            <DropTech />
+          </GameErrorBoundary>
         ) : activeGame === "mines" ? (
-          <TechCoinMines />
+          <GameErrorBoundary gameName="Tech Coin Mines" onBack={handleGameBoundaryBack}>
+            <TechCoinMines />
+          </GameErrorBoundary>
         ) : activeGame === "towers" ? (
-          <EkaTowers />
+          <GameErrorBoundary gameName="Eka Towers" onBack={handleGameBoundaryBack}>
+            <EkaTowers />
+          </GameErrorBoundary>
         ) : activeGame === "aviator" ? (
-          <TechAviator />
+          <GameErrorBoundary gameName="Tech Aviator" onBack={handleGameBoundaryBack}>
+            <TechAviator />
+          </GameErrorBoundary>
         ) : activeGame === "dice" ? (
-          <TechDice />
+          <GameErrorBoundary gameName="Tech Dice" onBack={handleGameBoundaryBack}>
+            <TechDice />
+          </GameErrorBoundary>
         ) : activeGame === "blackjack" ? (
-          <TechBlackjack />
+          <GameErrorBoundary gameName="Tech Blackjack" onBack={handleGameBoundaryBack}>
+            <TechBlackjack />
+          </GameErrorBoundary>
         ) : activeGame === "roulette" ? (
           <GameErrorBoundary
             gameName="Tech Roulette"
-            onBack={() => setActiveGame("hub")}
+            onBack={handleGameBoundaryBack}
           >
             <Suspense
               fallback={
@@ -596,7 +622,9 @@ export function OffPage() {
             onBuy={buyShopItem}
           />
         ) : (
-          <MarketAcademy />
+          <GameErrorBoundary gameName="Eka InvestSim" onBack={handleGameBoundaryBack}>
+            <MarketAcademy />
+          </GameErrorBoundary>
         )}
       </>
     );
