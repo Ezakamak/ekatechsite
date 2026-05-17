@@ -1,5 +1,7 @@
 import {
   Component,
+  Suspense,
+  lazy,
   useEffect,
   useState,
   type ErrorInfo,
@@ -36,9 +38,12 @@ import { DropTech } from "./DropTech";
 import { TechCoinMines } from "./TechCoinMines";
 import { EkaTowers } from "./EkaTowers";
 import { TechAviator } from "./tech-aviator/TechAviator";
-import { TechRoulette } from "./TechRoulette";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
+
+const TechRoulette = lazy(() =>
+  import("./TechRoulette").then((module) => ({ default: module.TechRoulette })),
+);
 
 type GameErrorBoundaryProps = {
   children: ReactNode;
@@ -504,7 +509,22 @@ export function OffPage() {
             gameName="Tech Roulette"
             onBack={() => setActiveGame("hub")}
           >
-            <TechRoulette />
+            <Suspense
+              fallback={
+                <main className="relative min-h-screen bg-black px-4 pb-24 pt-32 text-white sm:px-6">
+                  <div className="mx-auto max-w-2xl rounded-[2rem] border border-amber-300/20 bg-amber-300/10 p-6 text-center shadow-2xl shadow-amber-500/10 backdrop-blur-xl">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-100/70">
+                      Tech Roulette yükleniyor
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-white/60">
+                      Oyun modülü hazırlanıyor; hub ekranı bu yüklemeden etkilenmez.
+                    </p>
+                  </div>
+                </main>
+              }
+            >
+              <TechRoulette />
+            </Suspense>
           </GameErrorBoundary>
         ) : activeGame === "store" ? (
           <OffShopApp

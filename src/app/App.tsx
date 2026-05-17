@@ -1,4 +1,12 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import { LanguageProvider } from "./i18n";
 import { Navbar } from "./components/Navbar";
 import { Loader } from "./components/Loader";
@@ -47,6 +55,57 @@ const GamePresenceManager = lazy(() => import("./components/GamePresenceManager"
 const OffSoundEngine = lazy(() => import("./components/OffSoundEngine").then((module) => ({ default: module.OffSoundEngine })));
 const TechCoinWalletBadge = lazy(() => import("./components/TechCoinWalletBadge").then((module) => ({ default: module.TechCoinWalletBadge })));
 const TechAviator = lazy(() => import("./components/tech-aviator/TechAviator").then((module) => ({ default: module.TechAviator })));
+
+type AppErrorBoundaryProps = {
+  children: ReactNode;
+};
+
+type AppErrorBoundaryState = {
+  hasError: boolean;
+};
+
+class AppErrorBoundary extends Component<
+  AppErrorBoundaryProps,
+  AppErrorBoundaryState
+> {
+  state: AppErrorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("EkaTech arayüzü güvenli moda alındı", error, info);
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-black px-4 py-16 text-white sm:px-6">
+        <div className="max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-center shadow-2xl shadow-red-500/10 backdrop-blur-xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-100/70">
+            Güvenli mod
+          </p>
+          <h1 className="mt-4 text-3xl font-semibold">
+            Site yüklenirken bir modül hata verdi.
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-white/60">
+            Siyah ekranda kalmaman için arayüzü güvenli moda aldım. Sayfayı
+            yenileyerek tekrar deneyebilirsin.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-6 rounded-full border border-white/10 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
+          >
+            Sayfayı yenile
+          </button>
+        </div>
+      </main>
+    );
+  }
+}
 
 function getCurrentPath() {
   if (typeof window === "undefined") return "/";
@@ -149,26 +208,27 @@ export default function App() {
 
   return (
     <LanguageProvider>
-      <Loader show={loading || languageLoading || transitionLoading} />
-      <ScrollProgress />
-      <CommandMenu />
-      <BackToTop />
-      <CookieConsent />
-      <AnnouncementPopup />
-      <MaintenanceGate />
-      <Suspense fallback={null}>
-        <AutoEnterLobbies />
-        <GamePresenceManager />
-        <OffSoundEngine />
-      </Suspense>
-      {isCoreClash ? (
-        <div className="fixed right-5 top-24 z-[80] px-2 sm:right-6">
-          <Suspense fallback={null}>
-            <TechCoinWalletBadge />
-          </Suspense>
-        </div>
-      ) : null}
-      <div className="min-h-screen bg-black dark">
+      <AppErrorBoundary>
+        <Loader show={loading || languageLoading || transitionLoading} />
+        <ScrollProgress />
+        <CommandMenu />
+        <BackToTop />
+        <CookieConsent />
+        <AnnouncementPopup />
+        <MaintenanceGate />
+        <Suspense fallback={null}>
+          <AutoEnterLobbies />
+          <GamePresenceManager />
+          <OffSoundEngine />
+        </Suspense>
+        {isCoreClash ? (
+          <div className="fixed right-5 top-24 z-[80] px-2 sm:right-6">
+            <Suspense fallback={null}>
+              <TechCoinWalletBadge />
+            </Suspense>
+          </div>
+        ) : null}
+        <div className="min-h-screen bg-black dark">
         <Navbar />
 
         <Suspense fallback={<div className="min-h-screen bg-black" aria-live="polite" />}>
@@ -228,7 +288,8 @@ export default function App() {
           </>
         )}
         </Suspense>
-      </div>
+        </div>
+      </AppErrorBoundary>
     </LanguageProvider>
   );
 }
