@@ -1,7 +1,7 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const SESSION_MINUTES = 60;
 const DAILY_SERVER_MINUTES = 180;
-const COINS_PER_MINUTE = 1;
+const COINS_PER_MINUTE = 3;
 const COOLDOWN_DIVISOR = 5;
 
 const MINER_SERVERS = [
@@ -69,7 +69,7 @@ export async function onRequestPost(context: any) {
         details: `${auth.user.name} ${serverId} üzerinde TechCoin Miner başlattı.`,
       });
 
-      return json(await buildMinerState(context, auth.user.id, sessionSeconds < SESSION_MINUTES * 60 ? "Miner server bağlandı. Bugünkü 3 saatlik hakkından kalan süre kadar çalışacak." : "Miner server bağlandı. Her dakika Tech Coin üretmeye başladı."));
+      return json(await buildMinerState(context, auth.user.id, sessionSeconds < SESSION_MINUTES * 60 ? "Miner server bağlandı. Bugünkü 3 saatlik hakkından kalan süre kadar çalışacak." : "Miner server bağlandı. Her dakika 3 Tech Coin üretmeye başladı."));
     }
 
     if (action === "claim") {
