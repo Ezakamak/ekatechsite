@@ -26,25 +26,25 @@ function formatWinAmount(amount: number, locale: string) {
 }
 
 export function ToastNoFactionSuccess({ id, amount, multiplier, currency = "TechCoin", locale = "tr-TR", title = "CASHOUT BAŞARILI", displayAmount, variant = "success", onClose }: ToastNoFactionSuccessProps) {
-  const removeFromDomAndState = useCallback(() => {
-    document.getElementById(id)?.remove();
+  const safeMultiplier = Number.isFinite(Number(multiplier)) ? Number(multiplier) : 1;
+  const removeFromState = useCallback(() => {
     onClose(id);
   }, [id, onClose]);
 
   useEffect(() => {
-    const timer = window.setTimeout(removeFromDomAndState, 3800);
+    const timer = window.setTimeout(removeFromState, 3800);
     return () => window.clearTimeout(timer);
-  }, [removeFromDomAndState]);
+  }, [removeFromState]);
 
   return (
-    <button type="button" id={id} className={`toast-nofaction-success toast-nofaction-success--${variant}`} onClick={removeFromDomAndState} aria-live="polite" aria-label={`${title}: ${displayAmount || `+${formatWinAmount(amount, locale)} ${currency}`}, ${multiplier.toFixed(2)}x`}>
+    <button type="button" id={id} className={`toast-nofaction-success toast-nofaction-success--${variant}`} onClick={removeFromState} aria-live="polite" aria-label={`${title}: ${displayAmount || `+${formatWinAmount(amount, locale)} ${currency}`}, ${safeMultiplier.toFixed(2)}x`}>
       <span className="toast-nofaction-success__shine" aria-hidden="true" />
       <span className="toast-nofaction-success__burst toast-nofaction-success__burst--left" aria-hidden="true"><Sparkles /></span>
       <span className="toast-nofaction-success__burst toast-nofaction-success__burst--right" aria-hidden="true"><Sparkles /></span>
       <span className="toast-nofaction-success__icon" aria-hidden="true"><CheckCircle2 /></span>
       <span className="toast-nofaction-success__title">{title}</span>
       <span className="toast-nofaction-success__amount">{displayAmount || `+${formatWinAmount(amount, locale)} ${currency}`}</span>
-      <span className="toast-nofaction-success__multiplier">{multiplier.toFixed(2)}x</span>
+      <span className="toast-nofaction-success__multiplier">{safeMultiplier.toFixed(2)}x</span>
       <span className="toast-nofaction-success__hint">Kapatmak için tıkla</span>
     </button>
   );
