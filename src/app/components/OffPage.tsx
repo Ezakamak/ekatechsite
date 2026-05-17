@@ -643,7 +643,7 @@ export function OffPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 sm:px-6">
+    <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-40 pt-32 sm:px-6">
       <div className="absolute left-1/2 top-20 h-96 w-96 -translate-x-1/2 rounded-full bg-purple-500/10 blur-3xl" />
       <div className="absolute right-0 top-64 h-80 w-80 rounded-full bg-cyan-500/10 blur-3xl" />
       <div className="relative mx-auto max-w-7xl space-y-8">
@@ -708,7 +708,7 @@ export function OffPage() {
           </div>
         </section>
 
-        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <section className="grid gap-5 pb-40 md:grid-cols-2 xl:grid-cols-3">
           <GameCard
             icon={<Store className="h-6 w-6" />}
             status={copy.available}

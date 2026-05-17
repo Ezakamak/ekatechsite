@@ -236,3 +236,38 @@ main:has([class*="rotate-[-11deg]"]) .font-mono {
     letter-spacing: 0.06em !important;
   }
 }
+
+/* Floating widget safety for OFF surfaces: keep chat/sound/back-to-top out of game cards. */
+body[data-ekatech-off-surface="true"] {
+  --off-floating-left: calc(env(safe-area-inset-left) + 1rem);
+  --off-floating-bottom: calc(env(safe-area-inset-bottom) + 1rem);
+  --off-tawk-bottom: calc(env(safe-area-inset-bottom) + 6.25rem);
+}
+
+body[data-ekatech-off-surface="true"] iframe[src*="tawk.to"],
+body[data-ekatech-off-surface="true"] iframe[title*="chat" i],
+body[data-ekatech-off-surface="true"] iframe[title*="tawk" i],
+body[data-ekatech-off-surface="true"] div[id*="tawk" i],
+body[data-ekatech-off-surface="true"] div[class*="tawk" i] {
+  z-index: 80 !important;
+}
+
+body[data-ekatech-off-surface="true"] iframe[src*="tawk.to"][style*="bottom"],
+body[data-ekatech-off-surface="true"] iframe[title*="chat" i][style*="bottom"],
+body[data-ekatech-off-surface="true"] iframe[title*="tawk" i][style*="bottom"],
+body[data-ekatech-off-surface="true"] div[id*="tawk" i][style*="bottom"],
+body[data-ekatech-off-surface="true"] div[class*="tawk" i][style*="bottom"] {
+  bottom: var(--off-tawk-bottom) !important;
+}
+
+@media (max-width: 1024px) {
+  body[data-ekatech-off-surface="true"] {
+    --off-tawk-bottom: calc(env(safe-area-inset-bottom) + 5.5rem);
+  }
+
+  body[data-ekatech-off-surface="true"] iframe[src*="tawk.to"],
+  body[data-ekatech-off-surface="true"] iframe[title*="chat" i],
+  body[data-ekatech-off-surface="true"] iframe[title*="tawk" i] {
+    max-width: min(22rem, calc(100vw - 1.5rem)) !important;
+  }
+}

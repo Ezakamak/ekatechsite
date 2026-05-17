@@ -404,6 +404,23 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const offSurfaceRoutes = new Set(["/off", "/core-clash", "/tech-aviator"]);
+    const normalizedPath = path.replace(/\/$/, "") || "/";
+
+    document.body.dataset.ekatechRoute = normalizedPath;
+    document.body.dataset.ekatechOffSurface = offSurfaceRoutes.has(
+      normalizedPath,
+    )
+      ? "true"
+      : "false";
+
+    return () => {
+      delete document.body.dataset.ekatechRoute;
+      delete document.body.dataset.ekatechOffSurface;
+    };
+  }, [path]);
+
   const isSignIn = path === "/signin";
   const isSignUp = path === "/signup";
   const isForgotPassword = path === "/forgot-password";
