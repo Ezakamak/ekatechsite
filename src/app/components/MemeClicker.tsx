@@ -156,8 +156,9 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
 
     audio.onended = () => {
       setIsPlaying(false);
-      setMessage("Ses bitti. Tekrar basabilirsin.");
+      setMessage("Ses bitti. Tech Coin aktarılıyor...");
       audioRef.current = null;
+      void awardTechCoin();
     };
 
     audio.onerror = () => {
@@ -169,7 +170,6 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
     try {
       await audio.play();
       setMessage(`${selected.displayName} çalıyor...`);
-      void awardTechCoin();
     } catch {
       stopCurrentAudio();
       setIsPlaying(false);
@@ -238,8 +238,8 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
               Meme Clicker
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-white/55 sm:text-lg">
-              Büyük butona bas, rastgele meme sesi çalsın ve her başarılı
-              basışta {REWARD_PER_CLICK} Tech Coin kazan.
+              Büyük butona bas, rastgele meme sesi çalsın ve ses tamamlanınca
+              {REWARD_PER_CLICK} Tech Coin kazan.
             </p>
 
             <div className="mx-auto mt-7 grid max-w-3xl gap-3 sm:grid-cols-3">
@@ -267,6 +267,8 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
                 type="button"
                 disabled={buttonDisabled}
                 onClick={handlePlay}
+                aria-label={isPlaying ? "Meme sesi çalıyor" : "Meme sesi çal"}
+                title={isPlaying ? "Meme sesi çalıyor" : "Meme sesi çal"}
                 whileTap={buttonDisabled ? undefined : { scale: 0.94, rotate: -1 }}
                 animate={
                   isPlaying
@@ -276,14 +278,11 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
                 transition={isPlaying ? { repeat: Infinity, duration: 0.9 } : undefined}
                 className="relative z-10 h-44 w-44 rounded-full border border-cyan-100/45 bg-[linear-gradient(145deg,#22d3ee,#a855f7_50%,#111827_52%,#0b1020)] p-2 text-center shadow-[0_24px_0_rgba(30,41,59,0.85),0_34px_80px_rgba(34,211,238,0.32),inset_0_8px_24px_rgba(255,255,255,0.32)] transition disabled:cursor-not-allowed disabled:opacity-55 sm:h-56 sm:w-56"
               >
-                <span className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[radial-gradient(circle_at_35%_20%,rgba(255,255,255,0.55),transparent_18%),linear-gradient(145deg,rgba(255,255,255,0.24),rgba(0,0,0,0.18))] text-2xl font-black uppercase tracking-[0.12em] text-white drop-shadow sm:text-3xl">
+                <span className="flex h-full w-full items-center justify-center rounded-full bg-[radial-gradient(circle_at_35%_20%,rgba(255,255,255,0.55),transparent_18%),linear-gradient(145deg,rgba(255,255,255,0.24),rgba(0,0,0,0.18))] text-6xl drop-shadow sm:text-7xl">
                   {isPlaying ? (
-                    <>
-                      <span className="mb-3 h-8 w-8 animate-spin rounded-full border-4 border-white/30 border-t-white" />
-                      Çalıyor...
-                    </>
+                    <span className="h-12 w-12 animate-spin rounded-full border-4 border-white/30 border-t-white" />
                   ) : (
-                    "🔥 MEME BAS"
+                    <span aria-hidden="true">🔥</span>
                   )}
                 </span>
               </motion.button>
@@ -300,7 +299,7 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-purple-200/20 bg-purple-300/10 px-4 py-2 text-sm font-semibold text-purple-100">
-                  <Sparkles className="h-4 w-4" /> +{REWARD_PER_CLICK} TC / basış
+                  <Sparkles className="h-4 w-4" /> +{REWARD_PER_CLICK} TC / biten ses
                 </div>
               </div>
               <p className="mt-4 rounded-2xl border border-cyan-200/15 bg-cyan-300/10 px-4 py-3 text-sm font-medium text-cyan-50">

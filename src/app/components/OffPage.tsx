@@ -229,7 +229,7 @@ export function OffPage() {
           "Gerçek para ve gerçek hisse kullanmadan portföy, risk, haber etkisi ve sanal al-sat mantığını öğreten borsa simülasyonu.",
         minerTitle: "TechCoin Miner",
         minerDesc:
-          "3 miner serverdan birine bağlan. Aynı anda sadece 1 server kullan, dakikada 1 Tech Coin üret, 1 saatin sonunda server otomatik boşalsın.",
+          "3 miner serverdan birine bağlan. Aynı anda sadece 1 server kullan, dakikada 3 Tech Coin üret, 1 saatin sonunda server otomatik boşalsın.",
         droptechTitle: "DropTech",
         droptechDesc:
           "Kutu aç, ışıklı şeritte item yakala ve OFF'a özel emoji koleksiyonunu tamamla. Eşyalar kullanılmaz; sadece envanterde görünür.",
@@ -310,7 +310,7 @@ export function OffPage() {
           "A stock market simulator that teaches portfolio, risk, news impact and virtual buy/sell logic without real money or real stocks.",
         minerTitle: "TechCoin Miner",
         minerDesc:
-          "Connect to one of 3 miner servers. Use only 1 server at a time, earn 1 Tech Coin per minute, and automatically release the server after 1 hour.",
+          "Connect to one of 3 miner servers. Use only 1 server at a time, earn 3 Tech Coin per minute, and automatically release the server after 1 hour.",
         droptechTitle: "DropTech",
         droptechDesc:
           "Open boxes, catch an item on the glowing strip, and complete your OFF-only emoji collection. Items are not usable; they only appear in inventory.",
