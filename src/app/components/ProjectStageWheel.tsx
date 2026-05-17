@@ -1,3 +1,5 @@
+import { useLanguage } from "../i18n";
+
 type ProjectRequest = {
   id: number;
   project_name: string;
@@ -15,19 +17,19 @@ type ProjectRequest = {
 
 type Stage = {
   key: string;
-  label: string;
-  description: string;
+  label: { tr: string; en: string };
+  description: { tr: string; en: string };
 };
 
 const stages: Stage[] = [
-  { key: "received", label: "Talep alındı", description: "Talebiniz başarıyla alındı." },
-  { key: "reviewing", label: "İnceleniyor", description: "Ekibimiz talebinizi inceliyor." },
-  { key: "offer_ready", label: "Teklif hazırlandı", description: "Size özel teklif hazırlandı." },
-  { key: "waiting_approval", label: "Onay bekliyor", description: "Teklif onayınız bekleniyor." },
-  { key: "development_started", label: "Geliştirme başladı", description: "Proje geliştirme süreci aktif olarak devam ediyor." },
-  { key: "revision", label: "Revize", description: "Geri bildirimler doğrultusunda revize ediliyor." },
-  { key: "delivered", label: "Teslim edildi", description: "Proje teslim edildi ve onay bekliyor." },
-  { key: "completed", label: "Tamamlandı", description: "Proje başarıyla tamamlandı." },
+  { key: "received", label: { tr: "Talep alındı", en: "Request received" }, description: { tr: "Talebiniz başarıyla alındı.", en: "Your request was received successfully." } },
+  { key: "reviewing", label: { tr: "İnceleniyor", en: "Under review" }, description: { tr: "Ekibimiz talebinizi inceliyor.", en: "Our team is reviewing your request." } },
+  { key: "offer_ready", label: { tr: "Teklif hazırlandı", en: "Offer prepared" }, description: { tr: "Size özel teklif hazırlandı.", en: "A custom offer has been prepared for you." } },
+  { key: "waiting_approval", label: { tr: "Onay bekliyor", en: "Awaiting approval" }, description: { tr: "Teklif onayınız bekleniyor.", en: "The offer is waiting for your approval." } },
+  { key: "development_started", label: { tr: "Geliştirme başladı", en: "Development started" }, description: { tr: "Proje geliştirme süreci aktif olarak devam ediyor.", en: "Project development is actively in progress." } },
+  { key: "revision", label: { tr: "Revize", en: "Revision" }, description: { tr: "Geri bildirimler doğrultusunda revize ediliyor.", en: "Revisions are being made based on feedback." } },
+  { key: "delivered", label: { tr: "Teslim edildi", en: "Delivered" }, description: { tr: "Proje teslim edildi ve onay bekliyor.", en: "The project has been delivered and is awaiting approval." } },
+  { key: "completed", label: { tr: "Tamamlandı", en: "Completed" }, description: { tr: "Proje başarıyla tamamlandı.", en: "The project was completed successfully." } },
 ];
 
 const legacyStatusMap: Record<string, string> = {
@@ -48,13 +50,16 @@ function getInitials(name?: string | null, email?: string | null) {
 }
 
 export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
+  const { language } = useLanguage();
+  const tr = language === "tr";
+  const localizedStage = (stage: Stage) => ({ label: stage.label[language], description: stage.description[language] });
   const normalizedStatus = legacyStatusMap[request.status] || request.status || "received";
   const isRejected = normalizedStatus === "rejected";
   const foundStageIndex = stages.findIndex((stage) => stage.key === normalizedStatus);
   const activeIndex = isRejected ? 0 : foundStageIndex >= 0 ? foundStageIndex : 0;
   const activeStage = isRejected
-    ? { label: "Reddedildi", description: "Proje talebi şu anda onaylanmadı." }
-    : stages[activeIndex];
+    ? { label: tr ? "Reddedildi" : "Rejected", description: tr ? "Proje talebi şu anda onaylanmadı." : "The project request is not approved right now." }
+    : localizedStage(stages[activeIndex]);
   const progress = isRejected ? 0 : Math.round(((activeIndex + 1) / stages.length) * 100);
   const visualProgress = isRejected ? 0 : (activeIndex / (stages.length - 1)) * 100;
   const radius = 41.5;
@@ -71,8 +76,8 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
           <h3 className="text-2xl font-medium text-white">{request.project_name}</h3>
           <p className="max-w-2xl text-sm leading-6 text-white/55">{request.description}</p>
           <div className="flex flex-wrap gap-2 text-xs text-white/45">
-            {request.budget_range && <span className="rounded-full bg-white/[0.06] px-3 py-1">Bütçe: {request.budget_range}</span>}
-            {request.deadline && <span className="rounded-full bg-white/[0.06] px-3 py-1">Hedef: {request.deadline}</span>}
+            {request.budget_range && <span className="rounded-full bg-white/[0.06] px-3 py-1">{tr ? "Bütçe" : "Budget"}: {request.budget_range}</span>}
+            {request.deadline && <span className="rounded-full bg-white/[0.06] px-3 py-1">{tr ? "Hedef" : "Target"}: {request.deadline}</span>}
             {request.created_at && <span className="rounded-full bg-white/[0.06] px-3 py-1">{request.created_at}</span>}
           </div>
         </div>
@@ -87,7 +92,7 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 overflow-hidden rounded-full border border-white/15 bg-white text-black">
               {request.assigned_admin_avatar_url ? (
-                <img src={request.assigned_admin_avatar_url} alt="Admin" className="h-full w-full object-cover" />
+                <img src={request.assigned_admin_avatar_url} alt={tr ? "Admin" : "Administrator"} className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-sm font-semibold">
                   {getInitials(request.assigned_admin_name, request.assigned_admin_email)}
@@ -95,7 +100,7 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
               )}
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-cyan-100/55">Sorumlu admin</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-cyan-100/55">{tr ? "Sorumlu admin" : "Assigned admin"}</p>
               <p className="font-medium text-white">{request.assigned_admin_name}</p>
               {request.assigned_admin_email && <p className="text-sm text-white/40">{request.assigned_admin_email}</p>}
             </div>
@@ -105,13 +110,13 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
 
       {!hasAssignedAdmin && !isRejected && (
         <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white/45">
-          Proje henüz bir admin tarafından alınmadı. İnceleme başladığında sorumlu admin burada görünecek.
+          {tr ? "Proje henüz bir admin tarafından alınmadı. İnceleme başladığında sorumlu admin burada görünecek." : "No admin has taken this project yet. The assigned admin will appear here when review starts."}
         </div>
       )}
 
       {isRejected && (
         <div className="mt-5 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm text-red-100">
-          Bu proje talebi onaylanmadı. Yeni bir proje talebi gönderebilir veya destekle iletişime geçebilirsin.
+          {tr ? "Bu proje talebi onaylanmadı. Yeni bir proje talebi gönderebilir veya destekle iletişime geçebilirsin." : "This project request was not approved. You can send a new request or contact support."}
         </div>
       )}
 
@@ -161,9 +166,9 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
 
           <div className="absolute inset-0 flex items-center justify-center text-center">
             <div>
-              <p className="text-xs uppercase tracking-[0.35em] text-white/35">İlerleme</p>
+              <p className="text-xs uppercase tracking-[0.35em] text-white/35">{tr ? "İlerleme" : "Progress"}</p>
               <p className="mt-2 text-6xl font-medium tracking-tight text-white">%{progress}</p>
-              <p className="mt-2 text-sm text-white/45">Proje genel ilerleme</p>
+              <p className="mt-2 text-sm text-white/45">{tr ? "Proje genel ilerleme" : "Overall project progress"}</p>
               <div className="mx-auto mt-4 h-px w-24 bg-gradient-to-r from-transparent via-cyan-200/70 to-transparent" />
             </div>
           </div>
@@ -186,7 +191,7 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
                       : "border-white/15 bg-white/[0.04] text-white/45"
                 }`}
                 style={{ left: `${x}%`, top: `${y}%` }}
-                title={stage.label}
+                title={stage.label[language]}
               >
                 {index + 1}
               </div>
@@ -224,11 +229,11 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-medium text-white">{stage.label}</h4>
+                      <h4 className="font-medium text-white">{stage.label[language]}</h4>
                       {completed && <span className="text-cyan-200">✓</span>}
-                      {current && <span className="rounded-full bg-purple-300/20 px-2 py-0.5 text-xs text-purple-100">Aktif</span>}
+                      {current && <span className="rounded-full bg-purple-300/20 px-2 py-0.5 text-xs text-purple-100">{tr ? "Aktif" : "Active"}</span>}
                     </div>
-                    <p className="mt-1 text-sm leading-5 text-white/45">{stage.description}</p>
+                    <p className="mt-1 text-sm leading-5 text-white/45">{stage.description[language]}</p>
                   </div>
                 </div>
               </div>
@@ -238,9 +243,9 @@ export function ProjectStageWheel({ request }: { request: ProjectRequest }) {
       </div>
 
       <div className="mt-6 grid gap-3 md:grid-cols-3">
-        <SummaryCard label="Proje ilerlemesi" value={`%${progress}`} detail="Genel tamamlanma oranı" />
-        <SummaryCard label="Mevcut aşama" value={activeStage.label} detail={isRejected ? "Talep onaylanmadı" : `${activeIndex + 1}. aşamadasınız`} />
-        <SummaryCard label="Tahmini teslim" value={request.deadline || "Belirlenecek"} detail="Hedef teslim tarihi" />
+        <SummaryCard label={tr ? "Proje ilerlemesi" : "Project progress"} value={`%${progress}`} detail={tr ? "Genel tamamlanma oranı" : "Overall completion rate"} />
+        <SummaryCard label={tr ? "Mevcut aşama" : "Current stage"} value={activeStage.label} detail={isRejected ? (tr ? "Talep onaylanmadı" : "Request was not approved") : (tr ? `${activeIndex + 1}. aşamadasınız` : `You are at stage ${activeIndex + 1}`)} />
+        <SummaryCard label={tr ? "Tahmini teslim" : "Estimated delivery"} value={request.deadline || (tr ? "Belirlenecek" : "To be determined")} detail={tr ? "Hedef teslim tarihi" : "Target delivery date"} />
       </div>
     </div>
   );

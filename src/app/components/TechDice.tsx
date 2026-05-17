@@ -4,6 +4,7 @@ import { Dice5, Sparkles, Wallet } from "lucide-react";
 import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
 import { playOffSound } from "./OffSoundEngine";
+import { useLanguage } from "../i18n";
 
 type DiceMode = "over" | "under";
 
@@ -47,7 +48,9 @@ const RTP = 0.96;
 const MAX_RECENT_ROLLS = 60;
 
 export function TechDice() {
-  const locale = "en-US";
+  const { language } = useLanguage();
+  const tr = language === "tr";
+  const locale = tr ? "tr-TR" : "en-US";
   const mountedRef = useRef(true);
   const landingTimerRef = useRef<number | null>(null);
   const [wallet, setWallet] = useState<WalletState | null>(null);
@@ -80,9 +83,9 @@ export function TechDice() {
         if (Array.isArray(data.recent)) setRecent(sanitizeRecent(data.recent));
       })
       .catch(() => {
-        if (mountedRef.current) setMessage("Tech Dice is warming up. Try again in a moment.");
+        if (mountedRef.current) setMessage(tr ? "Tech Dice hazırlanıyor. Birazdan tekrar dene." : "Tech Dice is warming up. Try again in a moment.");
       });
-  }, []);
+  }, [tr]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -106,7 +109,7 @@ export function TechDice() {
         amount: Math.max(0, Math.round(Number(rewardAmount) || 0)),
         multiplier: sanitizeMultiplier(multiplier),
         currency: "TC",
-        title: "SUCCESSFUL ROLL",
+        title: tr ? "BAŞARILI ZAR" : "SUCCESSFUL ROLL",
       },
     ]);
   }
@@ -132,17 +135,17 @@ export function TechDice() {
         body: JSON.stringify({ amount: playAmount, mode, target: playTarget }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || "Roll could not be completed.");
+      if (!response.ok) throw new Error(data?.error || (tr ? "Zar atışı tamamlanamadı." : "Roll could not be completed."));
 
       const nextResult = sanitizeResult(data?.result, { amount: playAmount, mode, target: playTarget });
-      if (!nextResult) throw new Error("Roll result could not be read safely.");
+      if (!nextResult) throw new Error((tr ? "Zar sonucu güvenli şekilde okunamadı." : "Roll result could not be read safely."));
 
       if (!mountedRef.current) return;
       setWallet(data?.wallet ? sanitizeWallet(data.wallet) : null);
       setRecent(Array.isArray(data?.recent) ? sanitizeRecent(data.recent) : []);
       setMarkerPosition(nextResult.rolledNumber);
       setResult(nextResult);
-      setMessage(nextResult.won ? "Successful Roll" : "Missed Roll");
+      setMessage(nextResult.won ? (tr ? "Başarılı zar" : "Successful Roll") : (tr ? "Kaçan zar" : "Missed Roll"));
       recordSessionBet(nextResult.amount);
       recordSessionResult(nextResult.net);
 
@@ -160,7 +163,7 @@ export function TechDice() {
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
     } catch (error) {
       if (!mountedRef.current) return;
-      setMessage(error instanceof Error ? error.message : "Roll could not be completed.");
+      setMessage(error instanceof Error ? error.message : (tr ? "Zar atışı tamamlanamadı." : "Roll could not be completed."));
       playOffSound("error");
     } finally {
       if (mountedRef.current) setRolling(false);
@@ -185,11 +188,11 @@ export function TechDice() {
               </div>
               <h1 className="mt-5 text-5xl font-medium tracking-tight sm:text-7xl">Tech Dice</h1>
               <p className="mt-5 max-w-3xl text-lg leading-8 text-white/55">
-                Pick Roll Over or Roll Under, move the 0–100 target, and send a Tech Coin roll toward the green zone.
+                {tr ? "Üstüne at veya altına at modunu seç, 0–100 hedefini ayarla ve Tech Coin zarını yeşil bölgeye gönder." : "Pick Roll Over or Roll Under, move the 0–100 target, and send a Tech Coin roll toward the green zone."}
               </p>
             </div>
             <div className="rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-5 text-emerald-100">
-              <div className="flex items-center gap-2 text-sm text-emerald-100/75"><Wallet className="h-4 w-4" /> Tech Coin Wallet</div>
+              <div className="flex items-center gap-2 text-sm text-emerald-100/75"><Wallet className="h-4 w-4" /> {tr ? "Tech Coin Cüzdanı" : "Tech Coin Wallet"}</div>
               <div className="mt-2 text-4xl font-black">{formatNumber(wallet?.balance || 0, locale)} TC</div>
             </div>
           </div>
@@ -198,21 +201,21 @@ export function TechDice() {
         <section className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
             <div className="grid gap-4 md:grid-cols-3">
-              <Stat label="Selected mode" value={mode === "over" ? "Roll Over" : "Roll Under"} />
-              <Stat label="Target number" value={safeTarget.toFixed(2)} />
-              <Stat label="Win chance" value={`${(math.winChance * 100).toFixed(2)}%`} />
+              <Stat label={tr ? "Seçili mod" : "Selected mode"} value={mode === "over" ? (tr ? "Üstüne at" : "Roll Over") : (tr ? "Altına at" : "Roll Under")} />
+              <Stat label={tr ? "Hedef sayı" : "Target number"} value={safeTarget.toFixed(2)} />
+              <Stat label={tr ? "Kazanma şansı" : "Win chance"} value={`${(math.winChance * 100).toFixed(2)}%`} />
             </div>
 
             <div className="mt-8 rounded-[1.75rem] border border-white/10 bg-black/35 p-5 shadow-inner shadow-black/50">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.22em] text-white/40">Winning area</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-white">{mode === "over" ? "Green zone is right of target" : "Green zone is left of target"}</h2>
+                  <p className="text-sm uppercase tracking-[0.22em] text-white/40">{tr ? "Kazanma alanı" : "Winning area"}</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">{mode === "over" ? (tr ? "Yeşil bölge hedefin sağında" : "Green zone is right of target") : (tr ? "Yeşil bölge hedefin solunda" : "Green zone is left of target")}</h2>
                 </div>
                 <div className="inline-flex rounded-full border border-white/10 bg-white/[0.06] p-1">
                   {(["over", "under"] as DiceMode[]).map((item) => (
                     <button key={item} type="button" onClick={() => { setMode(item); playOffSound("click"); }} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${mode === item ? "bg-cyan-100 text-black" : "text-white/65 hover:text-white"}`}>
-                      Roll {item === "over" ? "Over" : "Under"}
+                      {item === "over" ? (tr ? "Üstüne at" : "Roll Over") : (tr ? "Altına at" : "Roll Under")}
                     </button>
                   ))}
                 </div>
@@ -225,7 +228,7 @@ export function TechDice() {
                     style={{ left: `${markerPosition}%` }}
                     aria-live="polite"
                   >
-                    <span>{result ? result.rolledNumber.toFixed(2) : "Roll"}</span>
+                    <span>{result ? result.rolledNumber.toFixed(2) : (tr ? "At" : "Roll")}</span>
                   </div>
                   <input
                     type="range"
@@ -236,49 +239,49 @@ export function TechDice() {
                     onChange={(event) => setTarget(clampTarget(Number(event.target.value)))}
                     className="tech-dice-slider w-full"
                     style={{ background: sliderBackground }}
-                    aria-label="Target number selector"
+                    aria-label={tr ? "Hedef sayı seçici" : "Target number selector"}
                   />
                 </div>
-                <div className="mt-3 flex justify-between text-xs uppercase tracking-[0.16em] text-white/35"><span>0</span><span>Target {safeTarget.toFixed(2)}</span><span>100</span></div>
+                <div className="mt-3 flex justify-between text-xs uppercase tracking-[0.16em] text-white/35"><span>0</span><span>{tr ? "Hedef" : "Target"} {safeTarget.toFixed(2)}</span><span>100</span></div>
               </div>
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label className="rounded-3xl border border-white/10 bg-black/25 p-4">
-                <span className="text-xs uppercase tracking-[0.18em] text-white/40">Tech Coin amount</span>
+                <span className="text-xs uppercase tracking-[0.18em] text-white/40">{tr ? "Tech Coin tutarı" : "Tech Coin amount"}</span>
                 <input type="number" min="1" max="10000" value={amount} onChange={(event) => setAmount(clampInteger(event.target.value, 1, 10_000))} className="mt-2 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-bold text-white outline-none focus:border-cyan-200/50" />
               </label>
               <div className="grid grid-cols-2 gap-4">
-                <Stat label="Multiplier" value={`${math.multiplier.toFixed(2)}x`} glow />
-                <Stat label="Reward" value={`${formatNumber(potentialReward, locale)} TC`} glow />
+                <Stat label={tr ? "Çarpan" : "Multiplier"} value={`${math.multiplier.toFixed(2)}x`} glow />
+                <Stat label={tr ? "Ödül" : "Reward"} value={`${formatNumber(potentialReward, locale)} TC`} glow />
               </div>
             </div>
 
             <button type="button" disabled={rolling} onClick={roll} className="mt-6 inline-flex w-full items-center justify-center gap-3 rounded-full bg-gradient-to-r from-cyan-100 via-white to-purple-100 px-6 py-4 text-base font-black text-black shadow-2xl shadow-cyan-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60">
-              <Sparkles className="h-5 w-5" /> {rolling ? "Rolling..." : "Roll"}
+              <Sparkles className="h-5 w-5" /> {rolling ? (tr ? "Atılıyor..." : "Rolling...") : (tr ? "At" : "Roll")}
             </button>
 
             <div className="mt-5 grid gap-3 text-sm text-white/65 sm:grid-cols-2 lg:grid-cols-4">
-              <ResultLine label="Result" value={message || "Ready"} />
-              <ResultLine label="Mode" value={mode === "over" ? "Roll Over" : "Roll Under"} />
-              <ResultLine label="Target" value={safeTarget.toFixed(2)} />
-              <ResultLine label="Rolled" value={result ? result.rolledNumber.toFixed(2) : "--"} />
+              <ResultLine label={tr ? "Sonuç" : "Result"} value={message || (tr ? "Hazır" : "Ready")} />
+              <ResultLine label={tr ? "Mod" : "Mode"} value={mode === "over" ? (tr ? "Üstüne at" : "Roll Over") : (tr ? "Altına at" : "Roll Under")} />
+              <ResultLine label={tr ? "Hedef" : "Target"} value={safeTarget.toFixed(2)} />
+              <ResultLine label={tr ? "Gelen" : "Rolled"} value={result ? result.rolledNumber.toFixed(2) : "--"} />
             </div>
           </div>
 
           <aside className="space-y-6">
             <GameSessionStatsPanel gameName="Tech Dice" stats={displayedSessionStats} onReset={resetSessionStats} />
             <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl">
-              <div className="flex items-center gap-2"><Dice5 className="h-5 w-5 text-cyan-100" /><h2 className="text-xl font-semibold">Recent Rolls</h2></div>
+              <div className="flex items-center gap-2"><Dice5 className="h-5 w-5 text-cyan-100" /><h2 className="text-xl font-semibold">{tr ? "Son Atışlar" : "Recent Rolls"}</h2></div>
               <div className="mt-4 space-y-2">
                 {recent.length ? recent.slice(0, 6).map((item, index) => (
                   <div key={`${item.created_at}-${index}`} className="grid grid-cols-4 gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-white/65">
-                    <span className={item.result === "win" ? "text-emerald-200" : "text-red-200"}>{item.result === "win" ? "Win" : "Loss"}</span>
-                    <span>{item.mode === "over" ? "Over" : "Under"}</span>
+                    <span className={item.result === "win" ? "text-emerald-200" : "text-red-200"}>{item.result === "win" ? (tr ? "Kazanç" : "Win") : (tr ? "Kayıp" : "Loss")}</span>
+                    <span>{item.mode === "over" ? (tr ? "Üst" : "Over") : (tr ? "Alt" : "Under")}</span>
                     <span>{Number(item.rolled_number || 0).toFixed(2)}</span>
                     <span className="text-right">{formatSignedTc(item.net_amount, locale)}</span>
                   </div>
-                )) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">No Tech Dice rolls yet. Your session history starts after the first roll.</p>}
+                )) : <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">{tr ? "Henüz Tech Dice atışı yok. Oturum geçmişin ilk atıştan sonra başlar." : "No Tech Dice rolls yet. Your session history starts after the first roll."}</p>}
               </div>
             </div>
           </aside>

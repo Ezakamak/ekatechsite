@@ -1,5 +1,6 @@
 import { Bot, Coins, ShieldCheck } from "lucide-react";
 import type { BetPanelState, GameStatus } from "./types";
+import { useLanguage } from "../../i18n";
 
 interface BetControlsProps {
   panels: BetPanelState[];
@@ -13,6 +14,8 @@ interface BetControlsProps {
 const quickBets = [50, 100, 500];
 
 export function BetControls({ panels, status, currentMultiplier, onPanelChange, onPlaceBet, onCashOut }: BetControlsProps) {
+  const { language } = useLanguage();
+  const tr = language === "tr";
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       {panels.map((panel, index) => {
@@ -23,11 +26,11 @@ export function BetControls({ panels, status, currentMultiplier, onPanelChange, 
         return (
           <div key={panel.id} className="rounded-[1.75rem] border border-emerald-300/20 bg-zinc-950/85 p-5 shadow-[0_0_42px_rgba(16,185,129,0.08)] backdrop-blur-xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-white">Tech Coin Bahis Paneli {index + 1}</h3>
+              <h3 className="text-lg font-black text-white">{tr ? "Tech Coin Bahis Paneli" : "Tech Coin Bet Panel"} {index + 1}</h3>
               <span className="rounded-full border border-cyan-300/30 px-3 py-1 text-xs uppercase tracking-[0.25em] text-cyan-200">{panel.id}</span>
             </div>
 
-            <label className="mt-5 block text-sm text-zinc-300">Bahis miktarı</label>
+            <label className="mt-5 block text-sm text-zinc-300">{tr ? "Bahis miktarı" : "Bet amount"}</label>
             <div className="mt-2 flex items-center rounded-2xl border border-emerald-300/20 bg-black/70 px-4 py-3 focus-within:border-emerald-300/70">
               <Coins className="mr-3 h-5 w-5 text-emerald-300" />
               <input
@@ -58,16 +61,16 @@ export function BetControls({ panels, status, currentMultiplier, onPanelChange, 
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <label className="flex items-center justify-between rounded-2xl border border-zinc-700 bg-black/40 p-3 text-sm text-zinc-200">
-                <span className="flex items-center gap-2"><Bot className="h-4 w-4 text-cyan-300" /> Otomatik bahis</span>
+                <span className="flex items-center gap-2"><Bot className="h-4 w-4 text-cyan-300" /> {tr ? "Otomatik bahis" : "Auto bet"}</span>
                 <input type="checkbox" checked={panel.autoBet} onChange={(event) => onPanelChange(panel.id, { autoBet: event.target.checked })} />
               </label>
               <label className="flex items-center justify-between rounded-2xl border border-zinc-700 bg-black/40 p-3 text-sm text-zinc-200">
-                <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-300" /> Auto cashout</span>
+                <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-300" /> {tr ? "Otomatik cashout" : "Auto cashout"}</span>
                 <input type="checkbox" checked={panel.autoCashout} onChange={(event) => onPanelChange(panel.id, { autoCashout: event.target.checked })} />
               </label>
             </div>
 
-            <label className="mt-4 block text-sm text-zinc-300">Otomatik nakit çekme çarpanı</label>
+            <label className="mt-4 block text-sm text-zinc-300">{tr ? "Otomatik nakit çekme çarpanı" : "Auto cashout multiplier"}</label>
             <div className="mt-2 flex items-center rounded-2xl border border-zinc-700 bg-black/50 px-4 py-3">
               <input
                 type="number"
@@ -86,15 +89,15 @@ export function BetControls({ panels, status, currentMultiplier, onPanelChange, 
               disabled={!canPlaceBet && !canCashOut}
               className={`mt-5 w-full rounded-2xl px-5 py-4 text-lg font-black uppercase tracking-[0.2em] transition disabled:cursor-not-allowed disabled:opacity-50 ${canCashOut ? "bg-emerald-300 text-black shadow-[0_0_26px_rgba(110,231,183,0.7)] hover:bg-emerald-200" : "bg-red-500 text-white shadow-[0_0_24px_rgba(239,68,68,0.45)] hover:bg-red-400"}`}
             >
-              {canCashOut ? "TECH COIN ÇEK" : panel.isBetAccepted ? "BAHİS KİLİTLENDİ" : "BAHİS YAP"}
+              {canCashOut ? (tr ? "TECH COIN ÇEK" : "CASH OUT TECH COIN") : panel.isBetAccepted ? (tr ? "BAHİS KİLİTLENDİ" : "BET LOCKED") : (tr ? "BAHİS YAP" : "PLACE BET")}
             </button>
 
             {panel.isBetAccepted && !panel.hasCashedOut ? (
               <p className="mt-3 text-center font-mono text-lg font-black text-emerald-300 drop-shadow-[0_0_14px_rgba(16,185,129,0.85)]">
-                Aktarılacak: {possibleWin.toFixed(2)} TC
+                {tr ? "Aktarılacak" : "To cash out"}: {possibleWin.toFixed(2)} TC
               </p>
             ) : null}
-            {panel.hasCashedOut ? <p className="mt-3 text-center text-sm font-bold text-cyan-200">Nakit çekim tamamlandı.</p> : null}
+            {panel.hasCashedOut ? <p className="mt-3 text-center text-sm font-bold text-cyan-200">{tr ? "Nakit çekim tamamlandı." : "Cashout completed."}</p> : null}
           </div>
         );
       })}

@@ -88,6 +88,7 @@ function labels(presence: Presence | null) {
       desc: presence?.reason === "you_left" ? "Maça geri döndün. Senkronizasyon yenileniyor." : "Rakip oyundan çıktı veya lobiye döndü. Süre bitmeden dönmezse sen kazanırsın.",
       countdown: `${seconds} saniye`,
       footer: "Rakip dönerse oyun kaldığı yerden devam eder.",
+      pauseLabel: "Duraklat / Hükmen bitir",
     };
   }
   return {
@@ -95,6 +96,7 @@ function labels(presence: Presence | null) {
     desc: presence?.reason === "you_left" ? "You returned. Sync is being restored." : "Opponent left or returned to the lobby. If they do not return before the timer ends, you win.",
     countdown: `${seconds}s`,
     footer: "If the opponent returns in time, the match resumes.",
+    pauseLabel: "Pause / Forfeit",
   };
 }
 
@@ -168,7 +170,7 @@ export function GamePresenceManager() {
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 px-4 text-white backdrop-blur-md">
       <div className="w-full max-w-md rounded-[2rem] border border-cyan-300/25 bg-black/85 p-6 text-center shadow-2xl shadow-cyan-500/20">
-        <p className="text-xs uppercase tracking-[0.28em] text-cyan-100/60">Pause / Forfeit</p>
+        <p className="text-xs uppercase tracking-[0.28em] text-cyan-100/60">{copy.pauseLabel}</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">{copy.title}</h2>
         <p className="mt-4 text-sm leading-6 text-white/60">{copy.desc}</p>
         <div className="mx-auto mt-6 flex h-28 w-28 items-center justify-center rounded-full border border-cyan-300/30 bg-cyan-300/10 text-3xl font-semibold text-cyan-100 shadow-2xl shadow-cyan-500/20">
