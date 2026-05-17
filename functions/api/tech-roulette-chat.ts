@@ -1,6 +1,16 @@
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const MAX_MESSAGE_LENGTH = 600;
 
+function rouletteUserColor(userId: number | string) {
+  const key = String(userId || 0);
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) >>> 0;
+  }
+  const hue = Math.round((hash * 137.508) % 360);
+  return `hsl(${hue} 78% 64%)`;
+}
+
 export async function onRequestGet(context: any) {
   const auth = await requireOffUser(context);
   if (!auth.ok)
@@ -35,7 +45,12 @@ export async function onRequestGet(context: any) {
       .all();
     return Response.json({
       ok: true,
-      messages: [...(result?.results || [])].reverse(),
+      messages: [...(result?.results || [])]
+        .reverse()
+        .map((message: any) => ({
+          ...message,
+          user_color: rouletteUserColor(message.user_id),
+        })),
     });
   } catch (error) {
     return Response.json({ error: readableError(error) }, { status: 500 });
