@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, DatabaseZap, Hash, ListRestart, ServerCog } from "lucide-react";
+import { AlertTriangle, CheckCircle2, DatabaseZap, Hash, ListRestart, ServerCog, ShieldCheck, XCircle } from "lucide-react";
 import { BetControls } from "./BetControls";
 import { TechCanvas } from "./TechCanvas";
 import { TechWalletPanel } from "./TechWalletPanel";
@@ -37,6 +37,8 @@ export function TechAviator() {
   const [connected, setConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [connectionNotice, setConnectionNotice] = useState<string>(tr ? "SQL canlı motoruna bağlanıyor; tüm pilotlar aynı roundu görecek." : "Connecting to the live SQL engine; every pilot will see the same round.");
+  const [verifyMessage, setVerifyMessage] = useState<string>();
+  const [verifyOk, setVerifyOk] = useState<boolean>();
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
   const [, setCashoutToastTriggers] = useState<Record<string, boolean>>({});
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-aviator");
@@ -61,6 +63,8 @@ export function TechAviator() {
       if (liveRoundRef.current !== data.gameState.roundId) {
         liveRoundRef.current = data.gameState.roundId;
         resetPanelsForRound();
+        setVerifyMessage(undefined);
+        setVerifyOk(undefined);
       }
       setGameState(data.gameState);
 
@@ -80,7 +84,7 @@ export function TechAviator() {
     if (!response.ok || !data) throw new Error(data?.error || (tr ? "Canlı SQL Tech Aviator roundu yüklenemedi." : "Live SQL Tech Aviator round could not be loaded."));
     applyLiveState(data);
     setConnected(true);
-    setConnectionNotice(tr ? "SQL canlı motoru aktif: round, hash, crash ve çarpan herkes için tek kaynaktan geliyor." : "Live SQL engine active: round, hash, crash and multiplier come from one shared source for everyone.");
+    setConnectionNotice(tr ? "SQL canlı motoru aktif: round, hash, düşüş noktası ve çarpan herkes için tek kaynaktan geliyor." : "Live SQL engine active: round, hash, drop point and multiplier come from one shared source for everyone.");
   }, [applyLiveState]);
 
   const postLiveAction = useCallback(async (payload: Record<string, unknown>) => {
@@ -99,13 +103,13 @@ export function TechAviator() {
 
   const placeBet = useCallback((panel: BetPanelState) => {
     if (gameState.status !== "STATUS_BETTING") {
-      setErrorMessage("Bahis süresi kapandı.");
+      setErrorMessage("Uçuşa katılım süresi kapandı.");
       return;
     }
 
     const amount = roundMoney(Number(panel.amount));
     if (!Number.isFinite(amount) || amount <= 0) {
-      setErrorMessage("Geçerli bir bahis miktarı girin.");
+      setErrorMessage("Geçerli bir Tech Coin katılım puanı girin.");
       return;
     }
 
@@ -114,13 +118,13 @@ export function TechAviator() {
       return;
     }
 
-    void postLiveAction({ action: "place-bet", roundId: gameState.roundId, panelId: panel.id, amount })
+    void postLiveAction({ action: "join-flight", roundId: gameState.roundId, panelId: panel.id, amount })
       .then(() => {
         updatePanel(panel.id, { isBetAccepted: true, hasCashedOut: false, activeBetAmount: amount });
         recordSessionBet(amount);
         setErrorMessage(undefined);
       })
-      .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Bahis reddedildi."));
+      .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Uçuş katılımı reddedildi."));
   }, [gameState.roundId, gameState.status, postLiveAction, updatePanel, wallet?.techCoinBalance]);
 
 
@@ -136,7 +140,7 @@ export function TechAviator() {
 
   const showCashoutSuccessToast = useCallback((panel: BetPanelState, amount: number, multiplier: number) => {
     const panelIndex = panels.findIndex((item) => item.id === panel.id);
-    const betLabel = `BAHİS ${panelIndex >= 0 ? panelIndex + 1 : panel.id} - TEBRİKLER!`;
+    const betLabel = `UÇUŞ ${panelIndex >= 0 ? panelIndex + 1 : panel.id} - ROUND PUANI KİLİTLENDİ`;
 
     setCashoutToastTriggers((current) => ({ ...current, [panel.id]: true }));
     setSuccessToasts((current) => ([
@@ -154,7 +158,7 @@ export function TechAviator() {
 
   const cashOut = useCallback((panel: BetPanelState) => {
     if (gameState.status !== "STATUS_FLYING" || !panel.isBetAccepted || panel.hasCashedOut) {
-      setErrorMessage("Nakit çekim şu anda uygun değil.");
+      setErrorMessage("Uçuşu durdurma şu anda uygun değil.");
       return;
     }
 
@@ -162,17 +166,17 @@ export function TechAviator() {
     if (cashoutLockRef.current.has(lockKey)) return;
     cashoutLockRef.current.add(lockKey);
 
-    void postLiveAction({ action: "cash-out", roundId: gameState.roundId, panelId: panel.id })
+    void postLiveAction({ action: "stop-flight", roundId: gameState.roundId, panelId: panel.id })
       .then((data) => {
         updatePanel(panel.id, { hasCashedOut: true });
-        const payout = Number(data.payout || (panel.activeBetAmount ?? panel.amount) * gameState.currentMultiplier);
+        const payout = Number(data.lockedScore || data.payout || (panel.activeBetAmount ?? panel.amount) * gameState.currentMultiplier);
         showCashoutSuccessToast(panel, payout, Number(data.multiplier || gameState.currentMultiplier || 1));
         recordSessionResult(roundMoney(payout - (panel.activeBetAmount ?? panel.amount)));
         setErrorMessage(undefined);
       })
       .catch((error) => {
         cashoutLockRef.current.delete(lockKey);
-        setErrorMessage(error instanceof Error ? error.message : "Nakit çekim reddedildi.");
+        setErrorMessage(error instanceof Error ? error.message : "Uçuşu durdurma reddedildi.");
       });
   }, [gameState.currentMultiplier, gameState.roundId, gameState.status, postLiveAction, showCashoutSuccessToast, updatePanel]);
 
@@ -237,12 +241,12 @@ export function TechAviator() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="mb-2 text-sm uppercase tracking-[0.55em] text-emerald-300">Crash / Tech Aviator</p>
+            <p className="mb-2 text-sm uppercase tracking-[0.55em] text-emerald-300">Arcade / Tech Aviator</p>
             <h1 className="text-4xl font-black tracking-tight sm:text-6xl">
               Tech Coin <span className="text-emerald-300 drop-shadow-[0_0_18px_rgba(16,185,129,0.8)]">Aviator</span>
             </h1>
             <p className="mt-3 max-w-2xl text-zinc-400">
-              {tr ? "Offline/demo motor kapalı: round, çarpan, crash noktası ve hash SQL üzerinden tek canlı kaynakta tutulur; herkes aynı uçuşu görür." : "Offline/demo engine is disabled: round, multiplier, crash point and hash are kept in one live SQL source, so everyone sees the same flight."}
+              {tr ? "Offline/demo motor kapalı: round, çarpan, düşüş noktası ve hash SQL üzerinden tek canlı kaynakta tutulur; herkes aynı uçuşu görür. Tech Coin yalnızca OFF Hub sanal puanıdır." : "Offline/demo engine is disabled: round, multiplier, drop point and hash are kept in one live SQL source, so everyone sees the same flight. Tech Coin is only an OFF Hub virtual score."}
             </p>
           </div>
           <TechWalletPanel wallet={wallet} connected={connected && Boolean(wallet)} />
@@ -268,6 +272,8 @@ export function TechAviator() {
           <span>{tr ? "Durum" : "Status"}: <strong className="text-white">{sqlModeLabel} / {gameState.status}</strong></span>
         </div>
 
+        <VerifyRound gameState={gameState} tr={tr} verifyMessage={verifyMessage} verifyOk={verifyOk} onVerify={(message, ok) => { setVerifyMessage(message); setVerifyOk(ok); }} />
+
         <RecentMultipliers rounds={recentMultipliers} tr={tr} />
 
         <div className="mb-5">
@@ -280,6 +286,81 @@ export function TechAviator() {
   );
 }
 
+
+function VerifyRound({ gameState, tr, verifyMessage, verifyOk, onVerify }: { gameState: GameState; tr: boolean; verifyMessage?: string; verifyOk?: boolean; onVerify: (message: string, ok: boolean) => void }) {
+  const canVerify = gameState.status === "STATUS_CRASHED" && Boolean(gameState.serverSeed && gameState.salt && gameState.nonce && gameState.hash);
+
+  const verifyRound = async () => {
+    if (!canVerify) {
+      onVerify(tr ? "Round bitmeden server seed gizli kalır; doğrulama düşüş sonrası yapılabilir." : "The server seed stays hidden until the round ends; verification is available after the drop.", false);
+      return;
+    }
+
+    const input = `${gameState.serverSeed}:${gameState.salt}:${gameState.nonce}`;
+    const computedHash = await sha256Hex(input);
+    const ok = computedHash === gameState.hash;
+    onVerify(
+      ok
+        ? (tr ? "Doğrulandı: Bu düşüş değeri round başlamadan önce kilitlenen hash ile uyumlu." : "Verified: this drop value matches the hash locked before the round started.")
+        : (tr ? "Doğrulama başarısız: hash uyuşmuyor." : "Verification failed: hash mismatch."),
+      ok,
+    );
+  };
+
+  return (
+    <section className="mb-5 rounded-3xl border border-cyan-300/20 bg-cyan-300/[0.06] p-5">
+      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-black text-cyan-100"><ShieldCheck className="h-5 w-5 text-emerald-300" /> {tr ? "Adalet / Round Doğrulama" : "Fairness / Verify Round"}</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            {tr ? "Server seed round bitene kadar gizlidir; başlangıçta yalnızca kilitli SHA-256 hash gösterilir." : "The server seed stays hidden until the round ends; only the locked SHA-256 hash is shown at the start."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={verifyRound}
+          disabled={!canVerify}
+          className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-2 text-sm font-black uppercase tracking-[0.18em] text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {tr ? "Bu roundu doğrula" : "Verify this round"}
+        </button>
+      </div>
+
+      <div className="grid gap-3 text-xs text-zinc-300 md:grid-cols-2 xl:grid-cols-3">
+        <FairValue label={tr ? "Round" : "Round"} value={gameState.roundId} />
+        <FairValue label={tr ? "Durum" : "Status"} value={gameState.status} />
+        <FairValue label={tr ? "Kilitli hash" : "Locked hash"} value={gameState.hash} mono />
+        <FairValue label="Server seed" value={gameState.serverSeed || (tr ? "Round bitince açıklanır" : "Revealed after round ends")} mono muted={!gameState.serverSeed} />
+        <FairValue label={tr ? "Salt / client seed" : "Salt / client seed"} value={gameState.salt || (tr ? "Round bitince açıklanır" : "Revealed after round ends")} mono muted={!gameState.salt} />
+        <FairValue label="Nonce" value={gameState.nonce ? String(gameState.nonce) : (tr ? "Round bitince açıklanır" : "Revealed after round ends")} mono muted={!gameState.nonce} />
+        <FairValue label={tr ? "Düşüş noktası" : "Drop point"} value={gameState.crashPoint ? `${gameState.crashPoint.toFixed(2)}x` : (tr ? "Round bitince açıklanır" : "Revealed after round ends")} muted={!gameState.crashPoint} />
+        <FairValue label={tr ? "Hash girdisi" : "Hash input"} value={gameState.hashInput || (tr ? "serverSeed:salt:nonce" : "serverSeed:salt:nonce")} mono muted={!gameState.hashInput} />
+      </div>
+
+      {verifyMessage ? (
+        <p className={`mt-4 flex items-center gap-2 rounded-2xl border p-3 text-sm font-bold ${verifyOk ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : "border-red-300/30 bg-red-300/10 text-red-100"}`}>
+          {verifyOk ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />} {verifyMessage}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function FairValue({ label, value, mono, muted }: { label: string; value: string; mono?: boolean; muted?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-black/35 p-3">
+      <div className="mb-1 text-[0.65rem] uppercase tracking-[0.22em] text-zinc-500">{label}</div>
+      <div className={`${mono ? "font-mono" : "font-semibold"} break-all ${muted ? "text-zinc-500" : "text-zinc-100"}`}>{value}</div>
+    </div>
+  );
+}
+
+async function sha256Hex(value: string) {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function RecentMultipliers({ rounds, tr }: { rounds: AviatorRoundResult[]; tr: boolean }) {
   return (
     <section className="mb-5 rounded-3xl border border-amber-300/20 bg-amber-300/[0.07] p-4">
@@ -288,10 +369,10 @@ function RecentMultipliers({ rounds, tr }: { rounds: AviatorRoundResult[]; tr: b
       </div>
       <div className="flex flex-wrap gap-2">
         {rounds.length ? rounds.map((round) => (
-          <span key={round.roundId} className={`rounded-full border px-3 py-1.5 font-mono text-sm font-black ${round.crashPoint >= 2 ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200" : "border-red-300/25 bg-red-300/10 text-red-200"}`}>
+          <span key={round.roundId} className={`rounded-full border px-3 py-1.5 font-mono text-sm font-black ${round.crashPoint >= 10 ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100" : round.crashPoint >= 2 ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200" : "border-red-300/25 bg-red-300/10 text-red-200"}`}>
             {round.crashPoint.toFixed(2)}x
           </span>
-        )) : <span className="text-sm text-amber-100/55">{tr ? "Henüz SQL'e yazılmış tamamlanan round yok; ilk crash sonrası liste dolacak." : "No completed rounds have been written to SQL yet; the list will populate after the first crash."}</span>}
+        )) : <span className="text-sm text-amber-100/55">{tr ? "Henüz SQL'e yazılmış tamamlanan round yok; ilk uçuş bitince liste dolacak." : "No completed rounds have been written to SQL yet; the list will populate after the first flight ends."}</span>}
       </div>
     </section>
   );

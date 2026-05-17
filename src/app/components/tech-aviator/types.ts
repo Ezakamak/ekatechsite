@@ -30,8 +30,10 @@ export interface AviatorRoundResult {
 export interface GameState {
   roundId: string;
   status: GameStatus;
-  salt: string;
+  salt?: string;
+  nonce?: number;
   hash: string;
+  hashInput?: string;
   serverSeed?: string;
   crashPoint?: number;
   currentMultiplier: number;

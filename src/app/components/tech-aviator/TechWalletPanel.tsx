@@ -25,7 +25,7 @@ export function TechWalletPanel({ wallet, connected }: TechWalletPanelProps) {
           <span className="absolute -right-1 -top-1 flex h-4 w-4 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.95)]" />
         </div>
         <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-emerald-200/70">{tr ? "OFF canlı Tech Coin" : "OFF live Tech Coin"}</p>
+          <p className="text-xs uppercase tracking-[0.35em] text-emerald-200/70">{tr ? "OFF Hub sanal Tech Coin" : "OFF Hub virtual Tech Coin"}</p>
           <h2 className="text-lg font-semibold text-white">{wallet?.userName ?? "Tech Pilot"}</h2>
         </div>
       </div>
@@ -33,7 +33,7 @@ export function TechWalletPanel({ wallet, connected }: TechWalletPanelProps) {
       <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-gradient-to-r from-emerald-400/10 via-cyan-400/10 to-transparent p-3">
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-sm text-zinc-300">
-            <Coins className="h-4 w-4 text-emerald-300" /> {tr ? "Bakiye" : "Balance"}
+            <Coins className="h-4 w-4 text-emerald-300" /> {tr ? "Sanal puan" : "Virtual score"}
           </span>
           <span className="font-mono text-xl font-black text-emerald-300 drop-shadow-[0_0_12px_rgba(16,185,129,0.85)]">
             {balance} TC
