@@ -3,6 +3,7 @@ import { AlertTriangle, DatabaseZap, Hash, ListRestart, ServerCog } from "lucide
 import { BetControls } from "./BetControls";
 import { TechCanvas } from "./TechCanvas";
 import { TechWalletPanel } from "./TechWalletPanel";
+import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "../ToastNoFactionSuccess";
 import type { AviatorRoundResult, BetPanelState, GameState, TechCoinWallet } from "./types";
 
 const BETTING_SECONDS = 8;
@@ -31,6 +32,8 @@ export function TechAviator() {
   const [connected, setConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [connectionNotice, setConnectionNotice] = useState<string>("SQL canlı motoruna bağlanıyor; tüm pilotlar aynı roundu görecek.");
+  const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
+  const [, setCashoutToastTriggers] = useState<Record<string, boolean>>({});
   const autoBetRoundRef = useRef<string>("");
   const liveRoundRef = useRef<string>(initialGameState.roundId);
   const cashoutLockRef = useRef<Set<string>>(new Set());
@@ -112,6 +115,35 @@ export function TechAviator() {
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Bahis reddedildi."));
   }, [gameState.roundId, gameState.status, postLiveAction, updatePanel, wallet?.techCoinBalance]);
 
+
+  const removeCashoutSuccessToast = useCallback((id: string) => {
+    setSuccessToasts((current) => {
+      const removedToast = current.find((toast) => toast.id === id);
+      if (removedToast?.sourceId) {
+        setCashoutToastTriggers((triggers) => ({ ...triggers, [removedToast.sourceId as string]: false }));
+      }
+      return current.filter((toast) => toast.id !== id);
+    });
+  }, []);
+
+  const showCashoutSuccessToast = useCallback((panel: BetPanelState, amount: number, multiplier: number) => {
+    const panelIndex = panels.findIndex((item) => item.id === panel.id);
+    const betLabel = `BAHİS ${panelIndex >= 0 ? panelIndex + 1 : panel.id} - TEBRİKLER!`;
+
+    setCashoutToastTriggers((current) => ({ ...current, [panel.id]: true }));
+    setSuccessToasts((current) => ([
+      ...current,
+      {
+        id: createToastNoFactionSuccessId(`toast-tech-aviator-${panel.id}`),
+        sourceId: panel.id,
+        title: betLabel,
+        amount: roundMoney(amount),
+        multiplier: Number.isFinite(multiplier) ? multiplier : 1,
+        currency: "TechCoin",
+      },
+    ]));
+  }, [panels]);
+
   const cashOut = useCallback((panel: BetPanelState) => {
     if (gameState.status !== "STATUS_FLYING" || !panel.isBetAccepted || panel.hasCashedOut) {
       setErrorMessage("Nakit çekim şu anda uygun değil.");
@@ -123,15 +155,16 @@ export function TechAviator() {
     cashoutLockRef.current.add(lockKey);
 
     void postLiveAction({ action: "cash-out", roundId: gameState.roundId, panelId: panel.id })
-      .then(() => {
+      .then((data) => {
         updatePanel(panel.id, { hasCashedOut: true });
+        showCashoutSuccessToast(panel, Number(data.payout || (panel.activeBetAmount ?? panel.amount) * gameState.currentMultiplier), Number(data.multiplier || gameState.currentMultiplier || 1));
         setErrorMessage(undefined);
       })
       .catch((error) => {
         cashoutLockRef.current.delete(lockKey);
         setErrorMessage(error instanceof Error ? error.message : "Nakit çekim reddedildi.");
       });
-  }, [gameState.roundId, gameState.status, postLiveAction, updatePanel]);
+  }, [gameState.currentMultiplier, gameState.roundId, gameState.status, postLiveAction, showCashoutSuccessToast, updatePanel]);
 
   useEffect(() => {
     let active = true;
@@ -174,6 +207,11 @@ export function TechAviator() {
 
   return (
     <main className="min-h-screen bg-black px-4 pb-16 pt-28 text-white sm:px-6">
+      {successToasts.length ? (
+        <div className="toast-nofaction-success-stack" aria-live="polite">
+          {successToasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale="tr-TR" onClose={removeCashoutSuccessToast} />)}
+        </div>
+      ) : null}
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
