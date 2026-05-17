@@ -8,6 +8,8 @@ export type ToastNoFactionSuccessPayload = {
   currency?: string;
   title?: string;
   sourceId?: string;
+  displayAmount?: string;
+  variant?: "success" | "danger" | "neutral";
 };
 
 export function createToastNoFactionSuccessId(prefix = "toast-nofaction-success") {
@@ -23,7 +25,7 @@ function formatWinAmount(amount: number, locale: string) {
   return new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.max(0, Math.floor(Number(amount) || 0)));
 }
 
-export function ToastNoFactionSuccess({ id, amount, multiplier, currency = "TechCoin", locale = "tr-TR", title = "CASHOUT BAŞARILI", onClose }: ToastNoFactionSuccessProps) {
+export function ToastNoFactionSuccess({ id, amount, multiplier, currency = "TechCoin", locale = "tr-TR", title = "CASHOUT BAŞARILI", displayAmount, variant = "success", onClose }: ToastNoFactionSuccessProps) {
   const removeFromDomAndState = useCallback(() => {
     document.getElementById(id)?.remove();
     onClose(id);
@@ -35,13 +37,13 @@ export function ToastNoFactionSuccess({ id, amount, multiplier, currency = "Tech
   }, [removeFromDomAndState]);
 
   return (
-    <button type="button" id={id} className="toast-nofaction-success" onClick={removeFromDomAndState} aria-live="polite" aria-label={`${title}: +${formatWinAmount(amount, locale)} ${currency}, ${multiplier.toFixed(2)}x`}>
+    <button type="button" id={id} className={`toast-nofaction-success toast-nofaction-success--${variant}`} onClick={removeFromDomAndState} aria-live="polite" aria-label={`${title}: ${displayAmount || `+${formatWinAmount(amount, locale)} ${currency}`}, ${multiplier.toFixed(2)}x`}>
       <span className="toast-nofaction-success__shine" aria-hidden="true" />
       <span className="toast-nofaction-success__burst toast-nofaction-success__burst--left" aria-hidden="true"><Sparkles /></span>
       <span className="toast-nofaction-success__burst toast-nofaction-success__burst--right" aria-hidden="true"><Sparkles /></span>
       <span className="toast-nofaction-success__icon" aria-hidden="true"><CheckCircle2 /></span>
       <span className="toast-nofaction-success__title">{title}</span>
-      <span className="toast-nofaction-success__amount">+{formatWinAmount(amount, locale)} {currency}</span>
+      <span className="toast-nofaction-success__amount">{displayAmount || `+${formatWinAmount(amount, locale)} ${currency}`}</span>
       <span className="toast-nofaction-success__multiplier">{multiplier.toFixed(2)}x</span>
       <span className="toast-nofaction-success__hint">Kapatmak için tıkla</span>
     </button>
