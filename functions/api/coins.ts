@@ -70,6 +70,89 @@ export async function onRequestGet(context: any) {
   }
 }
 
+export async function onRequestPost(context: any) {
+  const auth = await requireUser(context);
+  if (!auth.ok)
+    return Response.json({ error: auth.error }, { status: auth.status });
+
+  if (!["off", "admin", "owner"].includes(String(auth.user.role || ""))) {
+    return Response.json(
+      { error: "Bu ödül için OFF erişimi gerekiyor." },
+      { status: 403 },
+    );
+  }
+
+  const body = await context.request.json().catch(() => null);
+  if (body?.action !== "meme-clicker-reward") {
+    return Response.json({ error: "Geçersiz coin işlemi." }, { status: 400 });
+  }
+
+  const amount = 2;
+
+  try {
+    await ensureCoinTables(context);
+    await ensureWallet(context, auth.user.id);
+
+    await context.env.DB.prepare(
+      `
+        UPDATE coin_wallets
+        SET
+          balance = COALESCE(balance, 0) + ?,
+          lifetime_earned = COALESCE(lifetime_earned, 0) + ?,
+          updated_at = datetime('now')
+        WHERE user_id = ?
+      `,
+    )
+      .bind(amount, amount, auth.user.id)
+      .run();
+
+    await context.env.DB.prepare(
+      `
+        INSERT INTO coin_transactions (user_id, amount, reason, created_at)
+        VALUES (?, ?, ?, datetime('now'))
+      `,
+    )
+      .bind(auth.user.id, amount, "Meme Clicker reward")
+      .run();
+
+    const wallet = await context.env.DB.prepare(
+      `
+        SELECT
+          COALESCE(balance, 0) AS balance,
+          COALESCE(lifetime_earned, 0) AS lifetime_earned,
+          updated_at
+        FROM coin_wallets
+        WHERE user_id = ?
+      `,
+    )
+      .bind(auth.user.id)
+      .first();
+
+    const level = await getLevelProgress(context, auth.user.id);
+
+    return Response.json({
+      message: `+${amount} Tech Coin kazandın`,
+      reward: amount,
+      currency: "Tech Coin",
+      symbol: "TC",
+      balance: Number(wallet?.balance || 0),
+      lifetime_earned: Number(wallet?.lifetime_earned || 0),
+      updated_at: wallet?.updated_at || null,
+      wallet: {
+        balance: Number(wallet?.balance || 0),
+        lifetime_earned: Number(wallet?.lifetime_earned || 0),
+        updated_at: wallet?.updated_at || null,
+      },
+      level,
+    });
+  } catch (error) {
+    return Response.json(
+      { error: "Tech Coin ödülü eklenemedi." },
+      { status: 500 },
+    );
+  }
+}
+
 async function ensureCoinTables(context: any) {
   await context.env.DB.prepare(
     `
