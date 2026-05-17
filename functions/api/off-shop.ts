@@ -63,7 +63,7 @@ const SHOP_CATALOG: ShopItem[] = [
   },
   {
     slug: "deri-cuzdan",
-    name: "Deri Racon Cüzdanı",
+    name: "Halis Deri Cüzdan",
     emoji: "👝",
     description:
       "OFF vitrini için ağır deri cüzdan. Tech Coin cüzdanından ayrı koleksiyon eşyasıdır.",

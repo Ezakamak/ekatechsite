@@ -779,7 +779,7 @@ export function TechRoulette() {
           lastAnimatedRoundIdRef.current = data.lastResolvedRound.id;
           animateWheelTo(data.lastResolvedRound);
         }
-        setMessage("SQL senkronlu masa, geri sayım ve ortak çipler hazır.");
+        setMessage("Çevrimiçi masa, geri sayım ve ortak çipler hazır.");
       })
       .catch((error) =>
         setMessage(
@@ -992,15 +992,14 @@ export function TechRoulette() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-sm text-emerald-100">
-                  <ShieldCheck className="h-4 w-4" /> Backend RNG + SQL
+                  <ShieldCheck className="h-4 w-4" /> Canlı
                   ekatechwallet
                 </div>
                 <h1 className="mt-5 text-4xl font-semibold tracking-tight sm:text-6xl">
                   Tech Roulette
                 </h1>
                 <p className="mt-4 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">
-                  Avrupa ruleti: halıdan istediğin bahis alanına dokun, kendi
-                  Tech Coin miktarını yaz ve sunucu tarafı RNG ile turu başlat.
+                  Avrupa ruleti: Bahisler aşağıda gördüğünüz Tech Coin Cüzdanınınzdan kullanılır.
                 </p>
               </div>
               <TechCoinWalletBadge />
@@ -1097,7 +1096,7 @@ export function TechRoulette() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <StatCard
                     icon={<Dice5 className="h-4 w-4" />}
-                    label="Bahis"
+                    label="Seçili Bahis"
                     value={
                       stakeMode === "item" && selectedItem
                         ? `${selectedItem.emoji} ${formatTc(selectedItem.roulette_value, locale)} TC`
@@ -1106,7 +1105,7 @@ export function TechRoulette() {
                   />
                   <StatCard
                     icon={<Database className="h-4 w-4" />}
-                    label="SQL durum"
+                    label="Rulet Masası"
                     value={spinning ? "Çevriliyor" : "Hazır"}
                   />
                 </div>
@@ -1115,12 +1114,12 @@ export function TechRoulette() {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-xs uppercase tracking-[0.22em] text-cyan-50/55">
-                        {currentRound ? `Ortak tur #${currentRound.id}` : "Bahisler kapalı"}
+                        {currentRound ? `Tur Sayısı #${currentRound.id}` : "Bahisler kapalı"}
                       </p>
                       <p className="mt-2 text-sm text-white/60">
                         {currentRound
                           ? "Bahis süresi sadece masa açıkken işler; sayaç bitince bahisler kapanır ve top döner."
-                          : "Top kazanan cebe akarken yeni bahis sayacı başlamaz; sonraki tur açılınca tam sayaç görünür."}
+                          : "Top kazanan cebe akarken yeni bahis sayacı başlamaz."}
                       </p>
                     </div>
                     <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-full border border-cyan-100/30 bg-black/30">
@@ -1138,10 +1137,10 @@ export function TechRoulette() {
                       Sonuç gizli
                     </p>
                     <p className="mt-3 text-lg font-semibold text-amber-50">
-                      Top en az belirlenen süre boyunca döner; süre dolsa bile kazanan cebe doğal şekilde varana kadar durmaz.
+                      Top Durduğunda Sonuç Açıklanacaktır. Lütfen Bekleyiniz...
                     </p>
                     <p className="mt-2 text-sm text-white/55">
-                      Zamanlayıcıyla zorla bitirme yok; top aynı yörüngede pocket hizasını takip ederek sonuç verir.
+                      Biliyor muysun? Birçok enayi birey tüm parasının kırmızıya koyuyor.
                     </p>
                   </div>
                 ) : result && (
@@ -1322,7 +1321,7 @@ export function TechRoulette() {
 
         <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-7">
           <div className="mb-4 flex items-center gap-2 text-white/80">
-            <History className="h-5 w-5" /> Son SQL logları
+            <History className="h-5 w-5" /> Son Kazanç/Kayıp listesi
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {recent.length === 0 ? (
@@ -1431,8 +1430,7 @@ function RouletteLiveChat() {
             sohbet
           </h2>
           <p className="mt-2 text-sm text-white/50">
-            Admin chat mantığındaki canlı yenileme burada rulet masasına özel
-            çalışır; OFF oyuncuları aynı masada konuşur.
+            Rulet Masasına Özel Çevrimiçi Sohbet, hadi ilk raconu sen koy.
           </p>
         </div>
         <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-semibold text-emerald-100">
@@ -1922,7 +1920,7 @@ function RaconItemEffects({
         <div className="tech-roulette-gift-spotlight tech-roulette-gift-spotlight--right" />
         {uniqueLabels.map((label, index) => {
           const [emoji = "💎", ...nameParts] = label.split(/\s+/);
-          const giftName = nameParts.join(" ") || "Racon hediyesi";
+          const giftName = nameParts.join(" ") || "Raconu Koydu!";
           const tone = itemEffectForLabel(label);
           const pathOffset = (index * 5) % TIKTOK_GIFT_PATHS.length;
           return (

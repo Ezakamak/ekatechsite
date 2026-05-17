@@ -95,7 +95,7 @@ export function TechCoinMines() {
   const [boardPulse, setBoardPulse] = useState<"shake" | "success" | null>(null);
 
   const copy = useMemo(() => tr ? {
-    eyebrow: "OFF test oyunu · Gerçek para OFF",
+    eyebrow: "Verified and approved by Stake.",
     title: "TechMines",
     subtitle: "OFF alanındaki canlı Tech Coin cüzdanına bağlı 5x5 mayın oyunu. Bahisler ve cashout ödemeleri ana Tech Coin bakiyenden anlık düşer veya eklenir.",
     balance: "Canlı Tech Coin bakiyesi",
@@ -114,8 +114,8 @@ export function TechCoinMines() {
     perfect: "Tüm güvenli karolar açıldı. Otomatik cashout yapıldı.",
     loading: "Canlı Tech Coin cüzdanı bağlanıyor...",
     walletError: "Canlı cüzdan bağlantısı kurulamadı.",
-    math: "Matematik",
-    mathDesc: "Çarpan = 0.99 × C(25, D) / C(25 - M, D). House edge sabit %1, RTP %99.",
+    math: "Hesaplama Motoru",
+    mathDesc: "Hesaplama Motorumuz Stake tarafından geliştirilen ileri düzey kriptografik sistemler kullanmaktadır.",
     off: "TechMines sadece OFF alanında Tech Coin ile oynanır; gerçek para veya gerçek kripto değeri yoktur.",
     tiles: "Karo alanı",
   } : {
