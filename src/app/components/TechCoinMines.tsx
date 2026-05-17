@@ -3,6 +3,7 @@ import { AlertTriangle, Coins, Gem, Info, ShieldCheck, Sparkles } from "lucide-r
 import { useLanguage } from "../i18n";
 import { playOffSound } from "./OffSoundEngine";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
+import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
 
 type Tile = { id: number; isMine: boolean; isRevealed: boolean };
 type Notice = { type: "success" | "error" | "info"; text: string } | null;
@@ -95,6 +96,7 @@ export function TechCoinMines() {
   const [notice, setNotice] = useState<Notice>(null);
   const [boardPulse, setBoardPulse] = useState<"shake" | "success" | null>(null);
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
+  const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-mines");
 
   const copy = useMemo(() => tr ? {
     eyebrow: "Verified and approved by Stake.",
@@ -275,6 +277,7 @@ export function TechCoinMines() {
     }
     const data = await runMinesAction({ action: "start", betAmount, mineCount: gameState.mineCount });
     if (!data) return;
+    recordSessionBet(betAmount);
     setNotice({ type: "info", text: copy.off });
     playOffSound("bet");
   }
@@ -285,6 +288,7 @@ export function TechCoinMines() {
     if (!data) return;
     setNotice({ type: "success", text: copy.cashed });
     showCashoutSuccessToast(data.payout || cashoutAmount, Number(data.round?.currentMultiplier || gameState.currentMultiplier || 1));
+    recordSessionResult(roundTc(data.payout || cashoutAmount) - gameState.currentRoundBet);
     playOffSound("cashout");
     flashBoard("success");
   }
@@ -299,6 +303,7 @@ export function TechCoinMines() {
 
     if (data.message === "mine_hit") {
       setNotice({ type: "error", text: copy.mine });
+      recordSessionResult(-gameState.currentRoundBet);
       playOffSound("mine");
       flashBoard("shake");
       return;
@@ -307,6 +312,7 @@ export function TechCoinMines() {
     if (data.message === "perfect") {
       setNotice({ type: "success", text: copy.perfect });
       showCashoutSuccessToast(data.payout || 0, Number(data.round?.currentMultiplier || gameState.currentMultiplier || 1));
+      recordSessionResult(roundTc(data.payout || 0) - gameState.currentRoundBet);
       playOffSound("win");
       flashBoard("success");
       return;
@@ -342,6 +348,10 @@ export function TechCoinMines() {
               <p className="mt-2 text-cyan-100/75">{copy.mathDesc}</p>
             </div>
           </div>
+        </section>
+
+        <section className="mb-6">
+          <GameSessionStatsPanel gameName="Tech Mines" stats={sessionStats} onReset={resetSessionStats} />
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">

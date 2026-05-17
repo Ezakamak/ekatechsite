@@ -4,6 +4,7 @@ import { BetControls } from "./BetControls";
 import { TechCanvas } from "./TechCanvas";
 import { TechWalletPanel } from "./TechWalletPanel";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "../ToastNoFactionSuccess";
+import { GameSessionStatsPanel, useGameSessionStats } from "../GameSessionStats";
 import type { AviatorRoundResult, BetPanelState, GameState, TechCoinWallet } from "./types";
 
 const BETTING_SECONDS = 8;
@@ -34,9 +35,11 @@ export function TechAviator() {
   const [connectionNotice, setConnectionNotice] = useState<string>("SQL canlı motoruna bağlanıyor; tüm pilotlar aynı roundu görecek.");
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
   const [, setCashoutToastTriggers] = useState<Record<string, boolean>>({});
+  const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-aviator");
   const autoBetRoundRef = useRef<string>("");
   const liveRoundRef = useRef<string>(initialGameState.roundId);
   const cashoutLockRef = useRef<Set<string>>(new Set());
+  const settledCrashLossesRef = useRef<Set<string>>(new Set());
 
   const updatePanel = useCallback((panelId: string, patch: Partial<BetPanelState>) => {
     setPanels((current) => current.map((panel) => (panel.id === panelId ? { ...panel, ...patch } : panel)));
@@ -110,6 +113,7 @@ export function TechAviator() {
     void postLiveAction({ action: "place-bet", roundId: gameState.roundId, panelId: panel.id, amount })
       .then(() => {
         updatePanel(panel.id, { isBetAccepted: true, hasCashedOut: false, activeBetAmount: amount });
+        recordSessionBet(amount);
         setErrorMessage(undefined);
       })
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Bahis reddedildi."));
@@ -157,7 +161,9 @@ export function TechAviator() {
     void postLiveAction({ action: "cash-out", roundId: gameState.roundId, panelId: panel.id })
       .then((data) => {
         updatePanel(panel.id, { hasCashedOut: true });
-        showCashoutSuccessToast(panel, Number(data.payout || (panel.activeBetAmount ?? panel.amount) * gameState.currentMultiplier), Number(data.multiplier || gameState.currentMultiplier || 1));
+        const payout = Number(data.payout || (panel.activeBetAmount ?? panel.amount) * gameState.currentMultiplier);
+        showCashoutSuccessToast(panel, payout, Number(data.multiplier || gameState.currentMultiplier || 1));
+        recordSessionResult(roundMoney(payout - (panel.activeBetAmount ?? panel.amount)));
         setErrorMessage(undefined);
       })
       .catch((error) => {
@@ -192,6 +198,18 @@ export function TechAviator() {
     autoBetRoundRef.current = gameState.roundId;
     panels.filter((panel) => panel.autoBet && !panel.isBetAccepted).forEach((panel) => window.setTimeout(() => placeBet(panel), 250));
   }, [gameState.roundId, gameState.status, panels, placeBet]);
+
+  useEffect(() => {
+    if (gameState.status !== "STATUS_CRASHED") return;
+
+    panels.forEach((panel) => {
+      if (!panel.isBetAccepted || panel.hasCashedOut) return;
+      const lossKey = `${gameState.roundId}:${panel.id}`;
+      if (settledCrashLossesRef.current.has(lossKey)) return;
+      settledCrashLossesRef.current.add(lossKey);
+      recordSessionResult(-Number(panel.activeBetAmount ?? panel.amount));
+    });
+  }, [gameState.roundId, gameState.status, panels, recordSessionResult]);
 
   useEffect(() => {
     if (gameState.status !== "STATUS_FLYING") return;
@@ -247,6 +265,10 @@ export function TechAviator() {
         </div>
 
         <RecentMultipliers rounds={recentMultipliers} />
+
+        <div className="mb-5">
+          <GameSessionStatsPanel gameName="Tech Aviator" stats={sessionStats} onReset={resetSessionStats} />
+        </div>
 
         <BetControls panels={panels} status={gameState.status} currentMultiplier={gameState.currentMultiplier} onPanelChange={updatePanel} onPlaceBet={placeBet} onCashOut={cashOut} />
       </div>

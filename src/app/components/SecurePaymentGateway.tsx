@@ -12,6 +12,8 @@ import {
 type GatewayStage = "form" | "verifying" | "error";
 type FailureScenario = "timeout" | "declined";
 
+type CheckoutPackage = { slug: string; name: string; priceTl: string; techCoin: number; exp: number };
+
 type PaymentForm = {
   holder: string;
   card: string;
@@ -57,6 +59,14 @@ export function SecurePaymentGateway() {
   const [stage, setStage] = useState<GatewayStage>("form");
   const [scenario, setScenario] = useState<FailureScenario>("timeout");
   const [form, setForm] = useState<PaymentForm>(emptyForm);
+  const [checkoutPackage] = useState<CheckoutPackage | null>(() => {
+    try {
+      const saved = window.sessionStorage.getItem("ekatech:checkout-package");
+      return saved ? JSON.parse(saved) as CheckoutPackage : null;
+    } catch {
+      return null;
+    }
+  });
 
   const referenceCode = useMemo(
     () =>
@@ -136,7 +146,7 @@ export function SecurePaymentGateway() {
             <div className="flex justify-between gap-4 text-sm">
               <span className="text-slate-500">Ürün</span>
               <strong className="text-right text-slate-950">
-                10.000 TechCoin Paketi
+                {checkoutPackage?.name || "TechCoin Paketi"}
               </strong>
             </div>
             <div className="flex justify-between gap-4 text-sm">
@@ -151,11 +161,19 @@ export function SecurePaymentGateway() {
                 {referenceCode}
               </strong>
             </div>
+            {checkoutPackage ? (
+              <div className="flex justify-between gap-4 text-sm">
+                <span className="text-slate-500">Paket İçeriği</span>
+                <strong className="text-right text-slate-950">
+                  {checkoutPackage.techCoin.toLocaleString("tr-TR")} TC · {checkoutPackage.exp.toLocaleString("tr-TR")} EXP
+                </strong>
+              </div>
+            ) : null}
             <div className="border-t border-slate-200 pt-4">
               <div className="flex items-end justify-between gap-4">
                 <span className="text-sm text-slate-500">Tutar</span>
                 <strong className="text-3xl font-black text-[#0a3d62]">
-                  149.90 TL
+                  {checkoutPackage?.priceTl || "149,90 TL"}
                 </strong>
               </div>
             </div>

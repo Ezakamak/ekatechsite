@@ -167,7 +167,21 @@ export function CoreRaid() {
   const regenPerDay = Number(state?.regen_per_day || 500);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
+    <main className="core-raid-occupied relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
+      <style>{`
+        @keyframes coreRaidScan { 0% { transform: translateY(-120%); opacity: 0; } 12%, 72% { opacity: 0.5; } 100% { transform: translateY(120%); opacity: 0; } }
+        @keyframes coreRaidJitter { 0%, 100% { transform: translate(0); } 20% { transform: translate(-2px, 1px); } 42% { transform: translate(3px, -1px); } 68% { transform: translate(-1px, -2px); } }
+        .core-raid-occupied::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 5px), linear-gradient(90deg, rgba(239,68,68,0.08), transparent 20%, rgba(34,211,238,0.06) 52%, transparent 80%); mix-blend-mode: screen; opacity: 0.42; }
+        .core-raid-occupied::after { content: ""; position: fixed; left: -10%; right: -10%; top: 0; height: 38vh; z-index: 0; pointer-events: none; background: linear-gradient(180deg, transparent, rgba(255,255,255,0.13), transparent); animation: coreRaidScan 4.8s linear infinite; }
+        .core-raid-glitch-copy { position: absolute; inset: 0; color: rgba(248,113,113,0.48); transform: translate(2px, -1px); clip-path: inset(0 0 58% 0); mix-blend-mode: screen; animation: coreRaidJitter 0.9s steps(2,end) infinite; }
+      `}</style>
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        {Array.from({ length: 11 }, (_, index) => (
+          <span key={index} className="absolute h-5 rounded-sm bg-black/80 shadow-[0_0_18px_rgba(248,113,113,0.28)]" style={{ left: `${(index * 19) % 86}%`, top: `${12 + ((index * 13) % 74)}%`, width: `${9 + (index % 5) * 6}rem`, transform: `rotate(${index % 2 ? -2 : 2}deg)` }} />
+        ))}
+        <div className="absolute left-0 top-[18%] h-10 w-full bg-red-500/10 blur-sm" />
+        <div className="absolute right-0 top-[47%] h-8 w-2/3 bg-cyan-400/10 blur-sm" />
+      </div>
       <div className="pointer-events-none absolute inset-0 opacity-30">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[size:4rem_4rem]" />
         <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_50%,rgba(255,255,255,0.035)_50%)] bg-[size:100%_6px]" />
@@ -202,7 +216,7 @@ export function CoreRaid() {
                 <ShieldAlert className="h-4 w-4" /> {defeated ? c.restored : c.active}
               </div>
               <p className="mt-5 text-sm uppercase tracking-[0.28em] text-cyan-100/60">{c.eyebrow}</p>
-              <h1 className="mt-3 text-5xl font-medium tracking-tight sm:text-7xl">{c.title}</h1>
+              <div className="relative mt-3 inline-block"><span className="core-raid-glitch-copy" aria-hidden="true">{c.title}</span><h1 className="relative text-5xl font-medium tracking-tight sm:text-7xl">{c.title}</h1></div>
               <p className="mt-5 max-w-3xl text-lg leading-8 text-white/55">{c.subtitle}</p>
               <div className="mt-5 max-w-3xl rounded-2xl border border-red-300/15 bg-red-400/[0.06] p-4 font-mono text-xs leading-6 text-red-100/65">
                 <span className="text-red-100">{c.breach}</span> — {c.unstable}
