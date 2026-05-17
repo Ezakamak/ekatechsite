@@ -328,7 +328,9 @@ export default function App() {
       redirectTimer = undefined;
     };
 
-    const startCheckoutRedirect = () => {
+    const startCheckoutRedirect = (event?: Event) => {
+      const pack = (event as CustomEvent | undefined)?.detail;
+      if (pack) window.sessionStorage.setItem("ekatech:checkout-package", JSON.stringify(pack));
       clearRedirect();
       setCheckoutRedirecting(true);
       redirectTimer = window.setTimeout(() => {

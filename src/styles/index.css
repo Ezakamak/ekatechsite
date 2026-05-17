@@ -293,7 +293,7 @@
   left: 50%;
   position: absolute;
   top: 0;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   width: 1px;
 }
 
@@ -572,17 +572,17 @@
 @keyframes toast-nofaction-success-pop {
   0% {
     opacity: 0;
-    transform: translate(-50%, -18px) scale(0.78);
+    transform: translateY(-18px) scale(0.78);
     filter: blur(1px) saturate(1.15);
   }
   58% {
     opacity: 1;
-    transform: translate(-50%, 0) scale(1.08);
+    transform: translateY(0) scale(1.08);
     filter: blur(0) saturate(1.45);
   }
   100% {
     opacity: 1;
-    transform: translate(-50%, 0) scale(1);
+    transform: translateY(0) scale(1);
     filter: blur(0) saturate(1.25);
   }
 }
@@ -590,11 +590,11 @@
 @keyframes toast-nofaction-success-fade {
   0%, 78% {
     opacity: 1;
-    transform: translate(-50%, 0) scale(1);
+    transform: translateY(0) scale(1);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -20px) scale(0.96);
+    transform: translateY(-20px) scale(0.96);
   }
 }
 
@@ -614,13 +614,13 @@
 .toast-nofaction-success-stack {
   position: fixed;
   left: 50%;
-  top: clamp(5.5rem, 10vh, 8rem);
+  top: 50%;
   z-index: 9999;
   display: grid;
   width: min(92vw, 22rem);
   gap: 0.75rem;
   pointer-events: none;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
 }
 
 .toast-nofaction-success {

@@ -418,7 +418,9 @@ export function OffPage() {
     if (type === "tl-package") {
       setBuyingSlug(slug);
       setShopMessage("Güvenli ödeme sayfasına yönlendiriliyorsunuz...");
-      window.dispatchEvent(new Event("ekatech-start-techcoin-checkout"));
+      const pack = tlPackages.find((item) => item.slug === slug);
+      if (pack) window.sessionStorage.setItem("ekatech:checkout-package", JSON.stringify(pack));
+      window.dispatchEvent(new CustomEvent("ekatech-start-techcoin-checkout", { detail: pack }));
       window.setTimeout(() => setBuyingSlug(null), 1800);
       return;
     }

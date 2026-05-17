@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bomb, Coins, Gem, Info, RotateCcw, ShieldCheck, Sparkles, Star, Trophy, Wallet, Zap } from "lucide-react";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
+import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
 
 const STORAGE_KEY = "ekatech:eka-towers:v2";
 const LEVELS = 9;
@@ -89,6 +90,7 @@ export function EkaTowers() {
   const [shake, setShake] = useState(false);
   const [lastWin, setLastWin] = useState(0);
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
+  const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("eka-towers");
 
   const difficulty = useMemo(() => getDifficulty(round?.difficultyKey || difficultyKey), [difficultyKey, round?.difficultyKey]);
   const isPlaying = Boolean(round?.isRoundActive);
@@ -207,6 +209,7 @@ export function EkaTowers() {
 
     const data = await runTowerAction({ action: "start", betAmount: nextBet, difficultyKey });
     if (!data) return;
+    recordSessionBet(nextBet);
     setNotice({ type: "info", text: "Round started with your live OFF Tech Coin balance." });
     setLastWin(0);
   }
@@ -217,6 +220,7 @@ export function EkaTowers() {
     if (!data) return;
     setNotice({ type: "success", text: `Cashed out ${formatTc(data.payout || 0)} TC to the live wallet.` });
     showCashoutSuccessToast(data.payout || cashoutValue, Number(data.round?.currentMultiplier || round?.currentMultiplier || 1));
+    recordSessionResult(roundTc(data.payout || cashoutValue) - activeBet);
   }
 
   async function pickTile(rowIndex: number, tileIndex: number) {
@@ -228,12 +232,14 @@ export function EkaTowers() {
       setShake(true);
       window.setTimeout(() => setShake(false), 520);
       setNotice({ type: "error", text: "Bomb hit. The round is over and the bet stays spent." });
+      recordSessionResult(-activeBet);
       return;
     }
 
     if (data.message === "tower_cleared") {
       setNotice({ type: "success", text: `Tower cleared! ${formatTc(data.payout || 0)} TC landed in your live wallet.` });
       showCashoutSuccessToast(data.payout || 0, Number(data.round?.currentMultiplier || 1));
+      recordSessionResult(roundTc(data.payout || 0) - activeBet);
       return;
     }
 
@@ -333,6 +339,8 @@ export function EkaTowers() {
               ))}
             </div>
           </div>
+
+          <GameSessionStatsPanel gameName="Eka Towers" stats={sessionStats} onReset={resetSessionStats} />
 
           <div className="grid grid-cols-2 gap-2">
             <StatCard icon={<Coins className="h-4 w-4" />} label="Bet" value={`${formatTc(activeBet)} TC`} />
