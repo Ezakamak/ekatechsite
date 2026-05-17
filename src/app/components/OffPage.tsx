@@ -795,8 +795,6 @@ export function OffPage() {
             description={copy.diceDesc}
             accent="cyan"
             buttonLabel={copy.open}
-            visual={<DiceSliderVisual />}
-            badge="Tech Coin"
             onClick={() => {
               playOffSound("bet");
               setActiveGame("dice");
@@ -1231,8 +1229,6 @@ function GameCard({
   accent,
   buttonLabel,
   locked = false,
-  visual,
-  badge,
   onClick,
 }: {
   icon: ReactNode;
@@ -1242,8 +1238,6 @@ function GameCard({
   accent: "cyan" | "purple" | "amber";
   buttonLabel?: string;
   locked?: boolean;
-  visual?: ReactNode;
-  badge?: string;
   onClick?: () => void;
 }) {
   const accentClasses = {
@@ -1278,8 +1272,6 @@ function GameCard({
         </span>
       </div>
       <h2 className="mt-5 text-2xl font-medium text-white">{title}</h2>
-      {visual ? <div className="mt-4">{visual}</div> : null}
-      {badge ? <span className="mt-4 inline-flex rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-semibold text-emerald-100">{badge} support</span> : null}
       <p className="mt-3 min-h-24 text-sm leading-6 text-white/50">
         {description}
       </p>
@@ -1301,26 +1293,5 @@ function GameCard({
         </button>
       )}
     </motion.div>
-  );
-}
-
-
-function DiceSliderVisual() {
-  return (
-    <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
-      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-        <span>Roll Under</span>
-        <span>Roll Over</span>
-      </div>
-      <div className="mt-3 h-4 overflow-hidden rounded-full bg-white/10 shadow-[0_0_26px_rgba(34,211,238,0.18)]">
-        <div className="grid h-full grid-cols-2">
-          <div className="bg-emerald-400/90" />
-          <div className="bg-red-400/90" />
-        </div>
-      </div>
-      <div className="mt-3 flex items-center justify-center gap-2 text-sm text-cyan-100">
-        <Dice5 className="h-4 w-4" /> 0-100 target slider
-      </div>
-    </div>
   );
 }
