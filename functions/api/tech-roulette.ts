@@ -13,6 +13,16 @@ const ROUND_SECONDS = 18;
 // ball still has not physically reached the winning pocket.
 const RESULT_REVEAL_MIN_SECONDS = 22;
 
+function rouletteUserColor(userId: number | string) {
+  const key = String(userId || 0);
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) >>> 0;
+  }
+  const hue = Math.round((hash * 137.508) % 360);
+  return `hsl(${hue} 78% 64%)`;
+}
+
 const OPEN_ROUND_SELECT = `
   SELECT id, status, betting_started_at, spins_at, winning_number, winning_color, winning_parity,
          server_seed_hash, server_seed, client_seed, nonce, result_hmac, created_at, resolved_at
@@ -517,24 +527,62 @@ function loadRecentNumbers(context: any) {
   ).all();
 }
 
-function loadRoundBets(context: any, roundId: number, userId: number) {
-  return context.env.DB.prepare(
+async function loadRoundBets(context: any, roundId: number, userId: number) {
+  const result = await context.env.DB.prepare(
     `
-      SELECT bet_type, bet_value, COUNT(*) AS chip_count, SUM(bet_amount) AS total_amount,
-             MAX(created_at) AS last_bet_at,
-             GROUP_CONCAT(substr(user_name, 1, 14), ', ') AS users,
-             GROUP_CONCAT(stake_item_label, ', ') AS item_labels,
-             GROUP_CONCAT(id, ',') AS bet_ids,
-             GROUP_CONCAT(CASE WHEN user_id = ? THEN id END, ',') AS my_bet_ids
+      SELECT id, user_id, user_name, bet_type, bet_value, bet_amount, stake_item_label, created_at
       FROM tech_roulette_bets
       WHERE round_id = ? AND status = 'pending'
-      GROUP BY bet_type, COALESCE(bet_value, '')
-      ORDER BY last_bet_at DESC
+      ORDER BY created_at DESC, id DESC
     `,
   )
-    .bind(userId, roundId)
-    .all()
-    .then((result: any) => result?.results || []);
+    .bind(roundId)
+    .all();
+
+  const grouped = new Map<string, any>();
+  for (const row of result?.results || []) {
+    const key = `${row.bet_type}:${row.bet_value == null ? "" : row.bet_value}`;
+    const existing = grouped.get(key) || {
+      bet_type: row.bet_type,
+      bet_value: row.bet_value,
+      chip_count: 0,
+      total_amount: 0,
+      last_bet_at: row.created_at,
+      users: [] as string[],
+      user_colors: [] as string[],
+      item_labels: [] as string[],
+      bet_ids: [] as string[],
+      my_bet_ids: [] as string[],
+    };
+    const userColor = rouletteUserColor(row.user_id);
+    const userLabel = String(row.user_name || "OFF Player").slice(0, 14);
+
+    existing.chip_count += 1;
+    existing.total_amount += Number(row.bet_amount || 0);
+    existing.last_bet_at = existing.last_bet_at || row.created_at;
+    if (!existing.users.includes(userLabel)) existing.users.push(userLabel);
+    if (!existing.user_colors.includes(userColor))
+      existing.user_colors.push(userColor);
+    if (row.stake_item_label) existing.item_labels.push(row.stake_item_label);
+    existing.bet_ids.push(String(row.id));
+    if (Number(row.user_id) === Number(userId))
+      existing.my_bet_ids.push(String(row.id));
+    grouped.set(key, existing);
+  }
+
+  return [...grouped.values()]
+    .sort((left, right) =>
+      String(right.last_bet_at || "").localeCompare(String(left.last_bet_at || "")),
+    )
+    .map((bet) => ({
+      ...bet,
+      users: bet.users.join(", "),
+      user_colors: bet.user_colors.join(","),
+      primary_user_color: bet.user_colors[0] || rouletteUserColor(userId),
+      item_labels: bet.item_labels.join(", "),
+      bet_ids: bet.bet_ids.join(","),
+      my_bet_ids: bet.my_bet_ids.join(","),
+    }));
 }
 
 function loadUserRoundBets(context: any, roundId: number, userId: number) {

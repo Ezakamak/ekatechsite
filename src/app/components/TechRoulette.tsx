@@ -85,6 +85,8 @@ type TableBet = {
   chip_count: number;
   total_amount: number;
   users?: string | null;
+  user_colors?: string | null;
+  primary_user_color?: string | null;
   item_labels?: string | null;
   bet_ids?: string | null;
   my_bet_ids?: string | null;
@@ -115,6 +117,7 @@ type RouletteChatMessage = {
   user_avatar_url?: string;
   user_role?: string;
   user_level?: number;
+  user_color?: string;
   message: string;
   created_at?: string;
 };
@@ -1382,7 +1385,10 @@ function RouletteLiveChat() {
               className="rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3"
             >
               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-white/38">
-                <span className="inline-flex items-center gap-1 font-semibold text-cyan-100/80">
+                <span
+                  className="inline-flex items-center gap-1 font-semibold"
+                  style={{ color: item.user_color || "#a5f3fc" }}
+                >
                   {item.user_name}
                   {Number(item.user_level || 1) >= 5 ? (
                     <BadgeCheck className="h-3.5 w-3.5 fill-blue-500 text-white" />
@@ -1672,22 +1678,30 @@ function ChipPile({
 }) {
   if (!chip) return null;
   const totalAmount = Number(chip.total_amount || 0);
-  const chipCount = Math.min(99, Number(chip.chip_count || 1));
   const canCancel = Boolean(chip.my_bet_ids);
-  const chipTone =
-    totalAmount >= 5000
-      ? "from-fuchsia-200 via-violet-500 to-cyan-400"
-      : totalAmount >= 1000
-        ? "from-amber-100 via-orange-500 to-red-600"
-        : totalAmount >= 100
-          ? "from-cyan-100 via-sky-500 to-blue-700"
-          : "from-emerald-100 via-lime-500 to-emerald-700";
+  const assignedColors = String(
+    chip.user_colors || chip.primary_user_color || "#22c55e",
+  )
+    .split(",")
+    .map((color) => color.trim())
+    .filter(Boolean);
+  const uniqueColors = [...new Set(assignedColors)].slice(0, 6);
+  const chipBackground =
+    uniqueColors.length > 1
+      ? `conic-gradient(${uniqueColors
+          .map((color, index) => {
+            const start = Math.round((index / uniqueColors.length) * 100);
+            const end = Math.round(((index + 1) / uniqueColors.length) * 100);
+            return `${color} ${start}% ${end}%`;
+          })
+          .join(", ")})`
+      : uniqueColors[0] || "#22c55e";
 
   return (
     <span
       role={canCancel ? "button" : undefined}
       tabIndex={canCancel ? 0 : undefined}
-      title={`${chip.users || "Oyuncular"} · ${formatTc(totalAmount, "tr-TR")} TC${canCancel ? " · Geri çekmek için bas" : ""}`}
+      title={`${chip.users || "Oyuncular"} · ${formatTc(totalAmount, "tr-TR")} chips${canCancel ? " · Geri çekmek için bas" : ""}`}
       onClick={(event) => {
         event.stopPropagation();
         if (canCancel) onCancelBet(chip);
@@ -1698,10 +1712,13 @@ function ChipPile({
         event.stopPropagation();
         onCancelBet(chip);
       }}
-      className={`absolute -right-3 -top-3 z-20 flex min-w-12 origin-bottom items-center justify-center rounded-full border-2 border-white/80 bg-gradient-to-br ${chipTone} px-2.5 py-1.5 text-[0.62rem] font-black text-white shadow-[0_8px_18px_rgba(0,0,0,0.42)] ring-2 ring-black/30 transition hover:scale-110 ${canCancel ? "cursor-pointer animate-[chip-pop_0.72s_cubic-bezier(0.2,1.2,0.2,1)]" : "pointer-events-none animate-[chip-land_1.6s_ease-in-out_infinite]"}`}
+      style={{ background: chipBackground }}
+      className={`absolute -right-3 -top-3 z-20 flex min-w-16 origin-bottom items-center justify-center rounded-full border-2 border-white/80 px-2.5 py-1.5 text-[0.62rem] font-black text-white shadow-[0_8px_18px_rgba(0,0,0,0.42)] ring-2 ring-black/30 transition hover:scale-110 ${canCancel ? "cursor-pointer animate-[chip-pop_0.72s_cubic-bezier(0.2,1.2,0.2,1)]" : "pointer-events-none animate-[chip-land_1.6s_ease-in-out_infinite]"}`}
     >
-      <span className="absolute inset-1 rounded-full border border-white/45" />
-      <span className="relative tabular-nums">{chipCount} chip</span>
+      <span className="absolute inset-1 rounded-full border border-white/45 bg-black/10" />
+      <span className="relative whitespace-nowrap tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+        {formatTc(totalAmount, "tr-TR")} chips
+      </span>
     </span>
   );
 }
