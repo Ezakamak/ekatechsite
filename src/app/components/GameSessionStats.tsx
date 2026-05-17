@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Coins, TrendingUp } from "lucide-react";
+import { useLanguage } from "../i18n";
 
 export type SessionStatsGameKey = "tech-mines" | "eka-towers" | "tech-aviator" | "tech-dice" | "tech-blackjack";
 
@@ -103,6 +104,8 @@ export function useGameSessionStats(gameKey: SessionStatsGameKey) {
 }
 
 export function GameSessionStatsPanel({ gameName, stats, onReset }: { gameName: string; stats: SessionStats; onReset?: () => void }) {
+  const { language } = useLanguage();
+  const tr = language === "tr";
   const netPositive = stats.netGain >= 0;
   const chart = useMemo(() => buildChart(stats.points), [stats.points]);
   const chartId = useMemo(() => gameName.toLowerCase().replace(/[^a-z0-9]+/g, "-"), [gameName]);
@@ -124,18 +127,18 @@ export function GameSessionStatsPanel({ gameName, stats, onReset }: { gameName: 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.16),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(244,63,94,0.13),transparent_32%)]" />
       <div className="relative flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-100/45">Session Stats</p>
-          <h3 className="mt-1 flex items-center gap-2 text-xl font-black text-white"><TrendingUp className="h-5 w-5 text-emerald-300" /> Profit Chart</h3>
-          <p className="mt-1 text-xs text-white/40">{gameName} · Tech Coin oturum performansı</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-100/45">{tr ? "Oturum İstatistikleri" : "Session Stats"}</p>
+          <h3 className="mt-1 flex items-center gap-2 text-xl font-black text-white"><TrendingUp className="h-5 w-5 text-emerald-300" /> {tr ? "Kâr Grafiği" : "Profit Chart"}</h3>
+          <p className="mt-1 text-xs text-white/40">{gameName} · {tr ? "Tech Coin oturum performansı" : "Tech Coin session performance"}</p>
         </div>
-        {onReset ? <button type="button" onClick={onReset} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/55 transition hover:bg-white/[0.08]">Reset</button> : null}
+        {onReset ? <button type="button" onClick={onReset} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/55 transition hover:bg-white/[0.08]">{tr ? "Sıfırla" : "Reset"}</button> : null}
       </div>
 
       <div className="relative mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Metric label="Net Gain" value={`${netPositive ? "+" : ""}${formatTc(stats.netGain)} TC`} tone={netPositive ? "positive" : "negative"} />
-        <Metric label="Amount" value={`${formatTc(stats.amount)} TC`} icon={<Coins className="h-4 w-4 text-amber-300" />} />
-        <Metric label="Wins" value={String(stats.wins)} tone="positive" />
-        <Metric label="Losses" value={String(stats.losses)} tone="negative" />
+        <Metric label={tr ? "Net Kazanç" : "Net Gain"} value={`${netPositive ? "+" : ""}${formatTc(stats.netGain)} TC`} tone={netPositive ? "positive" : "negative"} />
+        <Metric label={tr ? "Tutar" : "Amount"} value={`${formatTc(stats.amount)} TC`} icon={<Coins className="h-4 w-4 text-amber-300" />} />
+        <Metric label={tr ? "Kazanç" : "Wins"} value={String(stats.wins)} tone="positive" />
+        <Metric label={tr ? "Kayıp" : "Losses"} value={String(stats.losses)} tone="negative" />
       </div>
 
       <div className="relative mt-4 overflow-hidden rounded-[1.35rem] border border-white/10 bg-[linear-gradient(180deg,rgba(7,17,26,0.92),rgba(2,6,12,0.96))] p-2 shadow-inner shadow-black/40 sm:p-3">

@@ -1,5 +1,6 @@
 import { Plane, RadioTower } from "lucide-react";
 import type { GameStatus } from "./types";
+import { useLanguage } from "../../i18n";
 
 interface TechCanvasProps {
   multiplier: number;
@@ -9,6 +10,8 @@ interface TechCanvasProps {
 }
 
 export function TechCanvas({ multiplier, status, countdown, crashPoint }: TechCanvasProps) {
+  const { language } = useLanguage();
+  const tr = language === "tr";
   const flightProgress = Math.min(86, Math.max(8, (Math.log(multiplier) / Math.log(20)) * 80 + 8));
   const isFlying = status === "STATUS_FLYING";
   const isCrashed = status === "STATUS_CRASHED";
@@ -57,18 +60,18 @@ export function TechCanvas({ multiplier, status, countdown, crashPoint }: TechCa
 
       <div className="relative z-10 flex min-h-[460px] flex-col items-center justify-center px-6 text-center">
         <p className="mb-4 flex items-center gap-2 rounded-full border border-cyan-300/20 bg-black/40 px-4 py-2 text-xs uppercase tracking-[0.4em] text-cyan-100/80">
-          <RadioTower className="h-4 w-4 text-emerald-300" /> Provably Fair SHA-256 Flight
+          <RadioTower className="h-4 w-4 text-emerald-300" /> {tr ? "Kanıtlanabilir Adil SHA-256 Uçuş" : "Provably Fair SHA-256 Flight"}
         </p>
         <h1 className={`font-mono text-7xl font-black sm:text-8xl ${isCrashed ? "text-red-400 drop-shadow-[0_0_26px_rgba(248,113,113,0.9)]" : "text-emerald-300 drop-shadow-[0_0_30px_rgba(16,185,129,0.9)]"}`}>
           {multiplier.toFixed(2)}x
         </h1>
         {status === "STATUS_BETTING" ? (
-          <p className="mt-6 text-2xl font-bold text-white">Bahis dönemi: {countdown}s</p>
+          <p className="mt-6 text-2xl font-bold text-white">{tr ? "Bahis dönemi" : "Betting period"}: {countdown}s</p>
         ) : null}
         {isCrashed ? (
-          <p className="mt-6 text-3xl font-black uppercase tracking-[0.2em] text-red-300">TECH CRASH / FLEW AWAY</p>
+          <p className="mt-6 text-3xl font-black uppercase tracking-[0.2em] text-red-300">{tr ? "TECH CRASH / UÇTU" : "TECH CRASH / FLEW AWAY"}</p>
         ) : null}
-        {crashPoint ? <p className="mt-3 text-sm text-zinc-400">Son doğrulanan crash point: {crashPoint.toFixed(2)}x</p> : null}
+        {crashPoint ? <p className="mt-3 text-sm text-zinc-400">{tr ? "Son doğrulanan crash noktası" : "Last verified crash point"}: {crashPoint.toFixed(2)}x</p> : null}
       </div>
     </section>
   );

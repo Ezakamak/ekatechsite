@@ -5,6 +5,7 @@ import { TechCanvas } from "./TechCanvas";
 import { TechWalletPanel } from "./TechWalletPanel";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "../ToastNoFactionSuccess";
 import { GameSessionStatsPanel, useGameSessionStats } from "../GameSessionStats";
+import { useLanguage } from "../../i18n";
 import type { AviatorRoundResult, BetPanelState, GameState, TechCoinWallet } from "./types";
 
 const BETTING_SECONDS = 8;
@@ -25,6 +26,9 @@ const initialGameState: GameState = {
 };
 
 export function TechAviator() {
+  const { language } = useLanguage();
+  const tr = language === "tr";
+  const locale = tr ? "tr-TR" : "en-US";
   const [wallet, setWallet] = useState<TechCoinWallet>();
   const [recentMultipliers, setRecentMultipliers] = useState<AviatorRoundResult[]>([]);
   const [gameState, setGameState] = useState<GameState>(initialGameState);
@@ -32,7 +36,7 @@ export function TechAviator() {
   const [countdown, setCountdown] = useState(BETTING_SECONDS);
   const [connected, setConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [connectionNotice, setConnectionNotice] = useState<string>("SQL canlı motoruna bağlanıyor; tüm pilotlar aynı roundu görecek.");
+  const [connectionNotice, setConnectionNotice] = useState<string>(tr ? "SQL canlı motoruna bağlanıyor; tüm pilotlar aynı roundu görecek." : "Connecting to the live SQL engine; every pilot will see the same round.");
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
   const [, setCashoutToastTriggers] = useState<Record<string, boolean>>({});
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-aviator");
@@ -73,10 +77,10 @@ export function TechAviator() {
   const loadLiveState = useCallback(async () => {
     const response = await fetch("/api/tech-aviator", { credentials: "same-origin", cache: "no-store" });
     const data = await response.json().catch(() => null);
-    if (!response.ok || !data) throw new Error(data?.error || "Canlı SQL Tech Aviator roundu yüklenemedi.");
+    if (!response.ok || !data) throw new Error(data?.error || (tr ? "Canlı SQL Tech Aviator roundu yüklenemedi." : "Live SQL Tech Aviator round could not be loaded."));
     applyLiveState(data);
     setConnected(true);
-    setConnectionNotice("SQL canlı motoru aktif: round, hash, crash ve çarpan herkes için tek kaynaktan geliyor.");
+    setConnectionNotice(tr ? "SQL canlı motoru aktif: round, hash, crash ve çarpan herkes için tek kaynaktan geliyor." : "Live SQL engine active: round, hash, crash and multiplier come from one shared source for everyone.");
   }, [applyLiveState]);
 
   const postLiveAction = useCallback(async (payload: Record<string, unknown>) => {
@@ -177,8 +181,8 @@ export function TechAviator() {
     const refresh = () => loadLiveState().catch((error) => {
       if (!active) return;
       setConnected(false);
-      setConnectionNotice("SQL canlı motoruna ulaşılamadı; offline/demo round açılmadı, tekrar deneniyor.");
-      setErrorMessage(error instanceof Error ? error.message : "Canlı SQL Tech Aviator roundu yüklenemedi.");
+      setConnectionNotice(tr ? "SQL canlı motoruna ulaşılamadı; offline/demo round açılmadı, tekrar deneniyor." : "Could not reach the live SQL engine; no offline/demo round was opened, retrying.");
+      setErrorMessage(error instanceof Error ? error.message : (tr ? "Canlı SQL Tech Aviator roundu yüklenemedi." : "Live SQL Tech Aviator round could not be loaded."));
     });
 
     refresh();
@@ -221,13 +225,13 @@ export function TechAviator() {
     });
   }, [cashOut, gameState.currentMultiplier, gameState.status, panels]);
 
-  const sqlModeLabel = useMemo(() => (connected ? "SQL ONLINE" : "SQL BAĞLANIYOR"), [connected]);
+  const sqlModeLabel = useMemo(() => (connected ? "SQL ONLINE" : (tr ? "SQL BAĞLANIYOR" : "SQL CONNECTING")), [connected, tr]);
 
   return (
     <main className="min-h-screen bg-black px-4 pb-16 pt-28 text-white sm:px-6">
       {successToasts.length ? (
         <div className="toast-nofaction-success-stack" aria-live="polite">
-          {successToasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale="tr-TR" onClose={removeCashoutSuccessToast} />)}
+          {successToasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale={locale} onClose={removeCashoutSuccessToast} />)}
         </div>
       ) : null}
       <div className="mx-auto max-w-7xl">
@@ -238,7 +242,7 @@ export function TechAviator() {
               Tech Coin <span className="text-emerald-300 drop-shadow-[0_0_18px_rgba(16,185,129,0.8)]">Aviator</span>
             </h1>
             <p className="mt-3 max-w-2xl text-zinc-400">
-              Offline/demo motor kapalı: round, çarpan, crash noktası ve hash SQL üzerinden tek canlı kaynakta tutulur; herkes aynı uçuşu görür.
+              {tr ? "Offline/demo motor kapalı: round, çarpan, crash noktası ve hash SQL üzerinden tek canlı kaynakta tutulur; herkes aynı uçuşu görür." : "Offline/demo engine is disabled: round, multiplier, crash point and hash are kept in one live SQL source, so everyone sees the same flight."}
             </p>
           </div>
           <TechWalletPanel wallet={wallet} connected={connected && Boolean(wallet)} />
@@ -259,12 +263,12 @@ export function TechAviator() {
         <TechCanvas multiplier={gameState.currentMultiplier} status={gameState.status} countdown={countdown} crashPoint={gameState.crashPoint} />
 
         <div className="my-5 grid gap-3 rounded-3xl border border-zinc-800 bg-zinc-950/80 p-4 text-xs text-zinc-400 md:grid-cols-3">
-          <span className="flex items-center gap-2"><ServerCog className="h-4 w-4 text-cyan-300" /> Tur: {gameState.roundId}</span>
+          <span className="flex items-center gap-2"><ServerCog className="h-4 w-4 text-cyan-300" /> {tr ? "Tur" : "Round"}: {gameState.roundId}</span>
           <span className="flex items-center gap-2"><Hash className="h-4 w-4 text-emerald-300" /> Hash: {gameState.hash.slice(0, 24)}...</span>
-          <span>Status: <strong className="text-white">{sqlModeLabel} / {gameState.status}</strong></span>
+          <span>{tr ? "Durum" : "Status"}: <strong className="text-white">{sqlModeLabel} / {gameState.status}</strong></span>
         </div>
 
-        <RecentMultipliers rounds={recentMultipliers} />
+        <RecentMultipliers rounds={recentMultipliers} tr={tr} />
 
         <div className="mb-5">
           <GameSessionStatsPanel gameName="Tech Aviator" stats={sessionStats} onReset={resetSessionStats} />
@@ -276,18 +280,18 @@ export function TechAviator() {
   );
 }
 
-function RecentMultipliers({ rounds }: { rounds: AviatorRoundResult[] }) {
+function RecentMultipliers({ rounds, tr }: { rounds: AviatorRoundResult[]; tr: boolean }) {
   return (
     <section className="mb-5 rounded-3xl border border-amber-300/20 bg-amber-300/[0.07] p-4">
       <div className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.22em] text-amber-100/80">
-        <ListRestart className="h-4 w-4" /> Son 10 SQL round çarpanları
+        <ListRestart className="h-4 w-4" /> {tr ? "Son 10 SQL round çarpanları" : "Last 10 SQL round multipliers"}
       </div>
       <div className="flex flex-wrap gap-2">
         {rounds.length ? rounds.map((round) => (
           <span key={round.roundId} className={`rounded-full border px-3 py-1.5 font-mono text-sm font-black ${round.crashPoint >= 2 ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200" : "border-red-300/25 bg-red-300/10 text-red-200"}`}>
             {round.crashPoint.toFixed(2)}x
           </span>
-        )) : <span className="text-sm text-amber-100/55">Henüz SQL'e yazılmış tamamlanan round yok; ilk crash sonrası liste dolacak.</span>}
+        )) : <span className="text-sm text-amber-100/55">{tr ? "Henüz SQL'e yazılmış tamamlanan round yok; ilk crash sonrası liste dolacak." : "No completed rounds have been written to SQL yet; the list will populate after the first crash."}</span>}
       </div>
     </section>
   );

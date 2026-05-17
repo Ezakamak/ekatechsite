@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bomb, Coins, Gem, Info, RotateCcw, ShieldCheck, Sparkles, Star, Trophy, Wallet, Zap } from "lucide-react";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
 import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
+import { useLanguage } from "../i18n";
 
 const STORAGE_KEY = "ekatech:eka-towers:v2";
 const LEVELS = 9;
@@ -33,7 +34,7 @@ type Round = {
 
 type Difficulty = {
   key: DifficultyKey;
-  label: string;
+  label: { en: string; tr: string };
   safeTiles: number;
   traps: number;
   chance: string;
@@ -41,9 +42,9 @@ type Difficulty = {
 };
 
 const DIFFICULTIES: Difficulty[] = [
-  { key: "easy", label: "Easy", safeTiles: 3, traps: 1, chance: "75%", accent: "from-emerald-300 to-cyan-300" },
-  { key: "medium", label: "Medium", safeTiles: 2, traps: 2, chance: "50%", accent: "from-cyan-300 to-blue-300" },
-  { key: "hard", label: "Hard", safeTiles: 1, traps: 3, chance: "25%", accent: "from-rose-300 to-amber-300" },
+  { key: "easy", label: { en: "Easy", tr: "Kolay" }, safeTiles: 3, traps: 1, chance: "75%", accent: "from-emerald-300 to-cyan-300" },
+  { key: "medium", label: { en: "Medium", tr: "Orta" }, safeTiles: 2, traps: 2, chance: "50%", accent: "from-cyan-300 to-blue-300" },
+  { key: "hard", label: { en: "Hard", tr: "Zor" }, safeTiles: 1, traps: 3, chance: "25%", accent: "from-rose-300 to-amber-300" },
 ];
 
 function roundTc(value: number) {
@@ -51,7 +52,7 @@ function roundTc(value: number) {
 }
 
 function formatTc(value: number) {
-  return new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(roundTc(value));
+  return new Intl.NumberFormat(document.documentElement.lang === "tr" ? "tr-TR" : "en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(roundTc(value));
 }
 
 function getDifficulty(key: DifficultyKey) {
@@ -79,6 +80,9 @@ function createEmptyMatrix() {
 }
 
 export function EkaTowers() {
+  const { language } = useLanguage();
+  const tr = language === "tr";
+  const locale = tr ? "tr-TR" : "en-US";
   const [walletBalance, setWalletBalance] = useState(0);
   const [betAmount, setBetAmount] = useState(DEFAULT_BET);
   const [difficultyKey, setDifficultyKey] = useState<DifficultyKey>("medium");
@@ -121,10 +125,10 @@ export function EkaTowers() {
     try {
       const response = await fetch("/api/techcoin-towers", { credentials: "same-origin", cache: "no-store" });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error(data?.error || "Live Tech Coin wallet connection failed.");
+      if (!response.ok || !data) throw new Error(data?.error || (tr ? "Canlı Tech Coin cüzdan bağlantısı başarısız." : "Live Tech Coin wallet connection failed."));
       applyServerState(data);
     } catch (error) {
-      setNotice({ type: "error", text: error instanceof Error ? error.message : "Live Tech Coin wallet connection failed." });
+      setNotice({ type: "error", text: error instanceof Error ? error.message : (tr ? "Canlı Tech Coin cüzdan bağlantısı başarısız." : "Live Tech Coin wallet connection failed.") });
     } finally {
       setWalletLoading(false);
     }
@@ -140,12 +144,12 @@ export function EkaTowers() {
         body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error(data?.error || "Eka Towers action failed.");
+      if (!response.ok || !data) throw new Error(data?.error || (tr ? "Eka Towers işlemi başarısız oldu." : "Eka Towers action failed."));
       applyServerState(data);
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
       return data;
     } catch (error) {
-      setNotice({ type: "error", text: error instanceof Error ? error.message : "Eka Towers action failed." });
+      setNotice({ type: "error", text: error instanceof Error ? error.message : (tr ? "Eka Towers işlemi başarısız oldu." : "Eka Towers action failed.") });
       return null;
     } finally {
       setActionLoading(false);
@@ -199,18 +203,18 @@ export function EkaTowers() {
   async function startGame() {
     const nextBet = roundTc(betAmount);
     if (nextBet < 1) {
-      setNotice({ type: "error", text: "Bet must be at least 1 Tech Coin." });
+      setNotice({ type: "error", text: (tr ? "Bahis en az 1 Tech Coin olmalı." : "Bet must be at least 1 Tech Coin.") });
       return;
     }
     if (walletBalance < nextBet) {
-      setNotice({ type: "error", text: "Not enough live Tech Coin. Lower the bet or earn more TC." });
+      setNotice({ type: "error", text: (tr ? "Yeterli canlı Tech Coin yok. Bahsi düşür veya daha fazla TC kazan." : "Not enough live Tech Coin. Lower the bet or earn more TC.") });
       return;
     }
 
     const data = await runTowerAction({ action: "start", betAmount: nextBet, difficultyKey });
     if (!data) return;
     recordSessionBet(nextBet);
-    setNotice({ type: "info", text: "Round started with your live OFF Tech Coin balance." });
+    setNotice({ type: "info", text: (tr ? "Round canlı OFF Tech Coin bakiyenle başladı." : "Round started with your live OFF Tech Coin balance.") });
     setLastWin(0);
   }
 
@@ -218,7 +222,7 @@ export function EkaTowers() {
     if (!canCashout) return;
     const data = await runTowerAction({ action: "cashout" });
     if (!data) return;
-    setNotice({ type: "success", text: `Cashed out ${formatTc(data.payout || 0)} TC to the live wallet.` });
+    setNotice({ type: "success", text: tr ? `${formatTc(data.payout || 0)} TC canlı cüzdana cashout edildi.` : `Cashed out ${formatTc(data.payout || 0)} TC to the live wallet.` });
     showCashoutSuccessToast(data.payout || cashoutValue, Number(data.round?.currentMultiplier || round?.currentMultiplier || 1));
     recordSessionResult(roundTc(data.payout || cashoutValue) - activeBet);
   }
@@ -231,19 +235,19 @@ export function EkaTowers() {
     if (data.message === "trap_hit") {
       setShake(true);
       window.setTimeout(() => setShake(false), 520);
-      setNotice({ type: "error", text: "Bomb hit. The round is over and the bet stays spent." });
+      setNotice({ type: "error", text: (tr ? "Bombaya denk geldin. Round bitti ve bahis harcandı." : "Bomb hit. The round is over and the bet stays spent.") });
       recordSessionResult(-activeBet);
       return;
     }
 
     if (data.message === "tower_cleared") {
-      setNotice({ type: "success", text: `Tower cleared! ${formatTc(data.payout || 0)} TC landed in your live wallet.` });
+      setNotice({ type: "success", text: tr ? `Kule temizlendi! ${formatTc(data.payout || 0)} TC canlı cüzdanına geçti.` : `Tower cleared! ${formatTc(data.payout || 0)} TC landed in your live wallet.` });
       showCashoutSuccessToast(data.payout || 0, Number(data.round?.currentMultiplier || 1));
       recordSessionResult(roundTc(data.payout || 0) - activeBet);
       return;
     }
 
-    setNotice({ type: "success", text: "Star found. Next level unlocked." });
+    setNotice({ type: "success", text: (tr ? "Yıldız bulundu. Sıradaki seviye açıldı." : "Star found. Next level unlocked.") });
   }
 
   const actionButton = isPlaying ? (
@@ -253,7 +257,7 @@ export function EkaTowers() {
       disabled={!canCashout}
       className="rounded-2xl bg-gradient-to-r from-emerald-300 to-cyan-300 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-slate-950 shadow-xl shadow-cyan-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100"
     >
-      Cashout {formatTc(cashoutValue)} TC
+      {tr ? "Cashout" : "Cashout"} {formatTc(cashoutValue)} TC
     </button>
   ) : (
     <button
@@ -262,7 +266,7 @@ export function EkaTowers() {
       disabled={!canStart}
       className="rounded-2xl bg-gradient-to-r from-cyan-300 via-sky-300 to-emerald-300 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-slate-950 shadow-xl shadow-cyan-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:from-slate-600 disabled:to-slate-500 disabled:text-white/45 disabled:hover:scale-100"
     >
-      Start Climb ({formatTc(betAmount)} TC)
+      {tr ? "Tırmanışı Başlat" : "Start Climb"} ({formatTc(betAmount)} TC)
     </button>
   );
 
@@ -270,7 +274,7 @@ export function EkaTowers() {
     <main className="min-h-screen overflow-hidden bg-[#0f212e] px-3 pb-10 pt-24 text-white sm:px-5">
       {successToasts.length ? (
         <div className="toast-nofaction-success-stack" aria-live="polite">
-          {successToasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale="tr-TR" onClose={removeCashoutSuccessToast} />)}
+          {successToasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale={locale} onClose={removeCashoutSuccessToast} />)}
         </div>
       ) : null}
       <div className="pointer-events-none fixed inset-0 opacity-70">
@@ -286,14 +290,14 @@ export function EkaTowers() {
                 <p className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-cyan-100">
                   <Zap className="h-3.5 w-3.5" /> Eka Towers
                 </p>
-                <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">Live Tech Coin tower</h1>
+                <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">{tr ? "Canlı Tech Coin kulesi" : "Live Tech Coin tower"}</h1>
                 <p className="mt-3 text-sm leading-6 text-white/55">
-                  Uses the live OFF Tech Coin wallet. Fixed bets are removed: enter any TC amount and climb the compact 9-level board.
+                  {tr ? "Canlı OFF Tech Coin cüzdanını kullanır. Sabit bahisler kaldırıldı: istediğin TC tutarını gir ve kompakt 9 seviyeli tahtada tırman." : "Uses the live OFF Tech Coin wallet. Fixed bets are removed: enter any TC amount and climb the compact 9-level board."}
                 </p>
               </div>
               <div className="shrink-0 rounded-2xl border border-amber-300/20 bg-black/25 p-3 text-center shadow-xl shadow-amber-400/10">
                 <Wallet className="mx-auto h-5 w-5 text-amber-200" />
-                <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-amber-100/55">Live wallet</p>
+                <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-amber-100/55">{tr ? "Canlı cüzdan" : "Live wallet"}</p>
                 <p className="mt-1 text-2xl font-black text-white drop-shadow-[0_0_18px_rgba(251,191,36,0.35)]">{walletLoading ? "..." : `${formatTc(walletBalance)} TC`}</p>
               </div>
             </div>
@@ -301,7 +305,7 @@ export function EkaTowers() {
 
           <div className="rounded-[1.6rem] border border-white/10 bg-[#1a2c38]/95 p-4 backdrop-blur-xl sm:p-5">
             <label className="block">
-              <span className="text-xs font-bold uppercase tracking-[0.18em] text-white/45">Bet amount (Tech Coin)</span>
+              <span className="text-xs font-bold uppercase tracking-[0.18em] text-white/45">{tr ? "Bahis tutarı (Tech Coin)" : "Bet amount (Tech Coin)"}</span>
               <input
                 type="number"
                 min="1"
@@ -322,7 +326,7 @@ export function EkaTowers() {
           </div>
 
           <div className="rounded-[1.6rem] border border-white/10 bg-[#1a2c38]/95 p-4 backdrop-blur-xl sm:p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/40">Difficulty</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/40">{tr ? "Zorluk" : "Difficulty"}</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
               {DIFFICULTIES.map((item) => (
                 <button
@@ -332,9 +336,9 @@ export function EkaTowers() {
                   onClick={() => setDifficultyKey(item.key)}
                   className={`rounded-2xl border p-3 text-left transition ${difficulty.key === item.key ? "border-cyan-200/60 bg-cyan-200/12" : "border-white/10 bg-white/[0.035] hover:bg-white/[0.07]"} disabled:cursor-not-allowed disabled:opacity-55`}
                 >
-                  <span className={`inline-flex rounded-full bg-gradient-to-r ${item.accent} px-3 py-1 text-[11px] font-black text-slate-950`}>{item.label}</span>
-                  <p className="mt-2 text-xs font-semibold text-white">{item.safeTiles} Stars / {item.traps} Bomb{item.traps > 1 ? "s" : ""}</p>
-                  <p className="mt-1 text-[11px] text-white/45">{item.chance} per row</p>
+                  <span className={`inline-flex rounded-full bg-gradient-to-r ${item.accent} px-3 py-1 text-[11px] font-black text-slate-950`}>{item.label[language]}</span>
+                  <p className="mt-2 text-xs font-semibold text-white">{item.safeTiles} {tr ? "Yıldız" : "Stars"} / {item.traps} {tr ? "Bomba" : `Bomb${item.traps > 1 ? "s" : ""}`}</p>
+                  <p className="mt-1 text-[11px] text-white/45">{item.chance} {tr ? "satır başına" : "per row"}</p>
                 </button>
               ))}
             </div>
@@ -343,10 +347,10 @@ export function EkaTowers() {
           <GameSessionStatsPanel gameName="Eka Towers" stats={sessionStats} onReset={resetSessionStats} />
 
           <div className="grid grid-cols-2 gap-2">
-            <StatCard icon={<Coins className="h-4 w-4" />} label="Bet" value={`${formatTc(activeBet)} TC`} />
-            <StatCard icon={<ShieldCheck className="h-4 w-4" />} label="Level" value={isPlaying ? `${currentLevel + 1} / ${LEVELS}` : "Ready"} />
-            <StatCard icon={<Trophy className="h-4 w-4" />} label="Cashout" value={`${formatTc(cashoutValue)} TC`} />
-            <StatCard icon={<Sparkles className="h-4 w-4" />} label="Last win" value={`${formatTc(lastWin)} TC`} />
+            <StatCard icon={<Coins className="h-4 w-4" />} label={tr ? "Bahis" : "Bet"} value={`${formatTc(activeBet)} TC`} />
+            <StatCard icon={<ShieldCheck className="h-4 w-4" />} label={tr ? "Seviye" : "Level"} value={isPlaying ? `${currentLevel + 1} / ${LEVELS}` : (tr ? "Hazır" : "Ready")} />
+            <StatCard icon={<Trophy className="h-4 w-4" />} label={tr ? "Cashout" : "Cashout"} value={`${formatTc(cashoutValue)} TC`} />
+            <StatCard icon={<Sparkles className="h-4 w-4" />} label={tr ? "Son kazanç" : "Last win"} value={`${formatTc(lastWin)} TC`} />
           </div>
 
           <div className="rounded-[1.6rem] border border-white/10 bg-[#1a2c38]/95 p-4 backdrop-blur-xl sm:p-5">
@@ -354,7 +358,7 @@ export function EkaTowers() {
               {actionButton}
               {!isPlaying && round && round.status !== "active" ? (
                 <button type="button" onClick={loadLiveState} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-white/70 transition hover:bg-white/[0.08]">
-                  <RotateCcw className="h-4 w-4" /> Refresh Board
+                  <RotateCcw className="h-4 w-4" /> {tr ? "Tahtayı Yenile" : "Refresh Board"}
                 </button>
               ) : null}
             </div>
@@ -365,10 +369,10 @@ export function EkaTowers() {
         <div className={`rounded-[1.7rem] border border-cyan-300/15 bg-[#1a2c38]/95 p-3 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl sm:p-4 ${shake ? "animate-[eka-tower-shake_0.52s_ease-in-out]" : ""}`}>
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100/55">9-level tower</p>
-              <h2 className="mt-1 text-xl font-black text-white">Pick one tile on the active row</h2>
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100/55">{tr ? "9 seviyeli kule" : "9-level tower"}</p>
+              <h2 className="mt-1 text-xl font-black text-white">{tr ? "Aktif satırda bir karo seç" : "Pick one tile on the active row"}</h2>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-[11px] font-bold text-white/60"><Info className="h-3.5 w-3.5" /> Bottom starts at Level 1</div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-[11px] font-bold text-white/60"><Info className="h-3.5 w-3.5" /> {tr ? "Alt sıra 1. seviyeden başlar" : "Bottom starts at Level 1"}</div>
           </div>
 
           <div className="flex flex-col-reverse gap-1.5">
@@ -394,7 +398,7 @@ export function EkaTowers() {
                           disabled={!active || tile.revealed || actionLoading}
                           onClick={() => pickTile(rowIndex, tileIndex)}
                           className={`h-9 rounded-xl border text-base transition duration-200 sm:h-10 md:h-11 lg:h-12 ${active ? "cursor-pointer border-cyan-200/55 bg-[#0f212e] hover:-translate-y-0.5 hover:border-cyan-100 hover:bg-cyan-300/10" : "cursor-default border-white/10 bg-[#0f212e]/80"} ${showSafe ? "!border-emerald-200/70 !bg-emerald-400/20 text-emerald-100 shadow-[0_0_16px_rgba(52,211,153,0.2)]" : ""} ${showTrap ? "!border-rose-200/70 !bg-rose-500/25 text-rose-100 shadow-[0_0_16px_rgba(244,63,94,0.22)]" : ""}`}
-                          aria-label={`Level ${levelLabel} tile ${tileIndex + 1}`}
+                          aria-label={tr ? `Seviye ${levelLabel} karo ${tileIndex + 1}` : `Level ${levelLabel} tile ${tileIndex + 1}`}
                         >
                           {showSafe ? <Star className="mx-auto h-4 w-4 fill-current sm:h-5 sm:w-5" /> : showTrap ? <Bomb className="mx-auto h-4 w-4 sm:h-5 sm:w-5" /> : active ? <Gem className="mx-auto h-4 w-4 text-cyan-100/75" /> : <span className="text-white/20">◆</span>}
                         </button>
@@ -407,7 +411,7 @@ export function EkaTowers() {
           </div>
 
           <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-xs leading-5 text-white/45">
-            Formula: payout = bet × 0.99 ÷ cumulative survival probability. Current {difficulty.label} row chance is {difficulty.chance}; next preview is {formatTc(previewValue)} TC.
+            {tr ? "Formül" : "Formula"}: {tr ? "ödeme" : "payout"} = {tr ? "bahis" : "bet"} × 0.99 ÷ {tr ? "kümülatif hayatta kalma olasılığı" : "cumulative survival probability"}. {tr ? "Geçerli" : "Current"} {difficulty.label[language]} {tr ? "satır şansı" : "row chance"} {difficulty.chance}; {tr ? "sıradaki önizleme" : "next preview"} {formatTc(previewValue)} TC.
           </div>
         </div>
       </section>

@@ -4,6 +4,7 @@ import { BadgeDollarSign, Club, Layers, Wallet } from "lucide-react";
 import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
 import { playOffSound } from "./OffSoundEngine";
+import { useLanguage } from "../i18n";
 
 type Suit = "C" | "D" | "H" | "S";
 type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K";
@@ -25,6 +26,9 @@ const EKA_LOGO_SRC = "/og-image.svg";
 const DEBUG_BLACKJACK = Boolean(import.meta.env?.DEV);
 
 export function TechBlackjack() {
+  const { language } = useLanguage();
+  const tr = language === "tr";
+  const locale = tr ? "tr-TR" : "en-US";
   const mountedRef = useRef(true);
   const timerRef = useRef<number | null>(null);
   const [wallet, setWallet] = useState<WalletState | null>(null);
@@ -37,7 +41,7 @@ export function TechBlackjack() {
   const [hands, setHands] = useState<PlayerHand[]>([]);
   const [activeHandIndex, setActiveHandIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("betting");
-  const [message, setMessage] = useState("Place a Tech Coin bet to start.");
+  const [message, setMessage] = useState(tr ? "Başlamak için Tech Coin bahsi koy." : "Place a Tech Coin bet to start.");
   const [history, setHistory] = useState<ResultHistory[]>([]);
   const [toasts, setToasts] = useState<BlackjackToast[]>([]);
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-blackjack");
@@ -68,7 +72,7 @@ export function TechBlackjack() {
       if (Array.isArray(data.recent)) setHistory(sanitizeServerHistory(data.recent));
     } catch (error) {
       debugBlackjack("caught error", { message: error instanceof Error ? error.message : String(error) });
-      if (mountedRef.current) setMessage(error instanceof Error ? error.message : "Tech Blackjack wallet unavailable.");
+      if (mountedRef.current) setMessage(error instanceof Error ? error.message : (tr ? "Tech Blackjack cüzdanı kullanılamıyor." : "Tech Blackjack wallet unavailable."));
     } finally {
       if (mountedRef.current) setWalletLoading(false);
     }
@@ -113,13 +117,13 @@ export function TechBlackjack() {
         body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error(data?.error || "Tech Blackjack action failed.");
+      if (!response.ok || !data) throw new Error(data?.error || (tr ? "Tech Blackjack işlemi başarısız oldu." : "Tech Blackjack action failed."));
       if (mountedRef.current && data.wallet) setWallet(sanitizeWallet(data.wallet));
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
       return data;
     } catch (error) {
       debugBlackjack("caught error", { message: error instanceof Error ? error.message : String(error) });
-      if (mountedRef.current) setMessage(error instanceof Error ? error.message : "Tech Blackjack action failed.");
+      if (mountedRef.current) setMessage(error instanceof Error ? error.message : (tr ? "Tech Blackjack işlemi başarısız oldu." : "Tech Blackjack action failed."));
       playOffSound("error");
       return null;
     } finally {
@@ -132,7 +136,7 @@ export function TechBlackjack() {
     debugBlackjack("round start", { amount, balance, phase, deckLength: safeDeck.length, playerHandLength: activeHand?.cards?.length || 0, dealerHandLength: dealerHand.length });
     if (phase !== "betting" && phase !== "settled") return;
     if (amount < 1 || amount > balance) {
-      setMessage("Enter a valid Tech Coin bet within your wallet balance.");
+      setMessage((tr ? "Cüzdan bakiyene uygun geçerli bir Tech Coin bahsi gir." : "Enter a valid Tech Coin bet within your wallet balance."));
       playOffSound("error");
       return;
     }
@@ -153,7 +157,7 @@ export function TechBlackjack() {
     setHands([{ id: handId, cards: [], bet: amount, status: "playing" }]);
     setActiveHandIndex(0);
     setPhase("dealer");
-    setMessage("Dealing cards...");
+    setMessage((tr ? "Kartlar dağıtılıyor..." : "Dealing cards..."));
     recordSessionBet(amount);
     playOffSound("bet");
 
@@ -161,7 +165,7 @@ export function TechBlackjack() {
     if (!mountedRef.current) return;
 
     setPhase(openingStatus === "blackjack" ? "dealer" : "playing");
-    setMessage(openingStatus === "blackjack" ? "Blackjack! Dealer reveals." : "Choose Hit, Stand, Double or Split.");
+    setMessage(openingStatus === "blackjack" ? (tr ? "Blackjack! Krupiye açıyor." : "Blackjack! Dealer reveals.") : (tr ? "Kart çek, dur, ikiye katla veya böl seçeneklerinden birini seç." : "Choose Hit, Stand, Double or Split."));
 
     if (openingStatus === "blackjack") {
       if (timerRef.current) window.clearTimeout(timerRef.current);
@@ -214,7 +218,7 @@ export function TechBlackjack() {
     debugBlackjack("current action", { action: "stand", activeHandIndex: activeHandIndexSafe });
     const nextHands = playerHands.map((hand, index) => (index === activeHandIndexSafe ? { ...hand, cards: safeCards(hand.cards), status: "stood" as HandStatus } : hand));
     playOffSound("click");
-    advanceOrSettle(nextHands, safeDeck, dealerHand, "Standing.");
+    advanceOrSettle(nextHands, safeDeck, dealerHand, (tr ? "Duruldu." : "Standing."));
   }
 
   async function doubleDown() {
@@ -236,7 +240,7 @@ export function TechBlackjack() {
     setDeck(drawn.deck);
     setHands(nextHands);
     playOffSound("bet");
-    advanceOrSettle(nextHands, drawn.deck, dealerHand, "Double locked. One card dealt.");
+    advanceOrSettle(nextHands, drawn.deck, dealerHand, (tr ? "İkiye katlandı. Bir kart dağıtıldı." : "Double locked. One card dealt."));
   }
 
   async function split() {
@@ -257,7 +261,7 @@ export function TechBlackjack() {
     setDeck(drawn.deck);
     setHands(nextHands);
     setActiveHandIndex(0);
-    setMessage("Split active. Play hand 1 first.");
+    setMessage((tr ? "Bölme aktif. Önce 1. eli oyna." : "Split active. Play hand 1 first."));
     playOffSound("card");
   }
 
@@ -268,11 +272,11 @@ export function TechBlackjack() {
     const nextIndex = safeNextHands.findIndex((hand, index) => index > activeHandIndexSafe && hand.status === "playing");
     if (nextIndex >= 0) {
       setActiveHandIndex(nextIndex);
-      setMessage("Next split hand is active.");
+      setMessage((tr ? "Sıradaki bölünmüş el aktif." : "Next split hand is active."));
       return;
     }
     const anyLiveHand = safeNextHands.some((hand) => hand.status !== "bust");
-    setMessage(anyLiveHand ? nextMessage : "All hands busted.");
+    setMessage(anyLiveHand ? nextMessage : (tr ? "Tüm eller battı." : "All hands busted."));
     settleDealer(safeNextHands, nextDeck, nextDealerCards);
   }
 
@@ -307,7 +311,7 @@ export function TechBlackjack() {
     const totalEntryAmount = settled.reduce((sum, hand) => sum + safeAmount(hand.bet, DEFAULT_BET), 0);
     const totalNet = settled.reduce((sum, hand) => sum + Math.round(hand.resultNet || 0), 0);
     const primary = settled[0] || safeRoundHands[0];
-    const resultLabel = toastLabel(settled, totalNet);
+    const resultLabel = toastLabel(settled, totalNet, tr);
 
     setDeck(finalDeck);
     setDealerCards(finalDealerCards);
@@ -354,7 +358,7 @@ export function TechBlackjack() {
       amount: safeTotalReturn,
       multiplier,
       currency: "Tech Coin",
-      title: "KAZANCINIZ",
+      title: tr ? "KAZANCINIZ" : "YOUR WIN",
       displayAmount: `${totalReturnLabel} Tech Coin`,
       displayMultiplier: multiplierLabel,
       variant: safeTotalReturn > 0 ? "success" : "neutral",
@@ -365,7 +369,7 @@ export function TechBlackjack() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
       <div className="toast-nofaction-success-stack" aria-live="polite">
-        {toasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale="en-US" onClose={removeToast} />)}
+        {toasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale={locale} onClose={removeToast} />)}
       </div>
       <div className="absolute left-1/2 top-24 h-[30rem] w-[30rem] -translate-x-1/2 rounded-full bg-emerald-500/10 blur-3xl" />
       <div className="absolute right-0 top-72 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
@@ -373,12 +377,12 @@ export function TechBlackjack() {
         <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="rounded-[2rem] border border-emerald-300/15 bg-[linear-gradient(135deg,rgba(4,12,20,0.98),rgba(3,34,28,0.82))] p-5 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl sm:p-7">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100"><Club className="h-4 w-4" /> OFF Hub Casino</div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100"><Club className="h-4 w-4" /> {tr ? "OFF Hub Casino" : "OFF Hub Casino"}</div>
               <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-6xl">Tech Blackjack</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">Standard blackjack with live Tech Coin wagers, 3:2 blackjack payouts, split hands, double down and shared OFF session stats.</p>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">{tr ? "Canlı Tech Coin bahisleri, 3:2 blackjack ödemeleri, el bölme, ikiye katlama ve ortak OFF oturum istatistikleriyle standart blackjack." : "Standard blackjack with live Tech Coin wagers, 3:2 blackjack payouts, split hands, double down and shared OFF session stats."}</p>
             </div>
             <div className="rounded-3xl border border-amber-300/25 bg-black/35 p-4 text-right shadow-xl shadow-amber-500/10">
-              <p className="flex items-center justify-end gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/55"><Wallet className="h-4 w-4" /> Tech Coin Balance</p>
+              <p className="flex items-center justify-end gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/55"><Wallet className="h-4 w-4" /> {tr ? "Tech Coin Bakiyesi" : "Tech Coin Balance"}</p>
               <p className="mt-2 text-3xl font-black text-white">{walletLoading ? "..." : `${formatTc(balance)} TC`}</p>
             </div>
           </div>
@@ -386,47 +390,47 @@ export function TechBlackjack() {
 
         <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
           <div className="relative overflow-hidden rounded-[2.25rem] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_34%),linear-gradient(180deg,rgba(4,16,18,0.96),rgba(2,8,12,0.98))] p-4 shadow-2xl shadow-black/40 sm:p-6">
-            <div className="absolute right-5 top-5 grid place-items-center rounded-2xl border border-white/10 bg-black/45 p-3 text-cyan-100 shadow-xl"><Layers className="h-8 w-8" /><span className="text-[10px] font-black uppercase tracking-[0.16em]">Deck {safeDeck.length || 52}</span></div>
+            <div className="absolute right-5 top-5 grid place-items-center rounded-2xl border border-white/10 bg-black/45 p-3 text-cyan-100 shadow-xl"><Layers className="h-8 w-8" /><span className="text-[10px] font-black uppercase tracking-[0.16em]">{tr ? "Deste" : "Deck"} {safeDeck.length || 52}</span></div>
             <div className="min-h-[11rem] pt-2">
-              <ScoreBadge label="Dealer" score={dealerScore} hidden={hideDealerHole && dealerHand.length > 1} />
+              <ScoreBadge label={tr ? "Krupiye" : "Dealer"} score={dealerScore} hidden={hideDealerHole && dealerHand.length > 1} />
               <CardFan cards={dealerHand} hideSecond={hideDealerHole} />
             </div>
             <div className="my-3 flex flex-wrap items-center justify-center gap-3 text-center">
-              <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-amber-100">Blackjack pays 3 to 2</span>
+              <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-amber-100">{tr ? "Blackjack 3’e 2 öder" : "Blackjack pays 3 to 2"}</span>
             </div>
             <div className="min-h-[13rem]">
               {playerHands.map((hand, index) => (
                 <div key={hand.id} className={`mb-3 rounded-[1.5rem] border p-3 transition ${index === activeHandIndexSafe && phase === "playing" ? "border-emerald-300/35 bg-emerald-300/[0.06]" : "border-white/10 bg-white/[0.025]"}`}>
-                  <ScoreBadge label={playerHands.length > 1 ? `Player hand ${index + 1}` : "Player"} score={handValue(hand.cards).total} status={hand.status} />
+                  <ScoreBadge label={playerHands.length > 1 ? tr ? `${index + 1}. oyuncu eli` : `Player hand ${index + 1}` : (tr ? "Oyuncu" : "Player")} score={handValue(hand.cards).total} status={hand.status} />
                   <CardFan cards={hand.cards} />
                 </div>
               ))}
-              {!playerHands.length ? <div className="grid min-h-[10rem] place-items-center rounded-[1.5rem] border border-dashed border-white/10 text-sm text-white/35">Cards appear here after betting.</div> : null}
+              {!playerHands.length ? <div className="grid min-h-[10rem] place-items-center rounded-[1.5rem] border border-dashed border-white/10 text-sm text-white/35">{tr ? "Kartlar bahis sonrası burada görünür." : "Cards appear here after betting."}</div> : null}
             </div>
             <p className="mt-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/65">{message}</p>
 
             <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <ActionButton onClick={hit} disabled={!canPlay}>Hit</ActionButton>
-              <ActionButton onClick={stand} disabled={!canPlay}>Stand</ActionButton>
-              <ActionButton onClick={split} disabled={!canSplit}>Split</ActionButton>
-              <ActionButton onClick={doubleDown} disabled={!canDouble}>Double</ActionButton>
+              <ActionButton onClick={hit} disabled={!canPlay}>{tr ? "Kart çek" : "Hit"}</ActionButton>
+              <ActionButton onClick={stand} disabled={!canPlay}>{tr ? "Dur" : "Stand"}</ActionButton>
+              <ActionButton onClick={split} disabled={!canSplit}>{tr ? "Böl" : "Split"}</ActionButton>
+              <ActionButton onClick={doubleDown} disabled={!canDouble}>{tr ? "İkiye katla" : "Double"}</ActionButton>
             </div>
 
             <div className="mt-4 grid gap-3 rounded-[1.6rem] border border-white/10 bg-black/30 p-3 md:grid-cols-[1fr_auto_auto_1.2fr]">
-              <label className="block"><span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Bet Amount</span><input type="number" min={1} max={Math.max(1, balance)} value={betAmount} disabled={phase === "playing" || phase === "dealer"} onChange={(event) => setBetAmount(Number(event.target.value))} onBlur={() => setBetAmount((current) => sanitizeBet(current, Math.max(balance, 1)))} className="mt-1 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-black text-white outline-none focus:border-emerald-300/40" /></label>
+              <label className="block"><span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">{tr ? "Bahis tutarı" : "Bet Amount"}</span><input type="number" min={1} max={Math.max(1, balance)} value={betAmount} disabled={phase === "playing" || phase === "dealer"} onChange={(event) => setBetAmount(Number(event.target.value))} onBlur={() => setBetAmount((current) => sanitizeBet(current, Math.max(balance, 1)))} className="mt-1 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-black text-white outline-none focus:border-emerald-300/40" /></label>
               <button type="button" disabled={phase === "playing" || phase === "dealer"} onClick={() => adjustBet(0.5)} className="self-end rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 font-black transition hover:bg-white/10 disabled:opacity-45">1/2</button>
               <button type="button" disabled={phase === "playing" || phase === "dealer"} onClick={() => adjustBet(2)} className="self-end rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 font-black transition hover:bg-white/10 disabled:opacity-45">2x</button>
-              <button type="button" disabled={walletLoading || actionLoading || safeBet < 1 || safeBet > balance || phase === "playing" || phase === "dealer"} onClick={startRound} className="self-end rounded-2xl bg-gradient-to-r from-emerald-300 to-lime-300 px-6 py-4 text-lg font-black uppercase tracking-[0.18em] text-slate-950 shadow-xl shadow-emerald-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100">Bet</button>
+              <button type="button" disabled={walletLoading || actionLoading || safeBet < 1 || safeBet > balance || phase === "playing" || phase === "dealer"} onClick={startRound} className="self-end rounded-2xl bg-gradient-to-r from-emerald-300 to-lime-300 px-6 py-4 text-lg font-black uppercase tracking-[0.18em] text-slate-950 shadow-xl shadow-emerald-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100">{tr ? "Bahis" : "Bet"}</button>
             </div>
           </div>
 
           <aside className="space-y-5">
             <GameSessionStatsPanel gameName="Tech Blackjack" stats={sessionStats} onReset={resetSessionStats} />
             <section className="rounded-[1.7rem] border border-white/10 bg-[#07111a]/92 p-4 shadow-2xl shadow-black/35">
-              <h2 className="flex items-center gap-2 text-xl font-black"><BadgeDollarSign className="h-5 w-5 text-emerald-300" /> Result History</h2>
+              <h2 className="flex items-center gap-2 text-xl font-black"><BadgeDollarSign className="h-5 w-5 text-emerald-300" /> {tr ? "Sonuç Geçmişi" : "Result History"}</h2>
               <div className="mt-4 space-y-2">
-                {history.slice(0, 8).map((item) => <HistoryRow key={item.id} item={item} />)}
-                {!history.length ? <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/40">No completed hands yet.</p> : null}
+                {history.slice(0, 8).map((item) => <HistoryRow key={item.id} item={item} tr={tr} />)}
+                {!history.length ? <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/40">{tr ? "Henüz tamamlanan el yok." : "No completed hands yet."}</p> : null}
               </div>
             </section>
           </aside>
@@ -507,10 +511,10 @@ function PremiumCardBack() {
   );
 }
 
-function HistoryRow({ item }: { item: ResultHistory }) {
+function HistoryRow({ item, tr }: { item: ResultHistory; tr: boolean }) {
   const positive = item.netAmount > 0;
   const neutral = item.netAmount === 0;
-  return <div className="grid grid-cols-[1fr_auto] gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm"><div><p className="font-black capitalize text-white">{item.resultType}</p><p className="mt-1 text-xs text-white/40">Player {item.playerScore} · Dealer {item.dealerScore} · Bet {formatTc(item.betAmount)} TC</p></div><p className={`font-black ${positive ? "text-emerald-200" : neutral ? "text-white/60" : "text-red-200"}`}>{neutral ? "±" : positive ? "+" : "-"}{formatTc(Math.abs(item.netAmount))}</p></div>;
+  return <div className="grid grid-cols-[1fr_auto] gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm"><div><p className="font-black capitalize text-white">{item.resultType}</p><p className="mt-1 text-xs text-white/40">{tr ? "Oyuncu" : "Player"} {item.playerScore} · {tr ? "Krupiye" : "Dealer"} {item.dealerScore} · {tr ? "Bahis" : "Bet"} {formatTc(item.betAmount)} TC</p></div><p className={`font-black ${positive ? "text-emerald-200" : neutral ? "text-white/60" : "text-red-200"}`}>{neutral ? "±" : positive ? "+" : "-"}{formatTc(Math.abs(item.netAmount))}</p></div>;
 }
 
 function isCard(value: unknown): value is Card {
@@ -605,12 +609,12 @@ function calculateBlackjackPayout(result: HandStatus | string | undefined, betAm
 function payoutForHand(hand: PlayerHand) {
   return calculateBlackjackPayout(hand?.status, hand?.bet);
 }
-function toastLabel(hands: PlayerHand[], totalNet: number) {
+function toastLabel(hands: PlayerHand[], totalNet: number, tr: boolean) {
   const safeHands = sanitizeHands(hands);
   if (safeHands.length === 1 && safeHands[0]?.status === "blackjack") return "Blackjack!";
-  if (totalNet > 0) return "Kazandınız.";
-  if (totalNet === 0) return "Beraberlik.";
-  return safeHands.some((hand) => hand.status === "loss" && handValue(hand.cards).total > 21) ? "Bust." : "Dealer wins.";
+  if (totalNet > 0) return tr ? "Kazandınız." : "You won.";
+  if (totalNet === 0) return tr ? "Beraberlik." : "Push.";
+  return safeHands.some((hand) => hand.status === "loss" && handValue(hand.cards).total > 21) ? (tr ? "Battınız." : "Bust.") : (tr ? "Krupiye kazandı." : "Dealer wins.");
 }
 function sanitizeBet(value: unknown, max: number) {
   const amount = Math.floor(Number(value));
