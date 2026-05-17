@@ -369,7 +369,7 @@ export function OffSoundEngine() {
       type="button"
       onClick={() => setEnabled((value) => !value)}
       title={`${enabled ? copy.on : copy.off} · ${copy.hint}`}
-      className="fixed bottom-24 left-5 z-[130] inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/75 text-white/75 shadow-2xl shadow-black/40 backdrop-blur-xl transition hover:bg-white/[0.08] sm:left-6"
+      className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-[calc(env(safe-area-inset-left)+1rem)] z-[100] inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/75 text-white/75 shadow-2xl shadow-black/40 backdrop-blur-xl transition hover:bg-white/[0.08]"
     >
       {enabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
     </button>
