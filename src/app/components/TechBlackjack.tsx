@@ -13,7 +13,7 @@ type PlayerHand = { id: string; cards: Card[]; bet: number; status: HandStatus; 
 type Phase = "betting" | "playing" | "dealer" | "settled";
 type WalletState = { balance: number; currency: string; symbol: string; lifetime_earned?: number };
 type ResultHistory = { id: string; resultType: string; playerScore: number; dealerScore: number; betAmount: number; netAmount: number };
-type BlackjackToast = ToastNoFactionSuccessPayload & { displayAmount?: string; displayMultiplier?: string; variant?: "success" | "danger" | "neutral" };
+type BlackjackToast = ToastNoFactionSuccessPayload & { displayAmount?: string; displayMultiplier?: string; variant?: "success" | "danger" | "neutral"; hideHint?: boolean };
 
 const SUITS: Suit[] = ["C", "D", "H", "S"];
 const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -316,7 +316,7 @@ export function TechBlackjack() {
     setActiveHandIndex(0);
     setMessage(resultLabel);
     settled.forEach((hand) => recordSessionResult(Math.round(hand.resultNet || 0)));
-    pushToast(totalPayout, totalEntryAmount, totalPayout - totalEntryAmount);
+    pushToast(totalPayout, totalEntryAmount);
     setHistory((current) => [
       ...settled.map((hand) => ({ id: uniqueId("result"), resultType: hand.status, playerScore: handValue(hand.cards).total, dealerScore: dealerTotal, betAmount: hand.bet, netAmount: Math.round(hand.resultNet || 0) })),
       ...current,
@@ -340,26 +340,25 @@ export function TechBlackjack() {
   }
 
   const removeToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
-  function pushToast(totalReturn: number, entryAmount: number, netGain: number) {
+  function pushToast(totalReturn: number, entryAmount: number) {
     const safeTotalReturn = Math.max(0, Number(totalReturn) || 0);
     const safeEntryAmount = Math.max(0, Number(entryAmount) || 0);
-    if (safeTotalReturn <= 0 || safeEntryAmount <= 0) return;
+    if (safeEntryAmount <= 0) return;
 
     const multiplier = safeTotalReturn / safeEntryAmount;
     const multiplierLabel = formatMultiplier(multiplier);
     const totalReturnLabel = formatTechCoinAmount(safeTotalReturn);
-    const netGainLabel = formatSignedTechCoinAmount(netGain);
-    const isRefund = Math.round(Number(netGain) || 0) === 0;
 
     setToasts([{
       id: createToastNoFactionSuccessId("toast-tech-blackjack"),
       amount: safeTotalReturn,
       multiplier,
       currency: "Tech Coin",
-      title: `${multiplierLabel} — ${totalReturnLabel} Tech Coin ${isRefund ? "iade edildi" : "kazandın"}`,
-      displayAmount: `Net artış: ${netGainLabel} Tech Coin`,
+      title: "KAZANCINIZ",
+      displayAmount: `${totalReturnLabel} Tech Coin`,
       displayMultiplier: multiplierLabel,
-      variant: isRefund ? "neutral" : "success",
+      variant: safeTotalReturn > 0 ? "success" : "neutral",
+      hideHint: true,
     }]);
   }
 
@@ -608,10 +607,10 @@ function payoutForHand(hand: PlayerHand) {
 }
 function toastLabel(hands: PlayerHand[], totalNet: number) {
   const safeHands = sanitizeHands(hands);
-  if (safeHands.length === 1 && safeHands[0]?.status === "blackjack") return `Blackjack! +${formatTc(Math.max(0, totalNet))} TC`;
-  if (totalNet > 0) return `You Win +${formatTc(totalNet)} TC`;
-  if (totalNet === 0) return "Push — Bet Returned";
-  return safeHands.some((hand) => hand.status === "loss" && handValue(hand.cards).total > 21) ? `Bust -${formatTc(Math.abs(totalNet))} TC` : `Dealer Wins -${formatTc(Math.abs(totalNet))} TC`;
+  if (safeHands.length === 1 && safeHands[0]?.status === "blackjack") return "Blackjack!";
+  if (totalNet > 0) return "Kazandınız.";
+  if (totalNet === 0) return "Beraberlik.";
+  return safeHands.some((hand) => hand.status === "loss" && handValue(hand.cards).total > 21) ? "Bust." : "Dealer wins.";
 }
 function sanitizeBet(value: unknown, max: number) {
   const amount = Math.floor(Number(value));
@@ -624,11 +623,6 @@ function formatTc(value: number) { return new Intl.NumberFormat("en-US", { maxim
 
 function formatTechCoinAmount(value: number) {
   return new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.max(0, Number(value) || 0));
-}
-function formatSignedTechCoinAmount(value: number) {
-  const safeValue = Number(value) || 0;
-  const sign = safeValue > 0 ? "+" : safeValue < 0 ? "-" : "";
-  return `${sign}${formatTechCoinAmount(Math.abs(safeValue))}`;
 }
 function formatMultiplier(value: number) {
   const safeValue = Number.isFinite(Number(value)) ? Number(value) : 1;

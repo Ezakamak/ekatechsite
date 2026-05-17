@@ -11,6 +11,7 @@ export type ToastNoFactionSuccessPayload = {
   displayAmount?: string;
   displayMultiplier?: string;
   variant?: "success" | "danger" | "neutral";
+  hideHint?: boolean;
 };
 
 export function createToastNoFactionSuccessId(prefix = "toast-nofaction-success") {
@@ -26,7 +27,7 @@ function formatWinAmount(amount: number, locale: string) {
   return new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.max(0, Math.floor(Number(amount) || 0)));
 }
 
-export function ToastNoFactionSuccess({ id, amount, multiplier, currency = "TechCoin", locale = "tr-TR", title = "CASHOUT BAŞARILI", displayAmount, displayMultiplier, variant = "success", onClose }: ToastNoFactionSuccessProps) {
+export function ToastNoFactionSuccess({ id, amount, multiplier, currency = "TechCoin", locale = "tr-TR", title = "CASHOUT BAŞARILI", displayAmount, displayMultiplier, variant = "success", hideHint = false, onClose }: ToastNoFactionSuccessProps) {
   const safeMultiplier = Number.isFinite(Number(multiplier)) ? Number(multiplier) : 1;
   const multiplierLabel = displayMultiplier || `${safeMultiplier.toFixed(2)}x`;
   const removeFromState = useCallback(() => {
@@ -47,7 +48,7 @@ export function ToastNoFactionSuccess({ id, amount, multiplier, currency = "Tech
       <span className="toast-nofaction-success__title">{title}</span>
       <span className="toast-nofaction-success__amount">{displayAmount || `+${formatWinAmount(amount, locale)} ${currency}`}</span>
       <span className="toast-nofaction-success__multiplier">{multiplierLabel}</span>
-      <span className="toast-nofaction-success__hint">Kapatmak için tıkla</span>
+      {!hideHint ? <span className="toast-nofaction-success__hint">Kapatmak için tıkla</span> : null}
     </button>
   );
 }
