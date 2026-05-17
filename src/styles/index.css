@@ -732,3 +732,25 @@
     animation: none;
   }
 }
+
+.toast-nofaction-success--danger {
+  border-color: rgba(254, 202, 202, 0.68);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(254, 226, 226, 0.34), transparent 38%),
+    linear-gradient(135deg, #fb7185 0%, #ef4444 52%, #991b1b 100%);
+  box-shadow:
+    0 0 0 1px rgba(248, 113, 113, 0.22) inset,
+    0 24px 70px rgba(248, 113, 113, 0.28),
+    0 16px 38px rgba(0, 0, 0, 0.42);
+}
+
+.toast-nofaction-success--neutral {
+  border-color: rgba(224, 242, 254, 0.58);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(224, 242, 254, 0.36), transparent 38%),
+    linear-gradient(135deg, #38bdf8 0%, #0891b2 52%, #164e63 100%);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.18) inset,
+    0 24px 70px rgba(56, 189, 248, 0.24),
+    0 16px 38px rgba(0, 0, 0, 0.42);
+}

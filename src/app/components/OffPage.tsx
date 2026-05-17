@@ -13,6 +13,7 @@ import {
   BarChart3,
   Building2,
   CircleDot,
+  Club,
   Dice5,
   Gamepad2,
   Gift,
@@ -40,6 +41,7 @@ import { TechCoinMines } from "./TechCoinMines";
 import { EkaTowers } from "./EkaTowers";
 import { TechAviator } from "./tech-aviator/TechAviator";
 import { TechDice } from "./TechDice";
+import { TechBlackjack } from "./TechBlackjack";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
 
@@ -140,6 +142,7 @@ type GameKey =
   | "aviator"
   | "roulette"
   | "dice"
+  | "blackjack"
   | "store";
 
 type TechStoreTlPackage = {
@@ -237,6 +240,9 @@ export function OffPage() {
         diceTitle: "Tech Dice",
         diceDesc:
           "0-100 slider ile Roll Over veya Roll Under seç; yeşil bölge şansı, çarpanı ve Tech Coin reward ihtimalini canlı gör.",
+        blackjackTitle: "Tech Blackjack",
+        blackjackDesc:
+          "Canlı OFF Hub Tech Coin cüzdanıyla 3:2 blackjack, double ve split kararlarını premium kart masasında oyna.",
         minesRemoved:
           "EkaMines yerine gerçek para OFF, ana Tech Coin cüzdanına bağlı TechMines aktif.",
         walletTitle: "Tech Coin cüzdanı",
@@ -312,6 +318,9 @@ export function OffPage() {
         diceTitle: "Tech Dice",
         diceDesc:
           "Choose Roll Over or Roll Under on a 0-100 slider; see the green zone chance, multiplier and Tech Coin reward live.",
+        blackjackTitle: "Tech Blackjack",
+        blackjackDesc:
+          "Play 3:2 blackjack, double down and split decisions on a premium card table connected to the live OFF Hub Tech Coin wallet.",
         minesRemoved:
           "TechMines is active with real money OFF and the main Tech Coin wallet connected.",
         walletTitle: "Tech Coin wallet",
@@ -550,6 +559,8 @@ export function OffPage() {
           <TechAviator />
         ) : activeGame === "dice" ? (
           <TechDice />
+        ) : activeGame === "blackjack" ? (
+          <TechBlackjack />
         ) : activeGame === "roulette" ? (
           <GameErrorBoundary
             gameName="Tech Roulette"
@@ -776,6 +787,18 @@ export function OffPage() {
             onClick={() => {
               playOffSound("bet");
               setActiveGame("dice");
+            }}
+          />
+          <GameCard
+            icon={<Club className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.blackjackTitle}
+            description={copy.blackjackDesc}
+            accent="amber"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("card");
+              setActiveGame("blackjack");
             }}
           />
           <GameCard
