@@ -35,6 +35,7 @@ import { TechDuelBotAssist } from "./TechDuelBotAssist";
 import { CipherBreak } from "./CipherBreak";
 import { CoreRaid } from "./CoreRaid";
 import { MarketAcademy } from "./MarketAcademy";
+import { MemeClicker } from "./MemeClicker";
 import { TechCoinMiner } from "./TechCoinMiner";
 import { DropTech } from "./DropTech";
 import { TechCoinMines } from "./TechCoinMines";
@@ -149,6 +150,7 @@ type GameKey =
   | "roulette"
   | "dice"
   | "blackjack"
+  | "memeClicker"
   | "store";
 
 type TechStoreTlPackage = {
@@ -247,6 +249,9 @@ export function OffPage() {
         diceDesc:
           "0-100 slider ile Roll Over veya Roll Under seç; yeşil bölge şansı, çarpanı ve Tech Coin reward ihtimalini canlı gör.",
         blackjackTitle: "Tech Blackjack",
+        memeClickerTitle: "Meme Clicker",
+        memeClickerDesc:
+          "Büyük butona bas, rastgele meme sesi çalsın ve Tech Coin kazan.",
         blackjackDesc:
           "Canlı OFF Hub Tech Coin cüzdanıyla 3:2 blackjack, double ve split kararlarını premium kart masasında oyna.",
         minesRemoved:
@@ -325,6 +330,9 @@ export function OffPage() {
         diceDesc:
           "Choose Roll Over or Roll Under on a 0-100 slider; see the green zone chance, multiplier and Tech Coin reward live.",
         blackjackTitle: "Tech Blackjack",
+        memeClickerTitle: "Meme Clicker",
+        memeClickerDesc:
+          "Büyük butona bas, rastgele meme sesi çalsın ve Tech Coin kazan.",
         blackjackDesc:
           "Play 3:2 blackjack, double down and split decisions on a premium card table connected to the live OFF Hub Tech Coin wallet.",
         minesRemoved:
@@ -610,6 +618,10 @@ export function OffPage() {
               <TechRoulette />
             </Suspense>
           </GameErrorBoundary>
+        ) : activeGame === "memeClicker" ? (
+          <GameErrorBoundary gameName="Meme Clicker" onBack={handleGameBoundaryBack}>
+            <MemeClicker onBack={() => setActiveGame("hub")} />
+          </GameErrorBoundary>
         ) : activeGame === "store" ? (
           <OffShopApp
             catalog={shopCatalog}
@@ -707,6 +719,18 @@ export function OffPage() {
             onClick={() => {
               playOffSound("click");
               setActiveGame("store");
+            }}
+          />
+          <GameCard
+            icon={<Sparkles className="h-6 w-6" />}
+            status={copy.available}
+            title={copy.memeClickerTitle}
+            description={copy.memeClickerDesc}
+            accent="purple"
+            buttonLabel={copy.open}
+            onClick={() => {
+              playOffSound("click");
+              setActiveGame("memeClicker");
             }}
           />
           <GameCard
