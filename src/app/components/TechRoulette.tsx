@@ -1878,6 +1878,25 @@ function PayoutBadge({ payout }: { payout: PayoutHighlight }) {
   );
 }
 
+const TIKTOK_GIFT_PATHS = [
+  { sx: "-12vw", sy: "82vh", ex: "18vw", ey: "34vh", r: "-18deg" },
+  { sx: "112vw", sy: "78vh", ex: "74vw", ey: "28vh", r: "20deg" },
+  { sx: "8vw", sy: "108vh", ex: "44vw", ey: "18vh", r: "-26deg" },
+  { sx: "92vw", sy: "106vh", ex: "55vw", ey: "22vh", r: "24deg" },
+  { sx: "50vw", sy: "112vh", ex: "50vw", ey: "13vh", r: "12deg" },
+  { sx: "-14vw", sy: "22vh", ex: "39vw", ey: "42vh", r: "34deg" },
+  { sx: "114vw", sy: "24vh", ex: "61vw", ey: "39vh", r: "-32deg" },
+  { sx: "22vw", sy: "-14vh", ex: "31vw", ey: "24vh", r: "18deg" },
+  { sx: "78vw", sy: "-12vh", ex: "68vw", ey: "25vh", r: "-22deg" },
+  { sx: "-10vw", sy: "54vh", ex: "26vw", ey: "58vh", r: "-10deg" },
+  { sx: "110vw", sy: "55vh", ex: "73vw", ey: "57vh", r: "10deg" },
+  { sx: "36vw", sy: "112vh", ex: "23vw", ey: "70vh", r: "-30deg" },
+  { sx: "64vw", sy: "112vh", ex: "78vw", ey: "70vh", r: "30deg" },
+  { sx: "-12vw", sy: "4vh", ex: "30vw", ey: "16vh", r: "28deg" },
+  { sx: "112vw", sy: "5vh", ex: "71vw", ey: "16vh", r: "-28deg" },
+  { sx: "50vw", sy: "-16vh", ex: "50vw", ey: "50vh", r: "0deg" },
+];
+
 function RaconItemEffects({
   tableBets,
   active,
@@ -1892,43 +1911,78 @@ function RaconItemEffects({
         .map((label) => label.trim())
         .filter(Boolean),
     )
-    .slice(0, 8);
+    .slice(0, 6);
   const uniqueLabels = [...new Set(labels)];
   if (!active || uniqueLabels.length === 0) return null;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-20 overflow-hidden" aria-hidden="true">
-      {uniqueLabels.map((label, index) => {
-        const [emoji = "💎"] = label.split(/\s+/);
-        const effect = itemEffectForLabel(label);
-        return (
-          <div
-            key={`${label}-${index}`}
-            className={`tech-roulette-screen-item-effect tech-roulette-screen-item-effect--${effect}`}
-            style={
-              {
-                "--effect-left": `${8 + ((index * 17) % 84)}%`,
-                "--effect-delay": `${index * 0.42}s`,
-                "--effect-duration": `${3.6 + (index % 3) * 0.7}s`,
-              } as CSSProperties
-            }
-          >
-            {Array.from({ length: effect === "rain" ? 8 : 5 }, (_, dropIndex) => (
-              <span
-                key={dropIndex}
-                style={
-                  {
-                    "--drop-x": `${(dropIndex - 2) * 1.6}rem`,
-                    "--drop-delay": `${dropIndex * 0.18}s`,
-                  } as CSSProperties
-                }
-              >
-                {emoji}
-              </span>
-            ))}
-          </div>
-        );
-      })}
+      <div className="tech-roulette-gift-stage">
+        <div className="tech-roulette-gift-spotlight tech-roulette-gift-spotlight--left" />
+        <div className="tech-roulette-gift-spotlight tech-roulette-gift-spotlight--right" />
+        {uniqueLabels.map((label, index) => {
+          const [emoji = "💎", ...nameParts] = label.split(/\s+/);
+          const giftName = nameParts.join(" ") || "Racon hediyesi";
+          const tone = itemEffectForLabel(label);
+          const pathOffset = (index * 5) % TIKTOK_GIFT_PATHS.length;
+          return (
+            <div
+              key={`${label}-${index}`}
+              className={`tech-roulette-gift-pack tech-roulette-gift-pack--${tone}`}
+              style={
+                {
+                  "--pack-delay": `${index * 0.34}s`,
+                  "--pack-x": `${50 + ((index % 3) - 1) * 18}vw`,
+                  "--pack-y": `${44 + (index % 2) * 13}vh`,
+                } as CSSProperties
+              }
+            >
+              <div className="tech-roulette-gift-card">
+                <span className="tech-roulette-gift-card-emoji">{emoji}</span>
+                <span className="tech-roulette-gift-card-copy">
+                  <strong>RACON HEDİYESİ</strong>
+                  <small>{giftName}</small>
+                </span>
+              </div>
+              {TIKTOK_GIFT_PATHS.slice(0, 12).map((_, burstIndex) => {
+                const path = TIKTOK_GIFT_PATHS[(pathOffset + burstIndex) % TIKTOK_GIFT_PATHS.length];
+                return (
+                  <span
+                    key={burstIndex}
+                    className="tech-roulette-gift-flyer"
+                    style={
+                      {
+                        "--gift-start-x": path.sx,
+                        "--gift-start-y": path.sy,
+                        "--gift-end-x": path.ex,
+                        "--gift-end-y": path.ey,
+                        "--gift-rotate": path.r,
+                        "--gift-delay": `${index * 0.16 + burstIndex * 0.105}s`,
+                        "--gift-duration": `${2.2 + (burstIndex % 4) * 0.24}s`,
+                        "--gift-size": `${2.1 + (burstIndex % 5) * 0.22}rem`,
+                      } as CSSProperties
+                    }
+                  >
+                    {emoji}
+                  </span>
+                );
+              })}
+              {Array.from({ length: 10 }, (_, sparkleIndex) => (
+                <i
+                  key={sparkleIndex}
+                  className="tech-roulette-gift-spark"
+                  style={
+                    {
+                      "--spark-angle": `${sparkleIndex * 36 + index * 11}deg`,
+                      "--spark-delay": `${index * 0.18 + sparkleIndex * 0.07}s`,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
