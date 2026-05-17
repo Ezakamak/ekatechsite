@@ -82,8 +82,8 @@ class GameErrorBoundary extends Component<
             {this.props.gameName} güvenli moda alındı.
           </h1>
           <p className="mt-3 text-sm leading-6 text-white/60">
-            Sayfanın tamamının çökmesini engelledim. Lütfen hub'a dönüp tekrar dene;
-            hata devam ederse bu kart açık kalır.
+            Sayfanın tamamının çökmesini engelledim. Lütfen hub'a dönüp tekrar
+            dene; hata devam ederse bu kart açık kalır.
           </p>
           <button
             type="button"
@@ -248,7 +248,8 @@ export function OffPage() {
         inventory: "Racon envanteri",
         onlyRoulette: "Sadece rulette bahis değeri",
         tlPackages: "TL paketleri",
-        tlPackageDesc: "Tech Store TL üzerinden satın alım alanı. Ödeme entegrasyonu bağlanana kadar buton paketi hesaba güvenli şekilde işler.",
+        tlPackageDesc:
+          "Tech Store TL üzerinden satın alım alanı. Buton, gerçek API kullanmadan simüle EkaPay Secure ödeme geçidine yönlendirir.",
         packageIncludes: "Paket içeriği",
         levelTitle: "OFF Level",
         expToNext: "sonraki levele",
@@ -319,7 +320,8 @@ export function OffPage() {
         inventory: "Swagger inventory",
         onlyRoulette: "Roulette stake only",
         tlPackages: "TRY packages",
-        tlPackageDesc: "Tech Store purchase area in Turkish Lira. Until payment integration is connected, the button safely credits the package to the account.",
+        tlPackageDesc:
+          "Tech Store purchase area in Turkish Lira. Until payment integration is connected, the button safely credits the package to the account.",
         packageIncludes: "Package includes",
         levelTitle: "OFF Level",
         expToNext: "to next level",
@@ -409,7 +411,18 @@ export function OffPage() {
     };
   }, [user?.id]);
 
-  const buyShopItem = async (slug: string, type: "item" | "tl-package" = "item") => {
+  const buyShopItem = async (
+    slug: string,
+    type: "item" | "tl-package" = "item",
+  ) => {
+    if (type === "tl-package") {
+      setBuyingSlug(slug);
+      setShopMessage("Güvenli ödeme sayfasına yönlendiriliyorsunuz...");
+      window.dispatchEvent(new Event("ekatech-start-techcoin-checkout"));
+      window.setTimeout(() => setBuyingSlug(null), 1800);
+      return;
+    }
+
     setBuyingSlug(slug);
     setShopMessage("");
     try {
@@ -422,7 +435,11 @@ export function OffPage() {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Ürün alınamadı.");
       setShopInventory(Array.isArray(data.inventory) ? data.inventory : []);
-      if (data.wallet) setWallet((current) => ({ ...data.wallet, level: data.level || current?.level }));
+      if (data.wallet)
+        setWallet((current) => ({
+          ...data.wallet,
+          level: data.level || current?.level,
+        }));
       setShopMessage(data?.message || "Ürün envantere eklendi.");
       window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
       playOffSound("coin");
@@ -533,7 +550,8 @@ export function OffPage() {
                       Tech Roulette yükleniyor
                     </p>
                     <p className="mt-3 text-sm leading-6 text-white/60">
-                      Oyun modülü hazırlanıyor; hub ekranı bu yüklemeden etkilenmez.
+                      Oyun modülü hazırlanıyor; hub ekranı bu yüklemeden
+                      etkilenmez.
                     </p>
                   </div>
                 </main>
@@ -890,19 +908,42 @@ function OffShopPanel({
       <div className="mt-6 rounded-[1.75rem] border border-cyan-200/20 bg-cyan-300/[0.07] p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h3 className="text-2xl font-semibold text-white">{copy.tlPackages}</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">{copy.tlPackageDesc}</p>
+            <h3 className="text-2xl font-semibold text-white">
+              {copy.tlPackages}
+            </h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">
+              {copy.tlPackageDesc}
+            </p>
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {tlPackages.map((pack) => (
-            <div key={pack.slug} className="rounded-[1.4rem] border border-white/10 bg-black/35 p-4 shadow-xl shadow-cyan-950/20">
-              <p className="text-xs uppercase tracking-[0.2em] text-cyan-100/65">{copy.packageIncludes}</p>
-              <h4 className="mt-2 text-xl font-semibold text-white">{pack.name}</h4>
-              <p className="mt-3 text-3xl font-black text-cyan-100">{pack.priceTl}</p>
+            <div
+              key={pack.slug}
+              className="rounded-[1.4rem] border border-white/10 bg-black/35 p-4 shadow-xl shadow-cyan-950/20"
+            >
+              <p className="text-xs uppercase tracking-[0.2em] text-cyan-100/65">
+                {copy.packageIncludes}
+              </p>
+              <h4 className="mt-2 text-xl font-semibold text-white">
+                {pack.name}
+              </h4>
+              <p className="mt-3 text-3xl font-black text-cyan-100">
+                {pack.priceTl}
+              </p>
               <div className="mt-4 space-y-2 text-sm text-white/70">
-                <div className="flex justify-between gap-3"><span>Tech Coin</span><strong className="text-white">{new Intl.NumberFormat(locale).format(pack.techCoin)} TC</strong></div>
-                <div className="flex justify-between gap-3"><span>EXP</span><strong className="text-white">{new Intl.NumberFormat(locale).format(pack.exp)} EXP</strong></div>
+                <div className="flex justify-between gap-3">
+                  <span>Tech Coin</span>
+                  <strong className="text-white">
+                    {new Intl.NumberFormat(locale).format(pack.techCoin)} TC
+                  </strong>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>EXP</span>
+                  <strong className="text-white">
+                    {new Intl.NumberFormat(locale).format(pack.exp)} EXP
+                  </strong>
+                </div>
               </div>
               <button
                 type="button"
@@ -910,7 +951,8 @@ function OffShopPanel({
                 onClick={() => onBuy(pack.slug, "tl-package")}
                 className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-cyan-100 px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Sparkles className="h-4 w-4" /> {buyingSlug === pack.slug ? "..." : copy.buy}
+                <Sparkles className="h-4 w-4" />{" "}
+                {buyingSlug === pack.slug ? "..." : copy.buy}
               </button>
             </div>
           ))}

@@ -16,6 +16,7 @@ export function Hero() {
             "Özen, hız ve akıllı sistemlerle tasarlanmış yeni nesil yapay zeka çözümleri ve modern web deneyimleri",
           primary: "Proje Başlat",
           secondary: "İşleri Gör",
+          buyTechCoin: "TechCoin Satın Al",
         }
       : {
           status: "Available for selected digital projects",
@@ -25,7 +26,12 @@ export function Hero() {
             "Next-generation AI solutions and modern web experiences crafted with precision and intelligence",
           primary: "Start a Project",
           secondary: "View Work",
+          buyTechCoin: "Buy TechCoin",
         };
+
+  const startTechCoinCheckout = () => {
+    window.dispatchEvent(new Event("ekatech-start-techcoin-checkout"));
+  };
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black px-4 pt-24">
@@ -92,6 +98,14 @@ export function Hero() {
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           </a>
+
+          <button
+            type="button"
+            onClick={startTechCoinCheckout}
+            className="w-full rounded-full bg-cyan-300 px-8 py-4 font-semibold text-black shadow-2xl shadow-cyan-500/20 transition-all duration-300 hover:bg-cyan-100 sm:w-auto"
+          >
+            {copy.buyTechCoin}
+          </button>
 
           <a href="#projects">
             <button className="w-full rounded-full border border-white/10 px-8 py-4 font-medium text-white transition-all duration-300 hover:bg-white/5 sm:w-auto">
