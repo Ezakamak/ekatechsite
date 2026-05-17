@@ -56,6 +56,7 @@ export function useGameSessionStats(gameKey: SessionStatsGameKey) {
   const [stats, setStats] = useState<SessionStats>(() => EMPTY_STATS);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     try {
       const saved = window.localStorage.getItem(storageKey(gameKey));
       if (saved) setStats(sanitizeStats(JSON.parse(saved)));
@@ -65,7 +66,12 @@ export function useGameSessionStats(gameKey: SessionStatsGameKey) {
   }, [gameKey]);
 
   useEffect(() => {
-    window.localStorage.setItem(storageKey(gameKey), JSON.stringify(stats));
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(storageKey(gameKey), JSON.stringify(stats));
+    } catch {
+      // Session stats are cosmetic; storage restrictions must never crash a game.
+    }
   }, [gameKey, stats]);
 
   const recordBet = useCallback((amount: number) => {
