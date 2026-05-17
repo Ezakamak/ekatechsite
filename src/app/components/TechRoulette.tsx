@@ -1679,6 +1679,52 @@ function ChipPile({
   if (!chip) return null;
   const totalAmount = Number(chip.total_amount || 0);
   const canCancel = Boolean(chip.my_bet_ids);
+  const itemLabels = String(chip.item_labels || "")
+    .split(",")
+    .map((label) => label.trim())
+    .filter(Boolean);
+  const uniqueItemLabels = [...new Set(itemLabels)];
+  const primaryItemLabel = uniqueItemLabels[0] || "";
+  const [itemEmojiPart, ...itemNameParts] = primaryItemLabel.split(/\s+/);
+  const primaryItemEmoji = itemEmojiPart || "💎";
+  const primaryItemName = itemNameParts.join(" ").trim();
+
+  if (uniqueItemLabels.length > 0) {
+    return (
+      <span
+        role={canCancel ? "button" : undefined}
+        tabIndex={canCancel ? 0 : undefined}
+        title={`${chip.users || "Oyuncular"} · ${uniqueItemLabels.join(", ")} · ${formatTc(totalAmount, "tr-TR")} TC${canCancel ? " · Geri çekmek için bas" : ""}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (canCancel) onCancelBet(chip);
+        }}
+        onKeyDown={(event) => {
+          if (!canCancel || (event.key !== "Enter" && event.key !== " ")) return;
+          event.preventDefault();
+          event.stopPropagation();
+          onCancelBet(chip);
+        }}
+        className={`tech-roulette-item-bet absolute -right-5 -top-6 z-30 flex min-w-[7.25rem] origin-bottom items-center gap-1.5 rounded-[1.15rem] border-2 border-amber-100/95 bg-[linear-gradient(135deg,rgba(255,247,178,0.98),rgba(251,146,60,0.95),rgba(168,85,247,0.92))] px-2.5 py-2 text-left text-[0.58rem] font-black text-black shadow-[0_0_26px_rgba(251,191,36,0.9),0_12px_28px_rgba(0,0,0,0.55)] ring-4 ring-amber-300/30 transition hover:scale-110 ${canCancel ? "cursor-pointer" : "pointer-events-none"}`}
+      >
+        <span className="tech-roulette-item-burst" aria-hidden="true" />
+        <span className="tech-roulette-item-burst tech-roulette-item-burst-delayed" aria-hidden="true" />
+        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/80 bg-black/85 text-xl shadow-inner shadow-amber-200/40">
+          {primaryItemEmoji}
+        </span>
+        <span className="relative min-w-0 leading-tight">
+          <span className="block max-w-[5.5rem] truncate uppercase tracking-[0.08em]">
+            {primaryItemName || "Racon eşyası"}
+          </span>
+          <span className="block whitespace-nowrap text-[0.54rem] text-black/70">
+            {formatTc(totalAmount, "tr-TR")} TC
+            {uniqueItemLabels.length > 1 ? ` · +${uniqueItemLabels.length - 1}` : ""}
+          </span>
+        </span>
+      </span>
+    );
+  }
+
   const assignedColors = String(
     chip.user_colors || chip.primary_user_color || "#22c55e",
   )
@@ -1701,7 +1747,7 @@ function ChipPile({
     <span
       role={canCancel ? "button" : undefined}
       tabIndex={canCancel ? 0 : undefined}
-      title={`${chip.users || "Oyuncular"} · ${formatTc(totalAmount, "tr-TR")} chips${canCancel ? " · Geri çekmek için bas" : ""}`}
+      title={`${chip.users || "Oyuncular"} · ${formatTc(totalAmount, "tr-TR")} TC${canCancel ? " · Geri çekmek için bas" : ""}`}
       onClick={(event) => {
         event.stopPropagation();
         if (canCancel) onCancelBet(chip);
@@ -1717,7 +1763,7 @@ function ChipPile({
     >
       <span className="absolute inset-1 rounded-full border border-white/45 bg-black/10" />
       <span className="relative whitespace-nowrap tabular-nums drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-        {formatTc(totalAmount, "tr-TR")} chips
+        {formatTc(totalAmount, "tr-TR")} TC
       </span>
     </span>
   );

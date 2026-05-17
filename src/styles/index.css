@@ -29,6 +29,128 @@
   }
 }
 
+
+@keyframes tech-roulette-item-flash {
+  0% {
+    filter: saturate(1.15) brightness(1);
+    transform: translate3d(0, 0, 0) scale(0.88) rotate(-6deg);
+  }
+  18% {
+    filter: saturate(1.9) brightness(1.38);
+    transform: translate3d(0, -5px, 0) scale(1.16) rotate(4deg);
+  }
+  36% {
+    transform: translate3d(0, 1px, 0) scale(1.02) rotate(-3deg);
+  }
+  52% {
+    filter: saturate(1.55) brightness(1.22);
+    transform: translate3d(0, -3px, 0) scale(1.1) rotate(3deg);
+  }
+  100% {
+    filter: saturate(1.15) brightness(1);
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes tech-roulette-item-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.28) rotate(0deg);
+  }
+  13% {
+    opacity: 1;
+  }
+  42% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.65) rotate(135deg);
+  }
+}
+
+@keyframes tech-roulette-item-shockwave {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.75);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.85);
+  }
+}
+
+.tech-roulette-item-bet {
+  animation: tech-roulette-item-flash 1.05s cubic-bezier(0.2, 1.25, 0.2, 1)
+    infinite;
+}
+
+.tech-roulette-item-bet::before,
+.tech-roulette-item-bet::after {
+  content: "";
+  position: absolute;
+  inset: -0.65rem;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.tech-roulette-item-bet::before {
+  border: 2px solid rgba(253, 224, 71, 0.95);
+  box-shadow: 0 0 18px rgba(253, 224, 71, 0.95),
+    inset 0 0 14px rgba(255, 255, 255, 0.42);
+  animation: tech-roulette-item-shockwave 0.9s ease-out infinite;
+}
+
+.tech-roulette-item-bet::after {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.98) 0 10%, transparent 12%) 0 0 / 28% 28%,
+    radial-gradient(circle, rgba(253, 224, 71, 0.96) 0 9%, transparent 12%) 50% 12% / 24% 24%,
+    radial-gradient(circle, rgba(244, 114, 182, 0.96) 0 8%, transparent 12%) 100% 48% / 25% 25%,
+    radial-gradient(circle, rgba(34, 211, 238, 0.92) 0 8%, transparent 12%) 18% 100% / 26% 26%;
+  filter: drop-shadow(0 0 10px rgba(253, 224, 71, 0.9));
+  animation: tech-roulette-item-burst 0.82s ease-out infinite;
+}
+
+.tech-roulette-item-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 5.8rem;
+  width: 5.8rem;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 8deg,
+    rgba(255, 255, 255, 0.98) 8deg 16deg,
+    transparent 16deg 38deg,
+    rgba(253, 224, 71, 0.98) 38deg 48deg,
+    transparent 48deg 78deg,
+    rgba(34, 211, 238, 0.96) 78deg 88deg,
+    transparent 88deg 128deg,
+    rgba(244, 114, 182, 0.96) 128deg 140deg,
+    transparent 140deg 212deg,
+    rgba(255, 255, 255, 0.96) 212deg 224deg,
+    transparent 224deg 360deg
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: tech-roulette-item-burst 0.72s ease-out infinite;
+}
+
+.tech-roulette-item-burst-delayed {
+  animation-delay: 0.24s;
+  transform: translate(-50%, -50%) rotate(24deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tech-roulette-item-bet,
+  .tech-roulette-item-bet::before,
+  .tech-roulette-item-bet::after,
+  .tech-roulette-item-burst {
+    animation: none;
+  }
+}
+
 @keyframes tech-roulette-wheel-spin {
   from {
     transform: rotate(var(--wheel-settle-angle, 0deg));
