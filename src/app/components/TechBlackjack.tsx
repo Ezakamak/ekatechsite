@@ -24,6 +24,7 @@ const DEBUG_BLACKJACK = Boolean(import.meta.env?.DEV);
 
 export function TechBlackjack() {
   const mountedRef = useRef(true);
+  const timerRef = useRef<number | null>(null);
   const [wallet, setWallet] = useState<WalletState | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -52,8 +53,7 @@ export function TechBlackjack() {
   const canPlay = phase === "playing" && Boolean(activeHand) && activeHand.status === "playing" && !actionLoading;
   const isFirstDecision = canPlay && safeCards(activeHand?.cards).length === 2 && !activeHand?.doubled;
   const canDouble = isFirstDecision && balance >= safeAmount(activeHand?.bet, DEFAULT_BET);
-  const canSplit = isFirstDecision && cardValue(activeHand?.cards?.[0]) === cardValue(activeHand?.cards?.[1]) && balance >= safeAmount(activeHand?.bet, DEFAULT_BET) && playerHands.length < 2;
-  const dealerShowsAce = phase === "playing" && dealerHand[0]?.rank === "A";
+  const canSplit = isFirstDecision && activeHand?.cards?.[0]?.rank === activeHand?.cards?.[1]?.rank && balance >= safeAmount(activeHand?.bet, DEFAULT_BET) && playerHands.length < 2;
 
   const loadState = useCallback(async () => {
     setWalletLoading(true);
@@ -88,6 +88,7 @@ export function TechBlackjack() {
     return () => {
       mountedRef.current = false;
       window.removeEventListener("ekatech-techcoin-refresh", loadState);
+      if (timerRef.current) window.clearTimeout(timerRef.current);
     };
   }, [loadState]);
 
@@ -154,7 +155,9 @@ export function TechBlackjack() {
     playOffSound("bet");
 
     if (openingStatus === "blackjack") {
-      window.setTimeout(() => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
         if (mountedRef.current) settleDealer([{ id: uniqueId("hand"), cards: playerCards, bet: amount, status: openingStatus, natural: openingStatus === "blackjack" }], deal.deck, nextDealerCards);
       }, 450);
     }
@@ -338,7 +341,6 @@ export function TechBlackjack() {
             </div>
             <div className="my-3 flex flex-wrap items-center justify-center gap-3 text-center">
               <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-amber-100">Blackjack pays 3 to 2</span>
-              {dealerShowsAce ? <button type="button" className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100">Insurance</button> : null}
             </div>
             <div className="min-h-[13rem]">
               {playerHands.map((hand, index) => (
@@ -359,7 +361,7 @@ export function TechBlackjack() {
             </div>
 
             <div className="mt-4 grid gap-3 rounded-[1.6rem] border border-white/10 bg-black/30 p-3 md:grid-cols-[1fr_auto_auto_1.2fr]">
-              <label className="block"><span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Bet Amount</span><input type="number" min={1} max={Math.max(1, balance)} value={safeBet} disabled={phase === "playing" || phase === "dealer"} onChange={(event) => setBetAmount(sanitizeBet(event.target.value, Math.max(balance, 1)))} className="mt-1 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-black text-white outline-none focus:border-emerald-300/40" /></label>
+              <label className="block"><span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Bet Amount</span><input type="number" min={1} max={Math.max(1, balance)} value={betAmount} disabled={phase === "playing" || phase === "dealer"} onChange={(event) => setBetAmount(Number(event.target.value))} onBlur={() => setBetAmount((current) => sanitizeBet(current, Math.max(balance, 1)))} className="mt-1 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-black text-white outline-none focus:border-emerald-300/40" /></label>
               <button type="button" disabled={phase === "playing" || phase === "dealer"} onClick={() => adjustBet(0.5)} className="self-end rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 font-black transition hover:bg-white/10 disabled:opacity-45">1/2</button>
               <button type="button" disabled={phase === "playing" || phase === "dealer"} onClick={() => adjustBet(2)} className="self-end rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 font-black transition hover:bg-white/10 disabled:opacity-45">2x</button>
               <button type="button" disabled={walletLoading || actionLoading || safeBet < 1 || safeBet > balance || phase === "playing" || phase === "dealer"} onClick={startRound} className="self-end rounded-2xl bg-gradient-to-r from-emerald-300 to-lime-300 px-6 py-4 text-lg font-black uppercase tracking-[0.18em] text-slate-950 shadow-xl shadow-emerald-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100">Bet</button>
