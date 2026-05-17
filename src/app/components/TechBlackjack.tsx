@@ -19,6 +19,8 @@ const SUITS: Suit[] = ["C", "D", "H", "S"];
 const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 const STORAGE_KEY = "ekatech:tech-blackjack:v1";
 const DEFAULT_BET = 25;
+const CARD_REVEAL_DELAY_MS = 520;
+const DEALER_DRAW_DELAY_MS = 680;
 const EKA_LOGO_SRC = "/og-image.svg";
 const DEBUG_BLACKJACK = Boolean(import.meta.env?.DEV);
 
@@ -143,23 +145,49 @@ export function TechBlackjack() {
     const playerCards = safeCards([deal.cards[0], deal.cards[2]]);
     const nextDealerCards = safeCards([deal.cards[1], deal.cards[3]]);
     const openingStatus = isBlackjack(playerCards) ? "blackjack" : "playing";
+    const handId = uniqueId("hand");
 
     setDeck(deal.deck);
-    setDealerCards(nextDealerCards);
-    setHideDealerHole(true);
-    setHands([{ id: uniqueId("hand"), cards: playerCards, bet: amount, status: openingStatus, natural: openingStatus === "blackjack" }]);
+    setDealerCards([]);
+    setHideDealerHole(false);
+    setHands([{ id: handId, cards: [], bet: amount, status: "playing" }]);
     setActiveHandIndex(0);
-    setPhase(openingStatus === "blackjack" ? "dealer" : "playing");
-    setMessage(openingStatus === "blackjack" ? "Blackjack! Dealer reveals." : "Choose Hit, Stand, Double or Split.");
+    setPhase("dealer");
+    setMessage("Dealing cards...");
     recordSessionBet(amount);
     playOffSound("bet");
+
+    await revealOpeningDeal(handId, playerCards, amount, openingStatus, nextDealerCards);
+    if (!mountedRef.current) return;
+
+    setPhase(openingStatus === "blackjack" ? "dealer" : "playing");
+    setMessage(openingStatus === "blackjack" ? "Blackjack! Dealer reveals." : "Choose Hit, Stand, Double or Split.");
 
     if (openingStatus === "blackjack") {
       if (timerRef.current) window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
-        if (mountedRef.current) settleDealer([{ id: uniqueId("hand"), cards: playerCards, bet: amount, status: openingStatus, natural: openingStatus === "blackjack" }], deal.deck, nextDealerCards);
-      }, 450);
+        if (mountedRef.current) settleDealer([{ id: handId, cards: playerCards, bet: amount, status: openingStatus, natural: openingStatus === "blackjack" }], deal.deck, nextDealerCards);
+      }, CARD_REVEAL_DELAY_MS);
+    }
+  }
+
+  async function revealOpeningDeal(handId: string, playerCards: Card[], amount: number, openingStatus: HandStatus, nextDealerCards: Card[]) {
+    const revealSteps = [
+      () => setHands([{ id: handId, cards: safeCards([playerCards[0]]), bet: amount, status: "playing" }]),
+      () => setDealerCards(safeCards([nextDealerCards[0]])),
+      () => setHands([{ id: handId, cards: playerCards, bet: amount, status: openingStatus, natural: openingStatus === "blackjack" }]),
+      () => {
+        setDealerCards(nextDealerCards);
+        setHideDealerHole(true);
+      },
+    ];
+
+    for (const revealCard of revealSteps) {
+      await wait(CARD_REVEAL_DELAY_MS);
+      if (!mountedRef.current) return;
+      revealCard();
+      playOffSound("card");
     }
   }
 
@@ -257,14 +285,20 @@ export function TechBlackjack() {
     let finalDealerCards = safeCards(currentDealerCards);
     const needsDealerDraw = safeRoundHands.some((hand) => hand.status !== "bust");
     if (needsDealerDraw) {
-      while (handValue(finalDealerCards).total < 17) {
+      await wait(CARD_REVEAL_DELAY_MS);
+      while (mountedRef.current && handValue(finalDealerCards).total < 17) {
         const drawn = drawCards(finalDeck, 1);
         const card = drawn.cards[0];
         if (!card) break;
         finalDeck = drawn.deck;
         finalDealerCards = [...finalDealerCards, card];
+        setDeck(finalDeck);
+        setDealerCards(finalDealerCards);
+        playOffSound("card");
+        await wait(DEALER_DRAW_DELAY_MS);
       }
     }
+    if (!mountedRef.current) return;
 
     const dealerTotal = handValue(finalDealerCards).total;
     const dealerBj = isBlackjack(finalDealerCards);
@@ -307,7 +341,8 @@ export function TechBlackjack() {
 
   const removeToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
   function pushToast(label: string, net: number) {
-    setToasts([{ id: createToastNoFactionSuccessId("toast-tech-blackjack"), amount: Math.abs(Math.round(net)), multiplier: 1, currency: "TC", title: label, displayAmount: net === 0 ? "Bet Returned" : `${net > 0 ? "+" : "-"}${formatTc(Math.abs(net))} TC`, variant: net > 0 ? "success" : net < 0 ? "danger" : "neutral" }]);
+    if (net <= 0) return;
+    setToasts([{ id: createToastNoFactionSuccessId("toast-tech-blackjack"), amount: Math.round(net), multiplier: 1, currency: "TC", title: label, displayAmount: `+${formatTc(net)} TC`, variant: "success" }]);
   }
 
   return (
@@ -398,10 +433,10 @@ function CardFan({ cards, hideSecond = false }: { cards?: Card[]; hideSecond?: b
     <div className="flex justify-center pl-8 [perspective:900px]">
       {safeHand.map((card, index) => (
         <motion.div
-          key={card.id || `${card.code}-${index}`}
+          key={`${card.id || `${card.code}-${index}`}-${hideSecond && index === 1 ? "back" : "face"}`}
           initial={{ opacity: 0, y: -18, rotateY: hideSecond && index === 1 ? 180 : 10, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, rotateY: 0, scale: 1 }}
-          transition={{ duration: 0.36, delay: index * 0.08, ease: [0.2, 0.8, 0.2, 1] }}
+          transition={{ duration: 0.46, delay: index * 0.18, ease: [0.2, 0.8, 0.2, 1] }}
           className="relative h-32 w-[5.8rem] shrink-0 sm:h-40 sm:w-[7.2rem]"
           style={{ marginLeft: index === 0 ? 0 : "-2rem", zIndex: index + 1 }}
         >
@@ -539,7 +574,13 @@ function settleHand(hand: PlayerHand, dealerTotal: number, dealerBj: boolean): P
   if (playerTotal === dealerTotal) return { ...safeHand, status: "push", resultNet: 0 };
   return { ...safeHand, status: "loss", resultNet: -bet };
 }
-function payoutForHand(hand: PlayerHand) { return Math.max(0, safeAmount(hand?.bet, DEFAULT_BET) + Math.round(Number(hand?.resultNet || 0))); }
+function payoutForHand(hand: PlayerHand) {
+  const bet = safeAmount(hand?.bet, DEFAULT_BET);
+  if (hand?.status === "blackjack") return Math.floor(bet * 2.5);
+  if (hand?.status === "win") return bet * 2;
+  if (hand?.status === "push") return bet;
+  return 0;
+}
 function toastLabel(hands: PlayerHand[], totalNet: number) {
   const safeHands = sanitizeHands(hands);
   if (safeHands.length === 1 && safeHands[0]?.status === "blackjack") return `Blackjack! +${formatTc(Math.max(0, totalNet))} TC`;
@@ -556,6 +597,7 @@ function sanitizeWallet(value: any): WalletState { return { currency: "Tech Coin
 function sanitizeServerHistory(value: any[]): ResultHistory[] { return value.slice(0, 20).map((item) => ({ id: uniqueId("server-result"), resultType: String(item?.result_type || "settled"), playerScore: Math.max(0, Math.floor(Number(item?.player_score || 0))), dealerScore: Math.max(0, Math.floor(Number(item?.dealer_score || 0))), betAmount: Math.max(0, Math.floor(Number(item?.bet_amount || 0))), netAmount: Math.round(Number(item?.net_amount || 0)) })); }
 function formatTc(value: number) { return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(Number(value) || 0)); }
 function uniqueId(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
+function wait(ms: number) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
 function cardImage(card: Card) { return `/cards/${card.code}.png`; }
 function cardAlt(card: Card) { return `${card.rank} of ${suitName(card.suit)}`; }
 function suitName(suit: Suit) { return suit === "C" ? "Clubs" : suit === "D" ? "Diamonds" : suit === "H" ? "Hearts" : "Spades"; }
