@@ -57,9 +57,9 @@ export async function onRequestPost(context: any) {
     }
 
     if (action === "settle") {
-      const creditAmount = Math.max(0, Math.floor(Number(body?.creditAmount || 0)));
-      if (creditAmount > 0) await creditWallet(context, auth.user.id, creditAmount, "Tech Blackjack payout");
-      await insertBlackjackLog(context, auth.user.id, body || {});
+      const payoutAmount = sanitizePayoutAmount(body);
+      if (payoutAmount > 0) await creditWallet(context, auth.user.id, payoutAmount, "Tech Blackjack payout");
+      await insertBlackjackLog(context, auth.user.id, { ...(body || {}), payoutAmount });
       return json(await buildState(context, auth.user.id));
     }
 
@@ -91,6 +91,23 @@ function sanitizeAmount(value: unknown) {
   if (!Number.isFinite(amount) || amount < AMOUNT_LIMITS.min) throw new Error("Tech Coin amount must be at least 1.");
   if (amount > AMOUNT_LIMITS.max) throw new Error(`Tech Coin amount must be ${AMOUNT_LIMITS.max} or less.`);
   return amount;
+}
+
+function sanitizePayoutAmount(body: BlackjackLogBody & { creditAmount?: number }) {
+  const payoutInput = body?.payoutAmount ?? body?.creditAmount ?? calculateBlackjackPayout(body?.resultType, body?.betAmount || 0);
+  const payoutAmount = Math.max(0, Math.floor(Number(payoutInput || 0)));
+  if (!Number.isFinite(payoutAmount)) throw new Error("Invalid Tech Blackjack payout.");
+  if (payoutAmount > AMOUNT_LIMITS.max * 3) throw new Error(`Tech Blackjack payout must be ${AMOUNT_LIMITS.max * 3} or less.`);
+  return payoutAmount;
+}
+
+function calculateBlackjackPayout(result: string | undefined, betAmount: number) {
+  const bet = Math.max(0, Math.floor(Number(betAmount || 0)));
+  if (result === "blackjack") return Math.floor(bet * 2.5);
+  if (result === "win") return bet * 2;
+  if (result === "push") return bet;
+  if (result === "surrender") return Math.floor(bet / 2);
+  return 0;
 }
 
 async function debitWallet(context: any, userId: number, amount: number, reason: string) {

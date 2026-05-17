@@ -8,7 +8,7 @@ import { playOffSound } from "./OffSoundEngine";
 type Suit = "C" | "D" | "H" | "S";
 type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K";
 type Card = { suit: Suit; rank: Rank; code: string; id: string };
-type HandStatus = "playing" | "stood" | "bust" | "blackjack" | "win" | "loss" | "push";
+type HandStatus = "playing" | "stood" | "bust" | "blackjack" | "win" | "loss" | "push" | "surrender";
 type PlayerHand = { id: string; cards: Card[]; bet: number; status: HandStatus; natural?: boolean; doubled?: boolean; resultNet?: number };
 type Phase = "betting" | "playing" | "dealer" | "settled";
 type WalletState = { balance: number; currency: string; symbol: string; lifetime_earned?: number };
@@ -303,7 +303,7 @@ export function TechBlackjack() {
     const dealerTotal = handValue(finalDealerCards).total;
     const dealerBj = isBlackjack(finalDealerCards);
     const settled = safeRoundHands.map((hand) => settleHand(hand, dealerTotal, dealerBj));
-    const totalCredit = settled.reduce((sum, hand) => sum + payoutForHand(hand), 0);
+    const totalPayout = settled.reduce((sum, hand) => sum + payoutForHand(hand), 0);
     const totalNet = settled.reduce((sum, hand) => sum + Math.round(hand.resultNet || 0), 0);
     const primary = settled[0] || safeRoundHands[0];
     const resultLabel = toastLabel(settled, totalNet);
@@ -323,15 +323,14 @@ export function TechBlackjack() {
 
     await runWalletAction({
       action: "settle",
-      creditAmount: totalCredit,
       resultType: primary?.status || "settled",
       playerScore: handValue(primary?.cards || []).total,
       dealerScore: dealerTotal,
       betAmount: settled.reduce((sum, hand) => sum + hand.bet, 0),
       netAmount: totalNet,
-      payoutAmount: totalCredit,
+      payoutAmount: totalPayout,
     });
-    debugBlackjack("round end", { status: "settled", totalNet, totalCredit, playerHandLength: settled.map((hand) => hand.cards.length), dealerHandLength: finalDealerCards.length, deckLength: finalDeck.length });
+    debugBlackjack("round end", { status: "settled", totalNet, totalPayout, playerHandLength: settled.map((hand) => hand.cards.length), dealerHandLength: finalDealerCards.length, deckLength: finalDeck.length });
     playOffSound(totalNet >= 0 ? "success" : "error");
   }
 
@@ -567,19 +566,26 @@ function settleHand(hand: PlayerHand, dealerTotal: number, dealerBj: boolean): P
   const safeHand = sanitizeHands([hand])[0] || { ...hand, cards: [], bet: DEFAULT_BET, status: "loss" as HandStatus };
   const bet = safeAmount(safeHand.bet, DEFAULT_BET);
   const playerTotal = handValue(safeHand.cards).total;
-  if (playerTotal > 21) return { ...safeHand, status: "loss", resultNet: -bet };
-  if (safeHand.natural && !dealerBj) return { ...safeHand, status: "blackjack", resultNet: Math.floor(bet * 1.5) };
-  if (dealerBj && !safeHand.natural) return { ...safeHand, status: "loss", resultNet: -bet };
-  if (dealerTotal > 21 || playerTotal > dealerTotal) return { ...safeHand, status: "win", resultNet: bet };
-  if (playerTotal === dealerTotal) return { ...safeHand, status: "push", resultNet: 0 };
-  return { ...safeHand, status: "loss", resultNet: -bet };
+  let result: HandStatus = "loss";
+  if (playerTotal > 21) result = "loss";
+  else if (safeHand.natural && !dealerBj) result = "blackjack";
+  else if (dealerBj && !safeHand.natural) result = "loss";
+  else if (dealerTotal > 21 || playerTotal > dealerTotal) result = "win";
+  else if (playerTotal === dealerTotal) result = "push";
+
+  const payout = calculateBlackjackPayout(result, bet);
+  return { ...safeHand, status: result, resultNet: payout - bet };
+}
+function calculateBlackjackPayout(result: HandStatus | string | undefined, betAmount: number) {
+  const bet = safeAmount(betAmount, DEFAULT_BET);
+  if (result === "blackjack") return Math.floor(bet * 2.5);
+  if (result === "win") return bet * 2;
+  if (result === "push") return bet;
+  if (result === "surrender") return Math.floor(bet / 2);
+  return 0;
 }
 function payoutForHand(hand: PlayerHand) {
-  const bet = safeAmount(hand?.bet, DEFAULT_BET);
-  if (hand?.status === "blackjack") return Math.floor(bet * 2.5);
-  if (hand?.status === "win") return bet * 2;
-  if (hand?.status === "push") return bet;
-  return 0;
+  return calculateBlackjackPayout(hand?.status, hand?.bet);
 }
 function toastLabel(hands: PlayerHand[], totalNet: number) {
   const safeHands = sanitizeHands(hands);
