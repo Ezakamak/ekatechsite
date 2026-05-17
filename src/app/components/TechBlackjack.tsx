@@ -13,7 +13,7 @@ type PlayerHand = { id: string; cards: Card[]; bet: number; status: HandStatus; 
 type Phase = "betting" | "playing" | "dealer" | "settled";
 type WalletState = { balance: number; currency: string; symbol: string; lifetime_earned?: number };
 type ResultHistory = { id: string; resultType: string; playerScore: number; dealerScore: number; betAmount: number; netAmount: number };
-type BlackjackToast = ToastNoFactionSuccessPayload & { displayAmount?: string; variant?: "success" | "danger" | "neutral" };
+type BlackjackToast = ToastNoFactionSuccessPayload & { displayAmount?: string; displayMultiplier?: string; variant?: "success" | "danger" | "neutral" };
 
 const SUITS: Suit[] = ["C", "D", "H", "S"];
 const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -304,6 +304,7 @@ export function TechBlackjack() {
     const dealerBj = isBlackjack(finalDealerCards);
     const settled = safeRoundHands.map((hand) => settleHand(hand, dealerTotal, dealerBj));
     const totalPayout = settled.reduce((sum, hand) => sum + payoutForHand(hand), 0);
+    const totalEntryAmount = settled.reduce((sum, hand) => sum + safeAmount(hand.bet, DEFAULT_BET), 0);
     const totalNet = settled.reduce((sum, hand) => sum + Math.round(hand.resultNet || 0), 0);
     const primary = settled[0] || safeRoundHands[0];
     const resultLabel = toastLabel(settled, totalNet);
@@ -315,7 +316,7 @@ export function TechBlackjack() {
     setActiveHandIndex(0);
     setMessage(resultLabel);
     settled.forEach((hand) => recordSessionResult(Math.round(hand.resultNet || 0)));
-    pushToast(resultLabel, totalNet);
+    pushToast(totalPayout, totalEntryAmount, totalPayout - totalEntryAmount);
     setHistory((current) => [
       ...settled.map((hand) => ({ id: uniqueId("result"), resultType: hand.status, playerScore: handValue(hand.cards).total, dealerScore: dealerTotal, betAmount: hand.bet, netAmount: Math.round(hand.resultNet || 0) })),
       ...current,
@@ -339,9 +340,27 @@ export function TechBlackjack() {
   }
 
   const removeToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
-  function pushToast(label: string, net: number) {
-    if (net <= 0) return;
-    setToasts([{ id: createToastNoFactionSuccessId("toast-tech-blackjack"), amount: Math.round(net), multiplier: 1, currency: "TC", title: label, displayAmount: `+${formatTc(net)} TC`, variant: "success" }]);
+  function pushToast(totalReturn: number, entryAmount: number, netGain: number) {
+    const safeTotalReturn = Math.max(0, Number(totalReturn) || 0);
+    const safeEntryAmount = Math.max(0, Number(entryAmount) || 0);
+    if (safeTotalReturn <= 0 || safeEntryAmount <= 0) return;
+
+    const multiplier = safeTotalReturn / safeEntryAmount;
+    const multiplierLabel = formatMultiplier(multiplier);
+    const totalReturnLabel = formatTechCoinAmount(safeTotalReturn);
+    const netGainLabel = formatSignedTechCoinAmount(netGain);
+    const isRefund = Math.round(Number(netGain) || 0) === 0;
+
+    setToasts([{
+      id: createToastNoFactionSuccessId("toast-tech-blackjack"),
+      amount: safeTotalReturn,
+      multiplier,
+      currency: "Tech Coin",
+      title: `${multiplierLabel} — ${totalReturnLabel} Tech Coin ${isRefund ? "iade edildi" : "kazandın"}`,
+      displayAmount: `Net artış: ${netGainLabel} Tech Coin`,
+      displayMultiplier: multiplierLabel,
+      variant: isRefund ? "neutral" : "success",
+    }]);
   }
 
   return (
@@ -602,6 +621,19 @@ function sanitizeBet(value: unknown, max: number) {
 function sanitizeWallet(value: any): WalletState { return { currency: "Tech Coin", symbol: "TC", balance: Math.max(0, Math.floor(Number(value?.balance || 0))), lifetime_earned: Math.max(0, Math.floor(Number(value?.lifetime_earned || 0))) }; }
 function sanitizeServerHistory(value: any[]): ResultHistory[] { return value.slice(0, 20).map((item) => ({ id: uniqueId("server-result"), resultType: String(item?.result_type || "settled"), playerScore: Math.max(0, Math.floor(Number(item?.player_score || 0))), dealerScore: Math.max(0, Math.floor(Number(item?.dealer_score || 0))), betAmount: Math.max(0, Math.floor(Number(item?.bet_amount || 0))), netAmount: Math.round(Number(item?.net_amount || 0)) })); }
 function formatTc(value: number) { return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(Number(value) || 0)); }
+
+function formatTechCoinAmount(value: number) {
+  return new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.max(0, Number(value) || 0));
+}
+function formatSignedTechCoinAmount(value: number) {
+  const safeValue = Number(value) || 0;
+  const sign = safeValue > 0 ? "+" : safeValue < 0 ? "-" : "";
+  return `${sign}${formatTechCoinAmount(Math.abs(safeValue))}`;
+}
+function formatMultiplier(value: number) {
+  const safeValue = Number.isFinite(Number(value)) ? Number(value) : 1;
+  return `${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.max(0, safeValue))}x`;
+}
 function uniqueId(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
 function wait(ms: number) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
 function cardImage(card: Card) { return `/cards/${card.code}.png`; }
