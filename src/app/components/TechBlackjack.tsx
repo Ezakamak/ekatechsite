@@ -20,7 +20,7 @@ const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "
 const STORAGE_KEY = "ekatech:tech-blackjack:v1";
 const DEFAULT_BET = 25;
 const EKA_LOGO_SRC = "/og-image.svg";
-const DEBUG_BLACKJACK = import.meta.env.DEV;
+const DEBUG_BLACKJACK = Boolean(import.meta.env?.DEV);
 
 export function TechBlackjack() {
   const mountedRef = useRef(true);
@@ -41,8 +41,8 @@ export function TechBlackjack() {
 
   const balance = Math.max(0, Math.floor(Number(wallet?.balance || 0)));
   const safeBet = useMemo(() => sanitizeBet(betAmount ?? DEFAULT_BET, Math.max(1, balance || 1)), [betAmount, balance]);
-  const safeDeck = useMemo(() => sanitizeCards(deck), [deck]);
-  const dealerHand = useMemo(() => sanitizeCards(dealerCards), [dealerCards]);
+  const safeDeck = useMemo(() => safeCards(deck), [deck]);
+  const dealerHand = useMemo(() => safeCards(dealerCards), [dealerCards]);
   const playerHands = useMemo(() => sanitizeHands(hands), [hands]);
   const activeHandIndexSafe = Math.min(Math.max(0, activeHandIndex || 0), Math.max(0, playerHands.length - 1));
   const activeHand = playerHands[activeHandIndexSafe];
@@ -74,14 +74,14 @@ export function TechBlackjack() {
 
   useEffect(() => {
     mountedRef.current = true;
-    const saved = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
-    if (saved) {
-      try {
+    try {
+      const saved = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
+      if (saved) {
         const parsed = JSON.parse(saved) as { betAmount?: number };
         setBetAmount(sanitizeBet(parsed.betAmount, 1_000_000));
-      } catch {
-        setBetAmount(DEFAULT_BET);
       }
+    } catch {
+      setBetAmount(DEFAULT_BET);
     }
     loadState();
     window.addEventListener("ekatech-techcoin-refresh", loadState);
@@ -93,7 +93,11 @@ export function TechBlackjack() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ betAmount: safeBet || DEFAULT_BET }));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ betAmount: safeBet || DEFAULT_BET }));
+    } catch {
+      debugBlackjack("local storage unavailable", { key: STORAGE_KEY });
+    }
   }, [safeBet]);
 
   async function runWalletAction(payload: Record<string, unknown>) {
