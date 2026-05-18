@@ -1,436 +1,224 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { BadgeDollarSign, Club, Layers, Wallet } from "lucide-react";
-import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
-import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
+import { BadgeCheck, Club, History, Layers, ShieldCheck } from "lucide-react";
 import { playOffSound } from "./OffSoundEngine";
 import { useLanguage } from "../i18n";
 
 type Suit = "C" | "D" | "H" | "S";
 type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K";
 type Card = { suit: Suit; rank: Rank; code: string; id: string };
-type HandStatus = "playing" | "stood" | "bust" | "blackjack" | "win" | "loss" | "push" | "surrender";
-type PlayerHand = { id: string; cards: Card[]; bet: number; status: HandStatus; natural?: boolean; doubled?: boolean; resultNet?: number };
-type Phase = "betting" | "playing" | "dealer" | "settled";
-type WalletState = { balance: number; currency: string; symbol: string; lifetime_earned?: number };
-type ResultHistory = { id: string; resultType: string; playerScore: number; dealerScore: number; betAmount: number; netAmount: number };
-type BlackjackToast = ToastNoFactionSuccessPayload & { displayAmount?: string; displayMultiplier?: string; variant?: "success" | "danger" | "neutral"; hideHint?: boolean };
+type HandStatus = "playing" | "stood" | "bust" | "blackjack" | "win" | "loss" | "push";
+type PlayerHand = { id: string; cards: Card[]; status: HandStatus; natural?: boolean; doubled?: boolean };
+type AvailableActions = { hit: boolean; stand: boolean; double: boolean; split: boolean; newRound: boolean };
+type RoundResult = {
+  label: "Player wins" | "Dealer wins" | "Push" | "Bust" | "Blackjack";
+  hands: Array<{ status: HandStatus; playerScore: number; dealerScore: number; outcome: "win" | "loss" | "push" | "blackjack" }>;
+};
+type BlackjackRound = {
+  roundId: string;
+  status: "playing" | "settled";
+  deckHash: string;
+  salt: string;
+  nonce: number;
+  serverSeed?: string;
+  dealerCardsVisible: Card[];
+  dealerCardsFull?: Card[];
+  playerHands: PlayerHand[];
+  activeHandIndex: number;
+  availableActions: AvailableActions;
+  result?: RoundResult | null;
+  verification?: { deckHash: string; salt: string; nonce: number; serverSeedRevealed: boolean };
+};
+type ResultHistory = { id: string; resultType: string; playerScore: number; dealerScore: number; deckHashShort: string; createdAt?: string };
+type VerifyState = { status: "idle" | "hidden" | "verified" | "failed" | "error"; message: string; recalculatedHash?: string };
 
 const SUITS: Suit[] = ["C", "D", "H", "S"];
 const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
-const STORAGE_KEY = "ekatech:tech-blackjack:v1";
-const DEFAULT_BET = 25;
-const CARD_REVEAL_DELAY_MS = 520;
-const DEALER_DRAW_DELAY_MS = 680;
 const EKA_LOGO_SRC = "/og-image.svg";
 const DEBUG_BLACKJACK = Boolean(import.meta.env?.DEV);
 
 export function TechBlackjack() {
   const { language } = useLanguage();
   const tr = language === "tr";
-  const locale = tr ? "tr-TR" : "en-US";
   const mountedRef = useRef(true);
-  const timerRef = useRef<number | null>(null);
-  const [wallet, setWallet] = useState<WalletState | null>(null);
-  const [walletLoading, setWalletLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [betAmount, setBetAmount] = useState(DEFAULT_BET);
-  const [deck, setDeck] = useState<Card[]>([]);
-  const [dealerCards, setDealerCards] = useState<Card[]>([]);
-  const [hideDealerHole, setHideDealerHole] = useState(true);
-  const [hands, setHands] = useState<PlayerHand[]>([]);
-  const [activeHandIndex, setActiveHandIndex] = useState(0);
-  const [phase, setPhase] = useState<Phase>("betting");
-  const [message, setMessage] = useState(tr ? "Başlamak için Tech Coin bahsi koy." : "Place a Tech Coin bet to start.");
+  const [round, setRound] = useState<BlackjackRound | null>(null);
   const [history, setHistory] = useState<ResultHistory[]>([]);
-  const [toasts, setToasts] = useState<BlackjackToast[]>([]);
-  const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-blackjack");
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [message, setMessage] = useState(tr ? "Backend kontrollü pratik round'u başlat." : "Start a backend-controlled practice round.");
+  const [verifyState, setVerifyState] = useState<VerifyState>({ status: "idle", message: "" });
 
-  const balance = Math.max(0, Math.floor(Number(wallet?.balance || 0)));
-  const safeBet = useMemo(() => sanitizeBet(betAmount ?? DEFAULT_BET, Math.max(1, balance || 1)), [betAmount, balance]);
-  const safeDeck = useMemo(() => safeCards(deck), [deck]);
-  const dealerHand = useMemo(() => safeCards(dealerCards), [dealerCards]);
-  const playerHands = useMemo(() => sanitizeHands(hands), [hands]);
-  const activeHandIndexSafe = Math.min(Math.max(0, activeHandIndex || 0), Math.max(0, playerHands.length - 1));
-  const activeHand = playerHands[activeHandIndexSafe];
-  const dealerVisibleCards = hideDealerHole && dealerHand.length > 1 ? dealerHand.slice(0, 1) : dealerHand;
-  const dealerScore = handValue(dealerVisibleCards).total;
-  const dealerActualScore = handValue(dealerHand).total;
-  const canPlay = phase === "playing" && Boolean(activeHand) && activeHand.status === "playing" && !actionLoading;
-  const isFirstDecision = canPlay && safeCards(activeHand?.cards).length === 2 && !activeHand?.doubled;
-  const canDouble = isFirstDecision && balance >= safeAmount(activeHand?.bet, DEFAULT_BET);
-  const canSplit = isFirstDecision && activeHand?.cards?.[0]?.rank === activeHand?.cards?.[1]?.rank && balance >= safeAmount(activeHand?.bet, DEFAULT_BET) && playerHands.length < 2;
+  const dealerCards = useMemo(() => safeCards(round?.status === "settled" ? round?.dealerCardsFull || round?.dealerCardsVisible : round?.dealerCardsVisible), [round]);
+  const playerHands = useMemo(() => sanitizeHands(round?.playerHands), [round]);
+  const activeHandIndex = Math.min(Math.max(0, round?.activeHandIndex || 0), Math.max(0, playerHands.length - 1));
+  const dealerHidden = Boolean(round && round.status !== "settled" && dealerCards.length === 1);
+  const dealerScore = dealerHidden ? handValue(dealerCards).total : handValue(dealerCards).total;
+  const actions = round?.availableActions || { hit: false, stand: false, double: false, split: false, newRound: true };
 
   const loadState = useCallback(async () => {
-    setWalletLoading(true);
+    setLoading(true);
     try {
       const response = await fetch("/api/tech-blackjack", { credentials: "same-origin", cache: "no-store" });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error(data?.error || "Wallet unavailable");
+      if (!response.ok || !data) throw new Error(data?.error || "Tech Blackjack Practice unavailable.");
       if (!mountedRef.current) return;
-      setWallet(sanitizeWallet(data.wallet));
-      if (Array.isArray(data.recent)) setHistory(sanitizeServerHistory(data.recent));
+      applyServerState(data, tr);
     } catch (error) {
-      debugBlackjack("caught error", { message: error instanceof Error ? error.message : String(error) });
-      if (mountedRef.current) setMessage(error instanceof Error ? error.message : (tr ? "Tech Blackjack cüzdanı kullanılamıyor." : "Tech Blackjack wallet unavailable."));
+      debugBlackjack("load error", { message: readableError(error) });
+      if (mountedRef.current) setMessage(readableError(error));
     } finally {
-      if (mountedRef.current) setWalletLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [tr]);
+
+  function applyServerState(data: any, isTurkish: boolean) {
+    const nextRound = sanitizeRound(data?.round);
+    setRound(nextRound);
+    setHistory(sanitizeServerHistory(data?.recent));
+    setVerifyState({ status: "idle", message: "" });
+    if (nextRound?.status === "settled" && nextRound.result) setMessage(resultMessage(nextRound.result, isTurkish));
+    else if (nextRound?.status === "playing") setMessage(isTurkish ? "Aksiyonlar backend'e gönderilir; kartlar server state'inden gelir." : "Actions are sent to the backend; cards come from server state.");
+    else setMessage(isTurkish ? "Yeni Round ile hash kilitli bir deste oluştur." : "Create a hash-locked deck with New Round.");
+  }
 
   useEffect(() => {
     mountedRef.current = true;
-    try {
-      const saved = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
-      if (saved) {
-        const parsed = JSON.parse(saved) as { betAmount?: number };
-        setBetAmount(sanitizeBet(parsed.betAmount, 1_000_000));
-      }
-    } catch {
-      setBetAmount(DEFAULT_BET);
-    }
     loadState();
-    window.addEventListener("ekatech-techcoin-refresh", loadState);
     return () => {
       mountedRef.current = false;
-      window.removeEventListener("ekatech-techcoin-refresh", loadState);
-      if (timerRef.current) window.clearTimeout(timerRef.current);
     };
   }, [loadState]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ betAmount: safeBet || DEFAULT_BET }));
-    } catch {
-      debugBlackjack("local storage unavailable", { key: STORAGE_KEY });
-    }
-  }, [safeBet]);
-
-  async function runWalletAction(payload: Record<string, unknown>) {
+  async function postAction(action: "start-round" | "hit" | "stand" | "double" | "split") {
     setActionLoading(true);
     try {
       const response = await fetch("/api/tech-blackjack", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ action }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error(data?.error || (tr ? "Tech Blackjack işlemi başarısız oldu." : "Tech Blackjack action failed."));
-      if (mountedRef.current && data.wallet) setWallet(sanitizeWallet(data.wallet));
-      window.dispatchEvent(new Event("ekatech-techcoin-refresh"));
-      return data;
+      if (!response.ok || !data) throw new Error(data?.error || (tr ? "Aksiyon başarısız oldu." : "Action failed."));
+      if (!mountedRef.current) return;
+      applyServerState(data, tr);
+      playOffSound(action === "start-round" ? "bet" : data?.round?.status === "settled" ? "success" : "card");
     } catch (error) {
-      debugBlackjack("caught error", { message: error instanceof Error ? error.message : String(error) });
-      if (mountedRef.current) setMessage(error instanceof Error ? error.message : (tr ? "Tech Blackjack işlemi başarısız oldu." : "Tech Blackjack action failed."));
+      debugBlackjack("action error", { action, message: readableError(error) });
+      if (mountedRef.current) setMessage(readableError(error));
       playOffSound("error");
-      return null;
     } finally {
       if (mountedRef.current) setActionLoading(false);
     }
   }
 
-  async function startRound() {
-    const amount = sanitizeBet(betAmount ?? DEFAULT_BET, balance);
-    debugBlackjack("round start", { amount, balance, phase, deckLength: safeDeck.length, playerHandLength: activeHand?.cards?.length || 0, dealerHandLength: dealerHand.length });
-    if (phase !== "betting" && phase !== "settled") return;
-    if (amount < 1 || amount > balance) {
-      setMessage((tr ? "Cüzdan bakiyene uygun geçerli bir Tech Coin bahsi gir." : "Enter a valid Tech Coin bet within your wallet balance."));
+  async function verifyRound() {
+    if (!round) return;
+    if (round.status !== "settled" || !round.serverSeed) {
+      setVerifyState({ status: "hidden", message: tr ? "Server seed round bitince açıklanır." : "Server seed will be revealed after the round." });
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const [clientHash, response] = await Promise.all([
+        sha256HexClient(`${round.serverSeed}:${round.salt}:${round.nonce}`),
+        fetch("/api/tech-blackjack", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "verify-round", roundId: round.roundId }),
+        }),
+      ]);
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) throw new Error(data?.error || "Verification failed.");
+      const backendVerified = data?.verification?.verified === true;
+      const matches = clientHash === round.deckHash && backendVerified;
+      setVerifyState({
+        status: matches ? "verified" : "failed",
+        message: matches ? "Verified: this deck was locked before the round." : "Verification failed: hash mismatch.",
+        recalculatedHash: clientHash,
+      });
+      playOffSound(matches ? "success" : "error");
+    } catch (error) {
+      setVerifyState({ status: "error", message: readableError(error) });
       playOffSound("error");
-      return;
+    } finally {
+      if (mountedRef.current) setActionLoading(false);
     }
-
-    const debited = await runWalletAction({ action: "debit", amount, reason: "Tech Blackjack bet" });
-    if (!debited) return;
-
-    const nextDeck = shuffleDeck(createDeck());
-    const deal = drawCards(nextDeck, 4);
-    const playerCards = safeCards([deal.cards[0], deal.cards[2]]);
-    const nextDealerCards = safeCards([deal.cards[1], deal.cards[3]]);
-    const openingStatus = isBlackjack(playerCards) ? "blackjack" : "playing";
-    const handId = uniqueId("hand");
-
-    setDeck(deal.deck);
-    setDealerCards([]);
-    setHideDealerHole(false);
-    setHands([{ id: handId, cards: [], bet: amount, status: "playing" }]);
-    setActiveHandIndex(0);
-    setPhase("dealer");
-    setMessage((tr ? "Kartlar dağıtılıyor..." : "Dealing cards..."));
-    recordSessionBet(amount);
-    playOffSound("bet");
-
-    await revealOpeningDeal(handId, playerCards, amount, openingStatus, nextDealerCards);
-    if (!mountedRef.current) return;
-
-    setPhase(openingStatus === "blackjack" ? "dealer" : "playing");
-    setMessage(openingStatus === "blackjack" ? (tr ? "Blackjack! Krupiye açıyor." : "Blackjack! Dealer reveals.") : (tr ? "Kart çek, dur, ikiye katla veya böl seçeneklerinden birini seç." : "Choose Hit, Stand, Double or Split."));
-
-    if (openingStatus === "blackjack") {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-      timerRef.current = window.setTimeout(() => {
-        timerRef.current = null;
-        if (mountedRef.current) settleDealer([{ id: handId, cards: playerCards, bet: amount, status: openingStatus, natural: openingStatus === "blackjack" }], deal.deck, nextDealerCards);
-      }, CARD_REVEAL_DELAY_MS);
-    }
-  }
-
-  async function revealOpeningDeal(handId: string, playerCards: Card[], amount: number, openingStatus: HandStatus, nextDealerCards: Card[]) {
-    const revealSteps = [
-      () => setHands([{ id: handId, cards: safeCards([playerCards[0]]), bet: amount, status: "playing" }]),
-      () => setDealerCards(safeCards([nextDealerCards[0]])),
-      () => setHands([{ id: handId, cards: playerCards, bet: amount, status: openingStatus, natural: openingStatus === "blackjack" }]),
-      () => {
-        setDealerCards(nextDealerCards);
-        setHideDealerHole(true);
-      },
-    ];
-
-    for (const revealCard of revealSteps) {
-      await wait(CARD_REVEAL_DELAY_MS);
-      if (!mountedRef.current) return;
-      revealCard();
-      playOffSound("card");
-    }
-  }
-
-  function hit() {
-    if (!canPlay) return;
-    debugBlackjack("current action", { action: "hit", activeHandIndex: activeHandIndexSafe, deckLength: safeDeck.length });
-    const drawn = drawCards(safeDeck, 1);
-    const card = drawn.cards[0];
-    if (!card) return;
-    const nextHands = playerHands.map((hand, index) => {
-      if (index !== activeHandIndexSafe) return hand;
-      const cards = [...safeCards(hand.cards), card];
-      return { ...hand, cards, status: handValue(cards).total > 21 ? "bust" : hand.status };
-    });
-    setDeck(drawn.deck);
-    setHands(nextHands);
-    playOffSound("card");
-    const nextHand = nextHands[activeHandIndexSafe];
-    if (nextHand?.status === "bust") advanceOrSettle(nextHands, drawn.deck, dealerHand, `Bust -${formatTc(nextHand.bet)} TC`);
-  }
-
-  function stand() {
-    if (!canPlay) return;
-    debugBlackjack("current action", { action: "stand", activeHandIndex: activeHandIndexSafe });
-    const nextHands = playerHands.map((hand, index) => (index === activeHandIndexSafe ? { ...hand, cards: safeCards(hand.cards), status: "stood" as HandStatus } : hand));
-    playOffSound("click");
-    advanceOrSettle(nextHands, safeDeck, dealerHand, (tr ? "Duruldu." : "Standing."));
-  }
-
-  async function doubleDown() {
-    if (!canDouble || !activeHand) return;
-    const activeBet = safeAmount(activeHand.bet, DEFAULT_BET);
-    debugBlackjack("current action", { action: "double", activeHandIndex: activeHandIndexSafe, activeBet });
-    const debited = await runWalletAction({ action: "debit", amount: activeBet, reason: "Tech Blackjack double" });
-    if (!debited) return;
-    recordSessionBet(activeBet);
-    const drawn = drawCards(safeDeck, 1);
-    const card = drawn.cards[0];
-    if (!card) return;
-    const nextHands = playerHands.map((hand, index) => {
-      if (index !== activeHandIndexSafe) return hand;
-      const cards = [...safeCards(hand.cards), card];
-      const nextBet = safeAmount(hand.bet, activeBet) * 2;
-      return { ...hand, cards, bet: nextBet, doubled: true, status: handValue(cards).total > 21 ? "bust" : "stood" };
-    });
-    setDeck(drawn.deck);
-    setHands(nextHands);
-    playOffSound("bet");
-    advanceOrSettle(nextHands, drawn.deck, dealerHand, (tr ? "İkiye katlandı. Bir kart dağıtıldı." : "Double locked. One card dealt."));
-  }
-
-  async function split() {
-    if (!canSplit || !activeHand) return;
-    const activeBet = safeAmount(activeHand.bet, DEFAULT_BET);
-    debugBlackjack("current action", { action: "split", activeHandIndex: activeHandIndexSafe, activeBet });
-    const debited = await runWalletAction({ action: "debit", amount: activeBet, reason: "Tech Blackjack split" });
-    if (!debited) return;
-    recordSessionBet(activeBet);
-    const drawn = drawCards(safeDeck, 2);
-    if (drawn.cards.length < 2) return;
-    const [first, second] = safeCards(activeHand.cards);
-    if (!first || !second) return;
-    const nextHands: PlayerHand[] = [
-      { id: uniqueId("split-a"), cards: safeCards([first, drawn.cards[0]]), bet: activeBet, status: "playing" },
-      { id: uniqueId("split-b"), cards: safeCards([second, drawn.cards[1]]), bet: activeBet, status: "playing" },
-    ];
-    setDeck(drawn.deck);
-    setHands(nextHands);
-    setActiveHandIndex(0);
-    setMessage((tr ? "Bölme aktif. Önce 1. eli oyna." : "Split active. Play hand 1 first."));
-    playOffSound("card");
-  }
-
-  function advanceOrSettle(nextHands: PlayerHand[], nextDeck: Card[], nextDealerCards: Card[], nextMessage: string) {
-    const safeNextHands = sanitizeHands(nextHands);
-    debugBlackjack("current action", { action: "advance-or-settle", activeHandIndex: activeHandIndexSafe, handLengths: safeNextHands.map((hand) => hand.cards.length) });
-    setHands(safeNextHands);
-    const nextIndex = safeNextHands.findIndex((hand, index) => index > activeHandIndexSafe && hand.status === "playing");
-    if (nextIndex >= 0) {
-      setActiveHandIndex(nextIndex);
-      setMessage((tr ? "Sıradaki bölünmüş el aktif." : "Next split hand is active."));
-      return;
-    }
-    const anyLiveHand = safeNextHands.some((hand) => hand.status !== "bust");
-    setMessage(anyLiveHand ? nextMessage : (tr ? "Tüm eller battı." : "All hands busted."));
-    settleDealer(safeNextHands, nextDeck, nextDealerCards);
-  }
-
-  async function settleDealer(roundHands: PlayerHand[], currentDeck: Card[], currentDealerCards: Card[]) {
-    setPhase("dealer");
-    setHideDealerHole(false);
-    const safeRoundHands = sanitizeHands(roundHands);
-    debugBlackjack("round end", { status: "dealer-settle-start", playerHandLength: safeRoundHands.map((hand) => hand.cards.length), dealerHandLength: safeCards(currentDealerCards).length, deckLength: safeCards(currentDeck).length });
-    let finalDeck = safeCards(currentDeck);
-    let finalDealerCards = safeCards(currentDealerCards);
-    const needsDealerDraw = safeRoundHands.some((hand) => hand.status !== "bust");
-    if (needsDealerDraw) {
-      await wait(CARD_REVEAL_DELAY_MS);
-      while (mountedRef.current && handValue(finalDealerCards).total < 17) {
-        const drawn = drawCards(finalDeck, 1);
-        const card = drawn.cards[0];
-        if (!card) break;
-        finalDeck = drawn.deck;
-        finalDealerCards = [...finalDealerCards, card];
-        setDeck(finalDeck);
-        setDealerCards(finalDealerCards);
-        playOffSound("card");
-        await wait(DEALER_DRAW_DELAY_MS);
-      }
-    }
-    if (!mountedRef.current) return;
-
-    const dealerTotal = handValue(finalDealerCards).total;
-    const dealerBj = isBlackjack(finalDealerCards);
-    const settled = safeRoundHands.map((hand) => settleHand(hand, dealerTotal, dealerBj));
-    const totalPayout = settled.reduce((sum, hand) => sum + payoutForHand(hand), 0);
-    const totalEntryAmount = settled.reduce((sum, hand) => sum + safeAmount(hand.bet, DEFAULT_BET), 0);
-    const totalNet = settled.reduce((sum, hand) => sum + Math.round(hand.resultNet || 0), 0);
-    const primary = settled[0] || safeRoundHands[0];
-    const resultLabel = toastLabel(settled, totalNet, tr);
-
-    setDeck(finalDeck);
-    setDealerCards(finalDealerCards);
-    setHands(settled);
-    setPhase("settled");
-    setActiveHandIndex(0);
-    setMessage(resultLabel);
-    settled.forEach((hand) => recordSessionResult(Math.round(hand.resultNet || 0)));
-    if (totalNet >= 0) pushToast(totalPayout, totalEntryAmount);
-    setHistory((current) => [
-      ...settled.map((hand) => ({ id: uniqueId("result"), resultType: hand.status, playerScore: handValue(hand.cards).total, dealerScore: dealerTotal, betAmount: hand.bet, netAmount: Math.round(hand.resultNet || 0) })),
-      ...current,
-    ].slice(0, 20));
-
-    await runWalletAction({
-      action: "settle",
-      resultType: primary?.status || "settled",
-      playerScore: handValue(primary?.cards || []).total,
-      dealerScore: dealerTotal,
-      betAmount: settled.reduce((sum, hand) => sum + hand.bet, 0),
-      netAmount: totalNet,
-      payoutAmount: totalPayout,
-    });
-    debugBlackjack("round end", { status: "settled", totalNet, totalPayout, playerHandLength: settled.map((hand) => hand.cards.length), dealerHandLength: finalDealerCards.length, deckLength: finalDeck.length });
-    playOffSound(totalNet >= 0 ? "success" : "error");
-  }
-
-  function adjustBet(multiplier: number) {
-    setBetAmount((current) => sanitizeBet(Math.floor(sanitizeBet(current, Math.max(balance, 1)) * multiplier), Math.max(balance, 1)));
-  }
-
-  const removeToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
-  function pushToast(totalReturn: number, entryAmount: number) {
-    const safeTotalReturn = Math.max(0, Number(totalReturn) || 0);
-    const safeEntryAmount = Math.max(0, Number(entryAmount) || 0);
-    if (safeEntryAmount <= 0 || safeTotalReturn <= 0) return;
-
-    const multiplier = safeTotalReturn / safeEntryAmount;
-    const multiplierLabel = formatMultiplier(multiplier);
-    const totalReturnLabel = formatTechCoinAmount(safeTotalReturn);
-
-    setToasts([{
-      id: createToastNoFactionSuccessId("toast-tech-blackjack"),
-      amount: safeTotalReturn,
-      multiplier,
-      currency: "Tech Coin",
-      title: tr ? "KAZANCINIZ" : "YOUR WIN",
-      displayAmount: `${totalReturnLabel} Tech Coin`,
-      displayMultiplier: multiplierLabel,
-      variant: safeTotalReturn > 0 ? "success" : "neutral",
-      hideHint: true,
-    }]);
   }
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-24 pt-32 text-white sm:px-6">
-      <div className="toast-nofaction-success-stack" aria-live="polite">
-        {toasts.map((toast) => <ToastNoFactionSuccess key={toast.id} {...toast} locale={locale} onClose={removeToast} />)}
-      </div>
       <div className="absolute left-1/2 top-24 h-[30rem] w-[30rem] -translate-x-1/2 rounded-full bg-emerald-500/10 blur-3xl" />
       <div className="absolute right-0 top-72 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
       <div className="relative mx-auto max-w-7xl space-y-6">
         <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="rounded-[2rem] border border-emerald-300/15 bg-[linear-gradient(135deg,rgba(4,12,20,0.98),rgba(3,34,28,0.82))] p-5 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl sm:p-7">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100"><Club className="h-4 w-4" /> {tr ? "OFF Hub Casino" : "OFF Hub Casino"}</div>
-              <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-6xl">Tech Blackjack</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">{tr ? "Canlı Tech Coin bahisleri, 3:2 blackjack ödemeleri, el bölme, ikiye katlama ve ortak OFF oturum istatistikleriyle standart blackjack." : "Standard blackjack with live Tech Coin wagers, 3:2 blackjack payouts, split hands, double down and shared OFF session stats."}</p>
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100"><Club className="h-4 w-4" /> OFF Card Lab</div>
+              <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-6xl">Tech Blackjack Practice</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">
+                {tr
+                  ? "Backend kontrollü blackjack pratik masası. Tech Coin harcanmaz veya kazanılmaz. Her deste round başlamadan SHA-256 hash ile kilitlenir."
+                  : "Backend-controlled blackjack practice table. No Tech Coin is spent or earned. Each deck is locked with SHA-256 before the round starts."}
+              </p>
             </div>
-            <div className="rounded-3xl border border-amber-300/25 bg-black/35 p-4 text-right shadow-xl shadow-amber-500/10">
-              <p className="flex items-center justify-end gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/55"><Wallet className="h-4 w-4" /> {tr ? "Tech Coin Bakiyesi" : "Tech Coin Balance"}</p>
-              <p className="mt-2 text-3xl font-black text-white">{walletLoading ? "..." : `${formatTc(balance)} TC`}</p>
+            <div className="rounded-3xl border border-cyan-300/25 bg-black/35 p-4 text-right shadow-xl shadow-cyan-500/10">
+              <p className="flex items-center justify-end gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100/55"><ShieldCheck className="h-4 w-4" /> {tr ? "Pratik Modu" : "Practice Mode"}</p>
+              <p className="mt-2 text-xl font-black text-white">No Tech Coin</p>
+              <p className="mt-1 text-xs text-white/40">Dealer stands on soft 17.</p>
             </div>
           </div>
         </motion.section>
 
         <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
           <div className="relative overflow-hidden rounded-[2.25rem] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_34%),linear-gradient(180deg,rgba(4,16,18,0.96),rgba(2,8,12,0.98))] p-4 shadow-2xl shadow-black/40 sm:p-6">
-            <div className="absolute right-5 top-5 grid place-items-center rounded-2xl border border-white/10 bg-black/45 p-3 text-cyan-100 shadow-xl"><Layers className="h-8 w-8" /><span className="text-[10px] font-black uppercase tracking-[0.16em]">{tr ? "Deste" : "Deck"} {safeDeck.length || 52}</span></div>
-            <div className="min-h-[11rem] pt-2">
-              <ScoreBadge label={tr ? "Krupiye" : "Dealer"} score={dealerScore} hidden={hideDealerHole && dealerHand.length > 1} />
-              <CardFan cards={dealerHand} hideSecond={hideDealerHole} />
-            </div>
-            <div className="my-3 flex flex-wrap items-center justify-center gap-3 text-center">
-              <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-amber-100">{tr ? "Blackjack 3’e 2 öder" : "Blackjack pays 3 to 2"}</span>
-            </div>
-            <div className="min-h-[13rem]">
-              {playerHands.map((hand, index) => (
-                <div key={hand.id} className={`mb-3 rounded-[1.5rem] border p-3 transition ${index === activeHandIndexSafe && phase === "playing" ? "border-emerald-300/35 bg-emerald-300/[0.06]" : "border-white/10 bg-white/[0.025]"}`}>
-                  <ScoreBadge label={playerHands.length > 1 ? tr ? `${index + 1}. oyuncu eli` : `Player hand ${index + 1}` : (tr ? "Oyuncu" : "Player")} score={handValue(hand.cards).total} status={hand.status} />
-                  <CardFan cards={hand.cards} />
+            <div className="absolute right-5 top-5 grid place-items-center rounded-2xl border border-white/10 bg-black/45 p-3 text-cyan-100 shadow-xl"><Layers className="h-8 w-8" /><span className="mt-1 text-[9px] font-black uppercase tracking-[0.2em] text-white/40">SHA-256</span></div>
+            <div className="rounded-[2rem] border border-emerald-200/10 bg-[radial-gradient(circle_at_50%_35%,rgba(20,184,166,0.2),transparent_34%),linear-gradient(145deg,rgba(2,44,34,0.9),rgba(2,8,14,0.92))] p-4 ring-1 ring-white/5 sm:p-7">
+              <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+                <div className="space-y-6 text-center">
+                  <div>
+                    <ScoreBadge label={tr ? "Krupiye" : "Dealer"} score={dealerScore} hidden={dealerHidden} />
+                    <CardFan cards={dealerCards} hideSecond={dealerHidden} />
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-black/35 p-4 text-sm text-white/60">{loading ? (tr ? "Yükleniyor..." : "Loading...") : message}</div>
                 </div>
-              ))}
-              {!playerHands.length ? <div className="grid min-h-[10rem] place-items-center rounded-[1.5rem] border border-dashed border-white/10 text-sm text-white/35">{tr ? "Kartlar bahis sonrası burada görünür." : "Cards appear here after betting."}</div> : null}
-            </div>
-            <p className="mt-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/65">{message}</p>
 
-            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <ActionButton onClick={hit} disabled={!canPlay}>{tr ? "Kart çek" : "Hit"}</ActionButton>
-              <ActionButton onClick={stand} disabled={!canPlay}>{tr ? "Dur" : "Stand"}</ActionButton>
-              <ActionButton onClick={split} disabled={!canSplit}>{tr ? "Böl" : "Split"}</ActionButton>
-              <ActionButton onClick={doubleDown} disabled={!canDouble}>{tr ? "İkiye katla" : "Double"}</ActionButton>
-            </div>
+                <div className="space-y-4">
+                  {playerHands.length ? playerHands.map((hand, index) => (
+                    <div key={hand.id || index} className={`rounded-[1.75rem] border p-4 transition ${index === activeHandIndex && round?.status === "playing" ? "border-emerald-300/45 bg-emerald-300/10" : "border-white/10 bg-black/25"}`}>
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <ScoreBadge label={`${tr ? "El" : "Hand"} ${index + 1}`} score={handValue(hand.cards).total} status={hand.status} />
+                        {hand.doubled ? <span className="rounded-full bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-cyan-100">Double</span> : null}
+                      </div>
+                      <CardFan cards={hand.cards} />
+                    </div>
+                  )) : (
+                    <div className="rounded-[1.75rem] border border-white/10 bg-black/25 p-6 text-center text-white/45">{tr ? "Henüz aktif pratik eli yok." : "No active practice hand yet."}</div>
+                  )}
+                </div>
+              </div>
 
-            <div className="mt-4 grid gap-3 rounded-[1.6rem] border border-white/10 bg-black/30 p-3 md:grid-cols-[1fr_auto_auto_1.2fr]">
-              <label className="block"><span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">{tr ? "Bahis tutarı" : "Bet Amount"}</span><input type="number" min={1} max={Math.max(1, balance)} value={betAmount} disabled={phase === "playing" || phase === "dealer"} onChange={(event) => setBetAmount(Number(event.target.value))} onBlur={() => setBetAmount((current) => sanitizeBet(current, Math.max(balance, 1)))} className="mt-1 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-black text-white outline-none focus:border-emerald-300/40" /></label>
-              <button type="button" disabled={phase === "playing" || phase === "dealer"} onClick={() => adjustBet(0.5)} className="self-end rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 font-black transition hover:bg-white/10 disabled:opacity-45">1/2</button>
-              <button type="button" disabled={phase === "playing" || phase === "dealer"} onClick={() => adjustBet(2)} className="self-end rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 font-black transition hover:bg-white/10 disabled:opacity-45">2x</button>
-              <button type="button" disabled={walletLoading || actionLoading || safeBet < 1 || safeBet > balance || phase === "playing" || phase === "dealer"} onClick={startRound} className="self-end rounded-2xl bg-gradient-to-r from-emerald-300 to-lime-300 px-6 py-4 text-lg font-black uppercase tracking-[0.18em] text-slate-950 shadow-xl shadow-emerald-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100">{tr ? "Bahis" : "Bet"}</button>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <ActionButton disabled={actionLoading || !actions.newRound} onClick={() => postAction("start-round")}>{tr ? "Yeni Round" : "New Round"}</ActionButton>
+                <ActionButton disabled={actionLoading || !actions.hit} onClick={() => postAction("hit")}>{tr ? "Kart Çek" : "Hit"}</ActionButton>
+                <ActionButton disabled={actionLoading || !actions.stand} onClick={() => postAction("stand")}>{tr ? "Dur" : "Stand"}</ActionButton>
+                <ActionButton disabled={actionLoading || !actions.double} onClick={() => postAction("double")}>Double</ActionButton>
+                <ActionButton disabled={actionLoading || !actions.split} onClick={() => postAction("split")}>Split</ActionButton>
+                <ActionButton disabled={actionLoading || !round} onClick={verifyRound}>{tr ? "Desteyi Doğrula" : "Verify Deck"}</ActionButton>
+              </div>
+              <p className="mt-3 text-center text-xs text-white/40">{tr ? "Double: bir kart al ve eli kapat." : "Double: take one card and close the hand."}</p>
             </div>
           </div>
 
           <aside className="space-y-5">
-            <GameSessionStatsPanel gameName="Tech Blackjack" stats={sessionStats} onReset={resetSessionStats} />
-            <section className="rounded-[1.7rem] border border-white/10 bg-[#07111a]/92 p-4 shadow-2xl shadow-black/35">
-              <h2 className="flex items-center gap-2 text-xl font-black"><BadgeDollarSign className="h-5 w-5 text-emerald-300" /> {tr ? "Sonuç Geçmişi" : "Result History"}</h2>
+            <InfoPanel round={round} tr={tr} />
+            <VerificationPanel round={round} verifyState={verifyState} tr={tr} onVerify={verifyRound} disabled={actionLoading || !round} />
+            <section className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/25 backdrop-blur-xl">
+              <h2 className="flex items-center gap-2 text-xl font-black"><History className="h-5 w-5 text-emerald-300" /> {tr ? "Pratik Geçmişi" : "Practice History"}</h2>
               <div className="mt-4 space-y-2">
                 {history.slice(0, 8).map((item) => <HistoryRow key={item.id} item={item} tr={tr} />)}
-                {!history.length ? <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/40">{tr ? "Henüz tamamlanan el yok." : "No completed hands yet."}</p> : null}
+                {!history.length ? <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-white/40">{tr ? "Henüz tamamlanan round yok." : "No completed rounds yet."}</p> : null}
               </div>
             </section>
           </aside>
@@ -438,6 +226,42 @@ export function TechBlackjack() {
       </div>
     </main>
   );
+}
+
+function InfoPanel({ round, tr }: { round: BlackjackRound | null; tr: boolean }) {
+  return (
+    <section className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/25 backdrop-blur-xl">
+      <h2 className="flex items-center gap-2 text-xl font-black"><BadgeCheck className="h-5 w-5 text-cyan-300" /> {tr ? "Round Bilgisi" : "Round Info"}</h2>
+      <div className="mt-4 space-y-3 text-sm">
+        <InfoRow label="Round ID" value={round?.roundId || "—"} />
+        <InfoRow label="Deck Hash" value={round?.deckHash || "—"} mono />
+        <InfoRow label={tr ? "Krupiye Kuralı" : "Dealer Rule"} value="Stands on soft 17" />
+        <InfoRow label={tr ? "Mod" : "Mode"} value="Practice Mode: No Tech Coin" />
+      </div>
+    </section>
+  );
+}
+
+function VerificationPanel({ round, verifyState, tr, onVerify, disabled }: { round: BlackjackRound | null; verifyState: VerifyState; tr: boolean; onVerify: () => void; disabled: boolean }) {
+  const settled = round?.status === "settled";
+  return (
+    <section className="rounded-[2rem] border border-cyan-200/15 bg-cyan-300/[0.04] p-5 shadow-2xl shadow-cyan-950/20 backdrop-blur-xl">
+      <h2 className="flex items-center gap-2 text-xl font-black"><ShieldCheck className="h-5 w-5 text-cyan-300" /> Deck Verification</h2>
+      <div className="mt-4 space-y-3 text-sm">
+        <InfoRow label="Deck Hash" value={round?.deckHash || "—"} mono />
+        <InfoRow label="Server Seed" value={settled ? round?.serverSeed || "—" : "Server seed will be revealed after the round."} mono={settled} />
+        <InfoRow label="Salt" value={round?.salt || "—"} mono />
+        <InfoRow label="Nonce" value={round ? String(round.nonce) : "—"} mono />
+      </div>
+      <button type="button" disabled={disabled || !settled} onClick={onVerify} className="mt-4 w-full rounded-2xl border border-cyan-200/20 bg-cyan-300/10 px-4 py-3 font-black uppercase tracking-[0.14em] text-cyan-50 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-35">{tr ? "Desteyi Doğrula" : "Verify Deck"}</button>
+      {verifyState.message ? <p className={`mt-3 rounded-2xl border p-3 text-sm ${verifyState.status === "verified" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : verifyState.status === "failed" || verifyState.status === "error" ? "border-red-300/30 bg-red-300/10 text-red-100" : "border-white/10 bg-white/[0.04] text-white/60"}`}>{verifyState.message}</p> : null}
+      {verifyState.recalculatedHash ? <p className="mt-2 break-all rounded-2xl bg-black/30 p-3 font-mono text-[11px] text-white/45">{verifyState.recalculatedHash}</p> : null}
+    </section>
+  );
+}
+
+function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">{label}</p><p className={`mt-1 break-all text-white/75 ${mono ? "font-mono text-xs" : "font-semibold"}`}>{value}</p></div>;
 }
 
 function ActionButton({ children, disabled, onClick }: { children: string; disabled: boolean; onClick: () => void }) {
@@ -457,7 +281,7 @@ function CardFan({ cards, hideSecond = false }: { cards?: Card[]; hideSecond?: b
           key={`${card.id || `${card.code}-${index}`}-${hideSecond && index === 1 ? "back" : "face"}`}
           initial={{ opacity: 0, y: -18, rotateY: hideSecond && index === 1 ? 180 : 10, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, rotateY: 0, scale: 1 }}
-          transition={{ duration: 0.46, delay: index * 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+          transition={{ duration: 0.46, delay: index * 0.12, ease: [0.2, 0.8, 0.2, 1] }}
           className="relative h-32 w-[5.8rem] shrink-0 sm:h-40 sm:w-[7.2rem]"
           style={{ marginLeft: index === 0 ? 0 : "-2rem", zIndex: index + 1 }}
         >
@@ -476,6 +300,19 @@ function CardFan({ cards, hideSecond = false }: { cards?: Card[]; hideSecond?: b
           )}
         </motion.div>
       ))}
+      {hideSecond && safeHand.length === 1 ? (
+        <motion.div
+          key="hidden-hole-card"
+          initial={{ opacity: 0, y: -18, rotateY: 180, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, rotateY: 0, scale: 1 }}
+          transition={{ duration: 0.46, delay: 0.12, ease: [0.2, 0.8, 0.2, 1] }}
+          className="relative h-32 w-[5.8rem] shrink-0 sm:h-40 sm:w-[7.2rem]"
+          style={{ marginLeft: "-2rem", zIndex: safeHand.length + 1 }}
+        >
+          <PremiumCardBack />
+        </motion.div>
+      ) : null}
+      {!safeHand.length ? <div className="grid h-32 w-[5.8rem] place-items-center rounded-xl border border-dashed border-white/15 bg-white/[0.03] text-xs text-white/30 sm:h-40 sm:w-[7.2rem]">Empty</div> : null}
     </div>
   );
 }
@@ -512,9 +349,41 @@ function PremiumCardBack() {
 }
 
 function HistoryRow({ item, tr }: { item: ResultHistory; tr: boolean }) {
-  const positive = item.netAmount > 0;
-  const neutral = item.netAmount === 0;
-  return <div className="grid grid-cols-[1fr_auto] gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm"><div><p className="font-black capitalize text-white">{item.resultType}</p><p className="mt-1 text-xs text-white/40">{tr ? "Oyuncu" : "Player"} {item.playerScore} · {tr ? "Krupiye" : "Dealer"} {item.dealerScore} · {tr ? "Bahis" : "Bet"} {formatTc(item.betAmount)} TC</p></div><p className={`font-black ${positive ? "text-emerald-200" : neutral ? "text-white/60" : "text-red-200"}`}>{neutral ? "±" : positive ? "+" : "-"}{formatTc(Math.abs(item.netAmount))}</p></div>;
+  return <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm"><p className="font-black capitalize text-white">{item.resultType}</p><p className="mt-1 text-xs text-white/40">{tr ? "Oyuncu" : "Player"} {item.playerScore} · {tr ? "Krupiye" : "Dealer"} {item.dealerScore} · Hash {item.deckHashShort || "—"}</p></div>;
+}
+
+function sanitizeRound(value: any): BlackjackRound | null {
+  if (!value || typeof value !== "object") return null;
+  const status = value.status === "settled" ? "settled" : "playing";
+  return {
+    roundId: String(value.roundId || ""),
+    status,
+    deckHash: String(value.deckHash || ""),
+    salt: String(value.salt || ""),
+    nonce: Number(value.nonce || 0),
+    serverSeed: typeof value.serverSeed === "string" ? value.serverSeed : undefined,
+    dealerCardsVisible: safeCards(value.dealerCardsVisible),
+    dealerCardsFull: safeCards(value.dealerCardsFull),
+    playerHands: sanitizeHands(value.playerHands),
+    activeHandIndex: Math.max(0, Math.floor(Number(value.activeHandIndex || 0))),
+    availableActions: sanitizeActions(value.availableActions),
+    result: sanitizeResult(value.result),
+    verification: value.verification,
+  };
+}
+
+function sanitizeActions(value: any): AvailableActions {
+  return { hit: Boolean(value?.hit), stand: Boolean(value?.stand), double: Boolean(value?.double), split: Boolean(value?.split), newRound: Boolean(value?.newRound) };
+}
+
+function sanitizeResult(value: any): RoundResult | null {
+  if (!value || typeof value !== "object") return null;
+  return { label: String(value.label || "Push") as RoundResult["label"], hands: Array.isArray(value.hands) ? value.hands.map((hand: any) => ({ status: isHandStatus(hand?.status) ? hand.status : "push", playerScore: Math.max(0, Math.floor(Number(hand?.playerScore || 0))), dealerScore: Math.max(0, Math.floor(Number(hand?.dealerScore || 0))), outcome: ["win", "loss", "push", "blackjack"].includes(String(hand?.outcome)) ? hand.outcome : "push" })) : [] };
+}
+
+function sanitizeServerHistory(value: any): ResultHistory[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 8).map((item, index) => ({ id: `${item?.created_at || "history"}-${index}`, resultType: String(item?.result_type || "settled"), playerScore: Math.max(0, Math.floor(Number(item?.player_score || 0))), dealerScore: Math.max(0, Math.floor(Number(item?.dealer_score || 0))), deckHashShort: String(item?.deck_hash_short || ""), createdAt: typeof item?.created_at === "string" ? item.created_at : undefined }));
 }
 
 function isCard(value: unknown): value is Card {
@@ -526,21 +395,14 @@ function safeCards(cards?: Array<Card | null | undefined> | null): Card[] {
   return Array.isArray(cards) ? cards.filter(isCard) : [];
 }
 
-function safeAmount(value: unknown, fallback = 0) {
-  const amount = Math.floor(Number(value));
-  return Number.isFinite(amount) ? Math.max(0, amount) : fallback;
-}
-
 function sanitizeHands(value?: Array<PlayerHand | null | undefined> | null): PlayerHand[] {
   if (!Array.isArray(value)) return [];
   return value.filter(Boolean).map((hand, index) => ({
-    id: typeof hand?.id === "string" && hand.id ? hand.id : uniqueId(`hand-${index}`),
+    id: typeof hand?.id === "string" && hand.id ? hand.id : `hand-${index}`,
     cards: safeCards(hand?.cards),
-    bet: safeAmount(hand?.bet, DEFAULT_BET) || DEFAULT_BET,
     status: isHandStatus(hand?.status) ? hand.status : "playing",
     natural: Boolean(hand?.natural),
     doubled: Boolean(hand?.doubled),
-    resultNet: Number.isFinite(Number(hand?.resultNet)) ? Math.round(Number(hand?.resultNet)) : undefined,
   }));
 }
 
@@ -548,92 +410,48 @@ function isHandStatus(value: unknown): value is HandStatus {
   return ["playing", "stood", "bust", "blackjack", "win", "loss", "push"].includes(String(value));
 }
 
-function debugBlackjack(message: string, payload?: Record<string, unknown>) {
-  if (!DEBUG_BLACKJACK) return;
-  console.debug(`[TechBlackjack] ${message}`, payload || {});
-}
-
-function createDeck(): Card[] {
-  return SUITS.flatMap((suit) => RANKS.map((rank) => ({ suit, rank, code: `${rank}${suit}`, id: uniqueId(`${rank}${suit}`) })));
-}
-function shuffleDeck(cards: Card[]) {
-  const deck = [...cards];
-  for (let index = deck.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
-  }
-  return deck;
-}
-function drawCards(currentDeck: Card[] | null | undefined, count: number) {
-  const requestedCount = Math.max(0, Math.floor(Number(count) || 0));
-  const safeCurrentDeck = safeCards(currentDeck);
-  const source = safeCurrentDeck.length >= requestedCount ? [...safeCurrentDeck] : shuffleDeck(createDeck());
-  return { cards: safeCards(source.slice(0, requestedCount)), deck: safeCards(source.slice(requestedCount)) };
-}
 function cardValue(card?: Card) {
   if (!card) return 0;
   if (card.rank === "A") return 11;
   if (["K", "Q", "J"].includes(card.rank)) return 10;
   return Number(card.rank) || 0;
 }
+
 function handValue(cards?: Card[] | null) {
   const safeHand = safeCards(cards);
   let total = safeHand.reduce((sum, card) => sum + cardValue(card), 0);
   let aces = safeHand.filter((card) => card.rank === "A").length;
-  while (total > 21 && aces > 0) { total -= 10; aces -= 1; }
+  while (total > 21 && aces > 0) {
+    total -= 10;
+    aces -= 1;
+  }
   return { total, soft: aces > 0 };
 }
-function isBlackjack(cards?: Card[] | null) { return safeCards(cards).length === 2 && handValue(cards).total === 21; }
-function settleHand(hand: PlayerHand, dealerTotal: number, dealerBj: boolean): PlayerHand {
-  const safeHand = sanitizeHands([hand])[0] || { ...hand, cards: [], bet: DEFAULT_BET, status: "loss" as HandStatus };
-  const bet = safeAmount(safeHand.bet, DEFAULT_BET);
-  const playerTotal = handValue(safeHand.cards).total;
-  let result: HandStatus = "loss";
-  if (playerTotal > 21) result = "loss";
-  else if (safeHand.natural && !dealerBj) result = "blackjack";
-  else if (dealerBj && !safeHand.natural) result = "loss";
-  else if (dealerTotal > 21 || playerTotal > dealerTotal) result = "win";
-  else if (playerTotal === dealerTotal) result = "push";
 
-  const payout = calculateBlackjackPayout(result, bet);
-  return { ...safeHand, status: result, resultNet: payout - bet };
+async function sha256HexClient(value: string) {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-function calculateBlackjackPayout(result: HandStatus | string | undefined, betAmount: number) {
-  const bet = safeAmount(betAmount, DEFAULT_BET);
-  if (result === "blackjack") return Math.floor(bet * 2.5);
-  if (result === "win") return bet * 2;
-  if (result === "push") return bet;
-  if (result === "surrender") return Math.floor(bet / 2);
-  return 0;
-}
-function payoutForHand(hand: PlayerHand) {
-  return calculateBlackjackPayout(hand?.status, hand?.bet);
-}
-function toastLabel(hands: PlayerHand[], totalNet: number, tr: boolean) {
-  const safeHands = sanitizeHands(hands);
-  if (safeHands.length === 1 && safeHands[0]?.status === "blackjack") return "Blackjack!";
-  if (totalNet > 0) return tr ? "Kazandınız." : "You won.";
-  if (totalNet === 0) return tr ? "Beraberlik." : "Push.";
-  return safeHands.some((hand) => hand.status === "loss" && handValue(hand.cards).total > 21) ? (tr ? "Battınız." : "Bust.") : (tr ? "Krupiye kazandı." : "Dealer wins.");
-}
-function sanitizeBet(value: unknown, max: number) {
-  const amount = Math.floor(Number(value));
-  if (!Number.isFinite(amount) || amount < 1) return 1;
-  return Math.max(1, Math.min(Math.max(1, Math.floor(Number(max) || 1)), amount));
-}
-function sanitizeWallet(value: any): WalletState { return { currency: "Tech Coin", symbol: "TC", balance: Math.max(0, Math.floor(Number(value?.balance || 0))), lifetime_earned: Math.max(0, Math.floor(Number(value?.lifetime_earned || 0))) }; }
-function sanitizeServerHistory(value: any[]): ResultHistory[] { return value.slice(0, 20).map((item) => ({ id: uniqueId("server-result"), resultType: String(item?.result_type || "settled"), playerScore: Math.max(0, Math.floor(Number(item?.player_score || 0))), dealerScore: Math.max(0, Math.floor(Number(item?.dealer_score || 0))), betAmount: Math.max(0, Math.floor(Number(item?.bet_amount || 0))), netAmount: Math.round(Number(item?.net_amount || 0)) })); }
-function formatTc(value: number) { return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(Number(value) || 0)); }
 
-function formatTechCoinAmount(value: number) {
-  return new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.max(0, Number(value) || 0));
+function resultMessage(result: RoundResult, tr: boolean) {
+  if (!tr) return result.label;
+  if (result.label === "Player wins") return "Oyuncu kazanır";
+  if (result.label === "Dealer wins") return "Krupiye kazanır";
+  if (result.label === "Bust") return "Bust";
+  if (result.label === "Blackjack") return "Blackjack";
+  return "Beraberlik";
 }
-function formatMultiplier(value: number) {
-  const safeValue = Number.isFinite(Number(value)) ? Number(value) : 1;
-  return `${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.max(0, safeValue))}x`;
+
+function readableError(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown Tech Blackjack Practice error.";
 }
-function uniqueId(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
-function wait(ms: number) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
+
+function debugBlackjack(message: string, payload?: Record<string, unknown>) {
+  if (!DEBUG_BLACKJACK) return;
+  console.debug(`[TechBlackjack] ${message}`, payload || {});
+}
+
 function cardImage(card: Card) { return `/cards/${card.code}.png`; }
 function cardAlt(card: Card) { return `${card.rank} of ${suitName(card.suit)}`; }
 function suitName(suit: Suit) { return suit === "C" ? "Clubs" : suit === "D" ? "Diamonds" : suit === "H" ? "Hearts" : "Spades"; }
