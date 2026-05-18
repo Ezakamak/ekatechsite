@@ -398,6 +398,11 @@ function randomMapKey(userId: number) {
   const index = hashNumber(`${userId}:${Date.now()}:${Math.random()}`) % MAP_OPTIONS.length;
   return MAP_OPTIONS[index];
 }
+function parseDateMs(value?: string | null) {
+  if (!value) return 0;
+  const text = String(value);
+  return Date.parse(text.includes("T") ? text : text.replace(" ", "T") + "Z");
+}
 function parseResolution(text: string) { try { const data = JSON.parse(text || "{}"); return { text: data.text || "", steps: Array.isArray(data.steps) ? data.steps : [] }; } catch { return { text, steps: [] }; } }
 function safeJson(text: string) { try { const v = JSON.parse(text || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } }
 function shuffle(items: string[], seed: string) { const arr = [...items]; let s = hashNumber(seed); for (let i = arr.length - 1; i > 0; i -= 1) { s = Math.imul(s ^ (s >>> 15), 2246822507) >>> 0; const j = s % (i + 1); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
