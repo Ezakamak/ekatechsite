@@ -26,6 +26,11 @@ type ActiveRound = {
   current_multiplier: number;
   payout_amount: number;
   status: string;
+  server_seed?: string | null;
+  salt?: string | null;
+  nonce?: number | null;
+  hash?: string | null;
+  client_seed?: string | null;
 };
 
 export async function onRequestGet(context: any) {
@@ -87,6 +92,14 @@ async function startRound(context: any, userId: number, body: any) {
   if (!Number.isFinite(betAmount) || betAmount < 1)
     throw new Error("Bahis en az 1 Tech Coin olmalı.");
 
+  const clientSeed = normalizeClientSeed(body?.clientSeed, userId);
+  const serverSeed = randomHex(32);
+  const salt = randomHex(16);
+  const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  const hashInput = fairHashInput(serverSeed, salt, nonce, clientSeed);
+  const hash = await sha256Hex(hashInput);
+  const matrix = await createMatrix(difficultyKey, serverSeed, salt, nonce, clientSeed);
+
   const debit = await context.env.DB.prepare(
     `UPDATE coin_wallets SET balance = COALESCE(balance, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND COALESCE(balance, 0) >= ?`,
   )
@@ -111,15 +124,20 @@ async function startRound(context: any, userId: number, body: any) {
 
   await context.env.DB.prepare(
     `
-      INSERT INTO techcoin_towers_rounds (user_id, bet_amount, difficulty_key, matrix_json, revealed_json, current_level, current_multiplier, status, started_at, updated_at)
-      VALUES (?, ?, ?, ?, '[]', 0, 1, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO techcoin_towers_rounds (user_id, bet_amount, difficulty_key, matrix_json, revealed_json, current_level, current_multiplier, status, server_seed, salt, nonce, hash, client_seed, started_at, updated_at)
+      VALUES (?, ?, ?, ?, '[]', 0, 1, 'active', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `,
   )
     .bind(
       userId,
       betAmount,
       difficultyKey,
-      JSON.stringify(createMatrix(difficultyKey)),
+      JSON.stringify(matrix),
+      serverSeed,
+      salt,
+      nonce,
+      hash,
+      clientSeed,
     )
     .run();
 
@@ -288,6 +306,15 @@ function serializeRound(round: ActiveRound) {
     status: round.status,
     isRoundActive: round.status === "active",
     payoutAmount: Number(round.payout_amount || 0),
+    fairness: {
+      algorithm: "SHA-256(serverSeed:salt:nonce:clientSeed)",
+      hash: round.hash || null,
+      clientSeed: round.client_seed || null,
+      salt: showAll ? round.salt || null : null,
+      nonce: showAll ? Number(round.nonce || 0) : null,
+      serverSeed: showAll ? round.server_seed || null : null,
+      hashInput: showAll && round.server_seed && round.salt ? fairHashInput(round.server_seed, round.salt, Number(round.nonce || 0), round.client_seed || "") : null,
+    },
     matrix: matrix.map((row, level) =>
       row.map((kind, tileIndex) => ({
         id: `${round.id}-${level}-${tileIndex}`,
@@ -327,34 +354,59 @@ async function creditWallet(
     .run();
 }
 
-function createMatrix(difficultyKey: DifficultyKey) {
+async function createMatrix(difficultyKey: DifficultyKey, serverSeed: string, salt: string, nonce: number, clientSeed: string) {
   const difficulty = DIFFICULTIES[difficultyKey];
-  return Array.from({ length: LEVELS }, () => {
+  const rows: TileKind[][] = [];
+  for (let level = 0; level < LEVELS; level += 1) {
     const row: TileKind[] = [
       ...Array.from({ length: difficulty.safeTiles }, () => "safe" as const),
       ...Array.from({ length: difficulty.traps }, () => "trap" as const),
     ];
-    return shuffle(row);
-  });
+    await fairShuffle(row, serverSeed, salt, nonce, clientSeed, `tower:${difficultyKey}:${level}`);
+    rows.push(row);
+  }
+  return rows;
 }
 
-function shuffle<T>(items: T[]) {
-  const result = [...items];
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const swapIndex = randomIndex(index + 1);
-    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
-  }
-  return result;
+function createFallbackMatrix(difficultyKey: DifficultyKey) {
+  const difficulty = DIFFICULTIES[difficultyKey];
+  return Array.from({ length: LEVELS }, () => [
+    ...Array.from({ length: difficulty.safeTiles }, () => "safe" as const),
+    ...Array.from({ length: difficulty.traps }, () => "trap" as const),
+  ]);
 }
 
-function randomIndex(maxExclusive: number) {
-  const cryptoApi = globalThis.crypto;
-  if (cryptoApi?.getRandomValues) {
-    const array = new Uint32Array(1);
-    cryptoApi.getRandomValues(array);
-    return array[0] % maxExclusive;
+async function fairShuffle<T>(items: T[], serverSeed: string, salt: string, nonce: number, clientSeed: string, cursorPrefix: string) {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = await fairRandomInt(index + 1, serverSeed, salt, nonce, clientSeed, `${cursorPrefix}:${index}`);
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
-  return Math.floor(Math.random() * maxExclusive);
+}
+
+async function fairRandomInt(maxExclusive: number, serverSeed: string, salt: string, nonce: number, clientSeed: string, cursor: string) {
+  const hash = await sha256Hex(`${fairHashInput(serverSeed, salt, nonce, clientSeed)}:${cursor}`);
+  return parseInt(hash.slice(0, 13), 16) % maxExclusive;
+}
+
+function fairHashInput(serverSeed: string, salt: string, nonce: number, clientSeed: string) {
+  return `${serverSeed}:${salt}:${nonce}:${clientSeed}`;
+}
+
+function normalizeClientSeed(value: unknown, userId: number) {
+  const seed = String(value || "").trim().replace(/[^a-zA-Z0-9_.:@-]/g, "").slice(0, 64);
+  return seed || `ekatowers-${userId}`;
+}
+
+function randomHex(bytes: number) {
+  const values = new Uint8Array(bytes);
+  globalThis.crypto.getRandomValues(values);
+  return Array.from(values, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Hex(value: string) {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function multiplierForLevel(level: number, difficultyKey: DifficultyKey) {
@@ -380,7 +432,7 @@ function payoutForLevel(
 function parseMatrix(value: string): TileKind[][] {
   try {
     const parsed = JSON.parse(value || "[]");
-    if (!Array.isArray(parsed)) return createMatrix("medium");
+    if (!Array.isArray(parsed)) return createFallbackMatrix("medium");
     return Array.from({ length: LEVELS }, (_, level) => {
       const row = Array.isArray(parsed[level]) ? parsed[level] : [];
       return Array.from({ length: TILES_PER_ROW }, (_, tileIndex) =>
@@ -388,7 +440,7 @@ function parseMatrix(value: string): TileKind[][] {
       );
     });
   } catch {
-    return createMatrix("medium");
+    return createFallbackMatrix("medium");
   }
 }
 
@@ -448,7 +500,12 @@ async function ensureTowersTables(context: any) {
       status TEXT NOT NULL DEFAULT 'active',
       started_at TEXT DEFAULT CURRENT_TIMESTAMP,
       ended_at TEXT,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      server_seed TEXT,
+      salt TEXT,
+      nonce INTEGER,
+      hash TEXT,
+      client_seed TEXT
     )
   `,
   ).run();
@@ -488,6 +545,12 @@ async function ensureTowersTables(context: any) {
     "created_at",
     "TEXT DEFAULT CURRENT_TIMESTAMP",
   );
+
+  await addColumnIfMissing(context, "techcoin_towers_rounds", "server_seed", "TEXT");
+  await addColumnIfMissing(context, "techcoin_towers_rounds", "salt", "TEXT");
+  await addColumnIfMissing(context, "techcoin_towers_rounds", "nonce", "INTEGER");
+  await addColumnIfMissing(context, "techcoin_towers_rounds", "hash", "TEXT");
+  await addColumnIfMissing(context, "techcoin_towers_rounds", "client_seed", "TEXT");
   await context.env.DB.prepare(
     `CREATE INDEX IF NOT EXISTS idx_techcoin_towers_rounds_active_user ON techcoin_towers_rounds(user_id, status)`,
   ).run();

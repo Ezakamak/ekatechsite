@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bomb, Coins, Gem, Info, RotateCcw, ShieldCheck, Sparkles, Star, Trophy, Wallet, Zap } from "lucide-react";
+import { Bomb, Coins, Gem, Hash, Info, RotateCcw, ShieldCheck, Sparkles, Star, Trophy, Wallet, Zap } from "lucide-react";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
 import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
 import { useLanguage } from "../i18n";
 
 const STORAGE_KEY = "ekatech:eka-towers:v2";
+const CLIENT_SEED_KEY = "ekatech:eka-towers-client-seed:v1";
 const LEVELS = 9;
 const TILES_PER_ROW = 4;
 const DEFAULT_BET = 10;
@@ -20,6 +21,8 @@ type Tile = {
   revealed: boolean;
 };
 
+type Fairness = { algorithm?: string; hash?: string | null; clientSeed?: string | null; salt?: string | null; nonce?: number | null; serverSeed?: string | null; hashInput?: string | null };
+
 type Round = {
   betAmount: number;
   difficultyKey: DifficultyKey;
@@ -29,6 +32,7 @@ type Round = {
   status: string;
   isRoundActive: boolean;
   payoutAmount: number;
+  fairness?: Fairness | null;
   matrix: Tile[][];
 };
 
@@ -98,6 +102,9 @@ export function EkaTowers() {
   const [shake, setShake] = useState(false);
   const [lastWin, setLastWin] = useState(0);
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
+  const [clientSeed, setClientSeed] = useState("");
+  const [fairness, setFairness] = useState<Fairness | null>(null);
+  const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("eka-towers");
 
   const difficulty = useMemo(() => getDifficulty(round?.difficultyKey || difficultyKey), [difficultyKey, round?.difficultyKey]);
@@ -116,6 +123,11 @@ export function EkaTowers() {
     const nextRound = data?.round || null;
     setWalletBalance(roundTc(Number(data?.wallet?.balance || 0)));
     setRound(nextRound);
+    if (nextRound?.fairness) {
+      setFairness(nextRound.fairness);
+      if (nextRound.fairness.clientSeed) setClientSeed(String(nextRound.fairness.clientSeed));
+      setVerifyMessage(null);
+    }
     if (nextRound?.matrix) {
       setMatrix(nextRound.matrix);
       setBetAmountInput(String(roundTc(Number(nextRound.betAmount || DEFAULT_BET))));
@@ -163,6 +175,8 @@ export function EkaTowers() {
   }, [applyServerState]);
 
   useEffect(() => {
+    const savedSeed = window.localStorage.getItem(CLIENT_SEED_KEY);
+    setClientSeed(savedSeed || `ekatowers-${Math.random().toString(16).slice(2, 10)}`);
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
     const parsed = JSON.parse(saved) as { betAmount?: number; difficultyKey?: DifficultyKey };
@@ -173,6 +187,10 @@ export function EkaTowers() {
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ betAmount: validBetAmount, difficultyKey }));
   }, [validBetAmount, difficultyKey]);
+
+  useEffect(() => {
+    if (clientSeed) window.localStorage.setItem(CLIENT_SEED_KEY, clientSeed);
+  }, [clientSeed]);
 
   useEffect(() => {
     loadLiveState();
@@ -206,6 +224,17 @@ export function EkaTowers() {
     ]));
   }
 
+
+  async function verifyFairnessHash() {
+    if (!fairness?.hashInput || !fairness?.hash) {
+      setVerifyMessage(tr ? "Server seed round bitince gösterilir." : "Server seed is revealed after the round ends.");
+      return;
+    }
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fairness.hashInput));
+    const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    setVerifyMessage(hex === fairness.hash ? (tr ? "SHA-256 hash doğrulandı." : "SHA-256 hash verified.") : (tr ? "Hash eşleşmedi." : "Hash mismatch."));
+  }
+
   async function startGame() {
     const nextBet = validBetAmount;
     if (nextBet < 1) {
@@ -217,7 +246,7 @@ export function EkaTowers() {
       return;
     }
 
-    const data = await runTowerAction({ action: "start", betAmount: nextBet, difficultyKey });
+    const data = await runTowerAction({ action: "start", betAmount: nextBet, difficultyKey, clientSeed });
     if (!data) return;
     recordSessionBet(nextBet);
     setNotice({ type: "info", text: (tr ? "Round canlı OFF Tech Coin bakiyenle başladı." : "Round started with your live OFF Tech Coin balance.") });
@@ -349,6 +378,19 @@ export function EkaTowers() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="rounded-[1.6rem] border border-cyan-300/15 bg-[#1a2c38]/95 p-4 text-sm leading-6 text-white/60 backdrop-blur-xl sm:p-5">
+            <div className="flex items-center gap-2 font-black text-cyan-100"><Hash className="h-4 w-4" /> {tr ? "SHA-256 provably fair" : "SHA-256 provably fair"}</div>
+            <p className="mt-1 text-xs text-white/45">{tr ? "Tırmanış başlamadan client seed'i değiştirebilirsin. Server seed round bitene kadar gizli kalır; hash kilidi sonradan doğrular." : "Change the client seed before climbing. The server seed stays hidden until the round ends; the hash commitment verifies afterward."}</p>
+            <label className="mt-3 block">
+              <span className="text-xs font-bold uppercase tracking-[0.16em] text-white/35">{tr ? "Client seed" : "Client seed"}</span>
+              <input value={clientSeed} disabled={isPlaying || actionLoading || walletLoading} onChange={(event) => setClientSeed(event.target.value.replace(/[^a-zA-Z0-9_.:@-]/g, "").slice(0, 64))} className="mt-1 w-full rounded-xl border border-white/10 bg-[#0f212e] px-3 py-2 text-xs font-semibold text-white outline-none focus:border-cyan-300/60 disabled:opacity-55" />
+            </label>
+            <p className="mt-3 break-all text-[11px] text-white/45">Server hash: <span className="text-cyan-100/80">{fairness?.hash || "pending"}</span></p>
+            <p className="mt-1 break-all text-[11px] text-white/45">Server seed: <span className="text-emerald-100/80">{fairness?.serverSeed || (tr ? "Round bitince gösterilir" : "Revealed after round end")}</span></p>
+            <button type="button" onClick={verifyFairnessHash} className="mt-3 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-100 transition hover:bg-cyan-300/15">{tr ? "Hash'i doğrula" : "Verify hash"}</button>
+            {verifyMessage ? <p className="mt-2 text-xs text-cyan-100/80">{verifyMessage}</p> : null}
           </div>
 
           <GameSessionStatsPanel gameName="Eka Towers" stats={sessionStats} onReset={resetSessionStats} />

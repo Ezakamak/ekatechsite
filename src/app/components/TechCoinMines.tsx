@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Coins, Gem, Info, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertTriangle, Coins, Gem, Hash, Info, ShieldCheck, Sparkles } from "lucide-react";
 import { useLanguage } from "../i18n";
 import { playOffSound } from "./OffSoundEngine";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
@@ -7,6 +7,7 @@ import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
 
 type Tile = { id: number; isMine: boolean; isRevealed: boolean };
 type Notice = { type: "success" | "error" | "info"; text: string } | null;
+type Fairness = { algorithm?: string; hash?: string | null; clientSeed?: string | null; salt?: string | null; nonce?: number | null; serverSeed?: string | null; hashInput?: string | null };
 
 type GameState = {
   balance: number;
@@ -23,6 +24,7 @@ const GRID_SIZE = 25;
 const HOUSE_EDGE = 0.01;
 const RTP = 1 - HOUSE_EDGE;
 const STORAGE_KEY = "ekatech:techmines-techcoin:v1";
+const CLIENT_SEED_KEY = "ekatech:techmines-client-seed:v1";
 const DEFAULT_GRID = Array.from({ length: GRID_SIZE }, (_, id) => ({ id, isMine: false, isRevealed: false }));
 const initialGameState: GameState = {
   balance: 0,
@@ -100,6 +102,9 @@ export function TechCoinMines() {
   const [notice, setNotice] = useState<Notice>(null);
   const [boardPulse, setBoardPulse] = useState<"shake" | "success" | null>(null);
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
+  const [clientSeed, setClientSeed] = useState("");
+  const [fairness, setFairness] = useState<Fairness | null>(null);
+  const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-mines");
 
   const copy = useMemo(() => tr ? {
@@ -126,6 +131,15 @@ export function TechCoinMines() {
     mathDesc: "Hesaplama Motorumuz Stake tarafından geliştirilen ileri düzey kriptografik sistemler kullanmaktadır.",
     off: "TechMines sadece OFF alanında Tech Coin ile oynanır; gerçek para veya gerçek kripto değeri yoktur.",
     tiles: "Karo alanı",
+    fairTitle: "SHA-256 provably fair",
+    fairDesc: "Round başlamadan client seed'i değiştirebilirsin. Server seed round bitene kadar gizli kalır; hash kilidi sonucu sonradan doğrular.",
+    clientSeed: "Client seed",
+    serverHash: "Server hash",
+    serverSeed: "Server seed",
+    locked: "Round aktifken kilitli",
+    verify: "Hash'i doğrula",
+    verified: "SHA-256 hash doğrulandı.",
+    waitingReveal: "Server seed round bitince gösterilir.",
   } : {
     eyebrow: "OFF test game · Real money OFF",
     title: "TechMines",
@@ -150,6 +164,15 @@ export function TechCoinMines() {
     mathDesc: "Multiplier = 0.99 × C(25, D) / C(25 - M, D). Fixed 1% house edge, 99% RTP.",
     off: "TechMines runs inside OFF with Tech Coin only; it has no real-money or real crypto value.",
     tiles: "Tile board",
+    fairTitle: "SHA-256 provably fair",
+    fairDesc: "You can change the client seed before a round starts. The server seed stays hidden until the round ends; the hash commitment verifies the result afterward.",
+    clientSeed: "Client seed",
+    serverHash: "Server hash",
+    serverSeed: "Server seed",
+    locked: "Locked during active round",
+    verify: "Verify hash",
+    verified: "SHA-256 hash verified.",
+    waitingReveal: "Server seed is revealed after the round ends.",
   }, [tr]);
 
   const [walletLoading, setWalletLoading] = useState(true);
@@ -157,6 +180,11 @@ export function TechCoinMines() {
 
   const applyServerState = useCallback((data: any) => {
     const round = data?.round;
+    if (round?.fairness) {
+      setFairness(round.fairness);
+      if (round.fairness.clientSeed) setClientSeed(String(round.fairness.clientSeed));
+      setVerifyMessage(null);
+    }
     setGameState((current) => ({
       ...current,
       balance: roundTc(Number(data?.wallet?.balance ?? current.balance)),
@@ -207,6 +235,8 @@ export function TechCoinMines() {
   }, [applyServerState, copy.walletError]);
 
   useEffect(() => {
+    const savedSeed = window.localStorage.getItem(CLIENT_SEED_KEY);
+    setClientSeed(savedSeed || `techmines-${Math.random().toString(16).slice(2, 10)}`);
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
     const parsed = JSON.parse(saved) as Partial<GameState>;
@@ -233,6 +263,10 @@ export function TechCoinMines() {
       mineCount: gameState.mineCount,
     }));
   }, [gameState.betAmount, gameState.mineCount]);
+
+  useEffect(() => {
+    if (clientSeed) window.localStorage.setItem(CLIENT_SEED_KEY, clientSeed);
+  }, [clientSeed]);
 
   useEffect(() => {
     if (!notice) return;
@@ -281,7 +315,7 @@ export function TechCoinMines() {
       playOffSound("error");
       return;
     }
-    const data = await runMinesAction({ action: "start", betAmount, mineCount: gameState.mineCount });
+    const data = await runMinesAction({ action: "start", betAmount, mineCount: gameState.mineCount, clientSeed });
     if (!data) return;
     recordSessionBet(betAmount);
     setNotice({ type: "info", text: copy.off });
@@ -297,6 +331,17 @@ export function TechCoinMines() {
     recordSessionResult(roundTc(data.payout || cashoutAmount) - gameState.currentRoundBet);
     playOffSound("cashout");
     flashBoard("success");
+  }
+
+
+  async function verifyFairnessHash() {
+    if (!fairness?.hashInput || !fairness?.hash) {
+      setVerifyMessage(copy.waitingReveal);
+      return;
+    }
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fairness.hashInput));
+    const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    setVerifyMessage(hex === fairness.hash ? copy.verified : (tr ? "Hash eşleşmedi." : "Hash mismatch."));
   }
 
   async function revealTile(tileId: number) {
@@ -389,6 +434,19 @@ export function TechCoinMines() {
                   {Array.from({ length: 24 }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count}</option>)}
                 </select>
               </label>
+
+              <div className="rounded-2xl border border-cyan-300/15 bg-black/20 p-4 text-sm leading-6 text-white/60">
+                <div className="flex items-center gap-2 font-bold text-cyan-100"><Hash className="h-4 w-4" /> {copy.fairTitle}</div>
+                <p className="mt-1 text-xs text-white/45">{copy.fairDesc}</p>
+                <label className="mt-3 block">
+                  <span className="text-xs uppercase tracking-[0.14em] text-white/35">{copy.clientSeed}</span>
+                  <input value={clientSeed} disabled={gameState.isRoundActive || actionLoading || walletLoading} onChange={(event) => setClientSeed(event.target.value.replace(/[^a-zA-Z0-9_.:@-]/g, "").slice(0, 64))} className="mt-1 w-full rounded-xl border border-white/10 bg-[#0f212e] px-3 py-2 text-xs font-semibold text-white outline-none focus:border-cyan-300/60 disabled:opacity-55" />
+                </label>
+                <p className="mt-3 break-all text-[11px] text-white/45">{copy.serverHash}: <span className="text-cyan-100/80">{fairness?.hash || "pending"}</span></p>
+                <p className="mt-1 break-all text-[11px] text-white/45">{copy.serverSeed}: <span className="text-emerald-100/80">{fairness?.serverSeed || copy.waitingReveal}</span></p>
+                <button type="button" onClick={verifyFairnessHash} className="mt-3 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-100 transition hover:bg-cyan-300/15">{copy.verify}</button>
+                {verifyMessage ? <p className="mt-2 text-xs text-cyan-100/80">{verifyMessage}</p> : null}
+              </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-4">

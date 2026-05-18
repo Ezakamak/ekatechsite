@@ -16,6 +16,11 @@ type ActiveRound = {
   revealed_ids: string;
   current_multiplier: number;
   status: string;
+  server_seed?: string | null;
+  salt?: string | null;
+  nonce?: number | null;
+  hash?: string | null;
+  client_seed?: string | null;
 };
 
 export async function onRequestGet(context: any) {
@@ -79,6 +84,14 @@ async function startRound(context: any, userId: number, body: any) {
   if (!Number.isFinite(mineCount) || mineCount < 1 || mineCount > 24)
     throw new Error("Mayın sayısı 1 ile 24 arasında olmalı.");
 
+  const clientSeed = normalizeClientSeed(body?.clientSeed, userId);
+  const serverSeed = randomHex(32);
+  const salt = randomHex(16);
+  const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  const hashInput = fairHashInput(serverSeed, salt, nonce, clientSeed);
+  const hash = await sha256Hex(hashInput);
+  const mineIds = await buildMineIds(mineCount, serverSeed, salt, nonce, clientSeed);
+
   const debit = await context.env.DB.prepare(
     `UPDATE coin_wallets SET balance = COALESCE(balance, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND COALESCE(balance, 0) >= ?`,
   )
@@ -103,11 +116,11 @@ async function startRound(context: any, userId: number, body: any) {
 
   await context.env.DB.prepare(
     `
-      INSERT INTO techcoin_mines_rounds (user_id, bet_amount, mine_count, mine_ids, revealed_ids, current_multiplier, status, started_at, updated_at)
-      VALUES (?, ?, ?, ?, '[]', 1, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO techcoin_mines_rounds (user_id, bet_amount, mine_count, mine_ids, revealed_ids, current_multiplier, status, server_seed, salt, nonce, hash, client_seed, started_at, updated_at)
+      VALUES (?, ?, ?, ?, '[]', 1, 'active', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `,
   )
-    .bind(userId, betAmount, mineCount, JSON.stringify(buildMineIds(mineCount)))
+    .bind(userId, betAmount, mineCount, JSON.stringify(mineIds), serverSeed, salt, nonce, hash, clientSeed)
     .run();
 
   return { ...(await buildState(context, userId)), message: "round_started" };
@@ -278,6 +291,15 @@ function serializeRound(round: ActiveRound) {
       isMine: canShowMines && mineIds.includes(id),
       isRevealed: revealedIds.includes(id),
     })),
+    fairness: {
+      algorithm: "SHA-256(serverSeed:salt:nonce:clientSeed)",
+      hash: round.hash || null,
+      clientSeed: round.client_seed || null,
+      salt: canShowMines ? round.salt || null : null,
+      nonce: canShowMines ? Number(round.nonce || 0) : null,
+      serverSeed: canShowMines ? round.server_seed || null : null,
+      hashInput: canShowMines && round.server_seed && round.salt ? fairHashInput(round.server_seed, round.salt, Number(round.nonce || 0), round.client_seed || "") : null,
+    },
   };
 }
 
@@ -313,7 +335,12 @@ async function ensureMinesTables(context: any) {
       status TEXT NOT NULL DEFAULT 'active',
       started_at TEXT DEFAULT CURRENT_TIMESTAMP,
       ended_at TEXT,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      server_seed TEXT,
+      salt TEXT,
+      nonce INTEGER,
+      hash TEXT,
+      client_seed TEXT
     )
   `,
   ).run();
@@ -353,6 +380,12 @@ async function ensureMinesTables(context: any) {
     "created_at",
     "TEXT DEFAULT CURRENT_TIMESTAMP",
   );
+
+  await addColumnIfMissing(context, "techcoin_mines_rounds", "server_seed", "TEXT");
+  await addColumnIfMissing(context, "techcoin_mines_rounds", "salt", "TEXT");
+  await addColumnIfMissing(context, "techcoin_mines_rounds", "nonce", "INTEGER");
+  await addColumnIfMissing(context, "techcoin_mines_rounds", "hash", "TEXT");
+  await addColumnIfMissing(context, "techcoin_mines_rounds", "client_seed", "TEXT");
   await context.env.DB.prepare(
     `CREATE INDEX IF NOT EXISTS idx_techcoin_mines_rounds_active_user ON techcoin_mines_rounds(user_id, status)`,
   ).run();
@@ -371,20 +404,43 @@ async function ensureWallet(context: any, userId: number) {
     .run();
 }
 
-function buildMineIds(mineCount: number) {
-  const mineIds = new Set<number>();
-  while (mineIds.size < mineCount) mineIds.add(randomIndex(GRID_SIZE));
-  return Array.from(mineIds).sort((a, b) => a - b);
+async function buildMineIds(mineCount: number, serverSeed: string, salt: string, nonce: number, clientSeed: string) {
+  const deck = Array.from({ length: GRID_SIZE }, (_, index) => index);
+  await fairShuffle(deck, serverSeed, salt, nonce, clientSeed, "mines");
+  return deck.slice(0, mineCount).sort((a, b) => a - b);
 }
 
-function randomIndex(maxExclusive: number) {
-  const cryptoApi = globalThis.crypto;
-  if (cryptoApi?.getRandomValues) {
-    const array = new Uint32Array(1);
-    cryptoApi.getRandomValues(array);
-    return array[0] % maxExclusive;
+async function fairShuffle<T>(items: T[], serverSeed: string, salt: string, nonce: number, clientSeed: string, gameKey: string) {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = (await fairRandomInt(index + 1, serverSeed, salt, nonce, clientSeed, `${gameKey}:${index}`));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
-  return Math.floor(Math.random() * maxExclusive);
+}
+
+async function fairRandomInt(maxExclusive: number, serverSeed: string, salt: string, nonce: number, clientSeed: string, cursor: string) {
+  const hash = await sha256Hex(`${fairHashInput(serverSeed, salt, nonce, clientSeed)}:${cursor}`);
+  return parseInt(hash.slice(0, 13), 16) % maxExclusive;
+}
+
+function fairHashInput(serverSeed: string, salt: string, nonce: number, clientSeed: string) {
+  return `${serverSeed}:${salt}:${nonce}:${clientSeed}`;
+}
+
+function normalizeClientSeed(value: unknown, userId: number) {
+  const seed = String(value || "").trim().replace(/[^a-zA-Z0-9_.:@-]/g, "").slice(0, 64);
+  return seed || `techmines-${userId}`;
+}
+
+function randomHex(bytes: number) {
+  const values = new Uint8Array(bytes);
+  globalThis.crypto.getRandomValues(values);
+  return Array.from(values, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Hex(value: string) {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function combinations(n: number, k: number) {
