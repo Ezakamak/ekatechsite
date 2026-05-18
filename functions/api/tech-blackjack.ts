@@ -6,6 +6,15 @@ const AMOUNT_LIMITS = { min: 1, max: 100_000 };
 
 type JsonResponseInit = ResponseInit & { status?: number };
 
+type TableColumn = {
+  cid?: number;
+  name: string;
+  type?: string | null;
+  notnull?: number;
+  dflt_value?: unknown;
+  pk?: number;
+};
+
 type BlackjackLogBody = {
   roundId?: string;
   usedDeck?: unknown;
@@ -50,10 +59,28 @@ export async function onRequestPost(context: any) {
       const { deck, deckHmac } = await generateBlackjackDeck(serverSeed, clientSeed, nonce);
       await debitWallet(context, auth.user.id, amount, "Tech Blackjack bet");
       await awardGameExp(context, auth.user.id, expForGame("easy", 6), "Tech Blackjack bet", "blackjack");
-      const roundId = `bj-${Date.now()}-${crypto.randomUUID?.() || nonce}`;
-      await context.env.DB.prepare(
-        `INSERT INTO tech_blackjack_rounds (id, user_id, server_seed, server_hash, client_seed, nonce, deck_hmac, deck_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      ).bind(roundId, auth.user.id, serverSeed, serverHash, clientSeed, nonce, deckHmac, JSON.stringify(deck.map((card) => card.code))).run();
+      const idColumn = await getTableColumn(context, "tech_blackjack_rounds", "id");
+      console.log(`[D1_BLACKJACK_SCHEMA] tech_blackjack_rounds id column = ${formatTableColumnForLog(idColumn)}`);
+      const usesIntegerId = isIntegerPrimaryKey(idColumn);
+      console.log(`[D1_BLACKJACK_INSERT_MODE] ${usesIntegerId ? "integer-id" : "text-id"}`);
+
+      const deckOrder = JSON.stringify(deck.map((card) => card.code));
+      let roundId: string;
+
+      if (usesIntegerId) {
+        const insert = await context.env.DB.prepare(
+          `INSERT INTO tech_blackjack_rounds (user_id, server_seed, server_hash, client_seed, nonce, deck_hmac, deck_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        ).bind(auth.user.id, serverSeed, serverHash, clientSeed, nonce, deckHmac, deckOrder).run();
+        const lastRowId = insert?.meta?.last_row_id;
+        if (!Number.isInteger(Number(lastRowId))) throw new Error("Tech Blackjack round id could not be created.");
+        roundId = String(lastRowId);
+      } else {
+        roundId = `bj-${Date.now()}-${crypto.randomUUID?.() || nonce}`;
+        await context.env.DB.prepare(
+          `INSERT INTO tech_blackjack_rounds (id, user_id, server_seed, server_hash, client_seed, nonce, deck_hmac, deck_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        ).bind(roundId, auth.user.id, serverSeed, serverHash, clientSeed, nonce, deckHmac, deckOrder).run();
+      }
+
       return json({
         ...(await buildState(context, auth.user.id)),
         round: {
@@ -169,17 +196,22 @@ async function creditWallet(context: any, userId: number, amount: number, reason
 async function settleBlackjackRound(context: any, userId: number, body: BlackjackLogBody & { roundId?: string; usedDeck?: unknown }) {
   const roundId = String(body?.roundId || "");
   if (!roundId) return null;
+
+  const idColumn = await getTableColumn(context, "tech_blackjack_rounds", "id");
+  const normalizedRoundId = normalizeRoundId(roundId, idColumn);
+  if (normalizedRoundId === null) return null;
+
   const row = await context.env.DB.prepare(
     `SELECT id, server_seed AS serverSeed, server_hash AS serverHash, client_seed AS clientSeed, nonce, deck_hmac AS deckHmac, deck_order AS deckOrder FROM tech_blackjack_rounds WHERE id = ? AND user_id = ?`,
-  ).bind(roundId, userId).first();
+  ).bind(normalizedRoundId, userId).first();
   if (!row?.id) return null;
   const usedDeck = Array.isArray(body?.usedDeck) ? body.usedDeck.map((card: any) => String(card?.code || card)).filter(Boolean) : [];
   await context.env.DB.prepare(
     `UPDATE tech_blackjack_rounds SET used_deck = ?, settled_at = datetime('now') WHERE id = ? AND user_id = ?`,
-  ).bind(JSON.stringify(usedDeck), roundId, userId).run();
+  ).bind(JSON.stringify(usedDeck), normalizedRoundId, userId).run();
   return {
     algorithm: "SHA-256 / HMAC-SHA256 Provably Fair",
-    roundId,
+    roundId: String(row.id),
     clientSeed: String(row.clientSeed),
     nonce: Number(row.nonce),
     serverHash: String(row.serverHash),
@@ -306,6 +338,44 @@ async function ensureBlackjackTables(context: any) {
     ["created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"],
   ];
   for (const [name, type] of handColumns) await addColumnIfMissing(context, "tech_blackjack_hands", name, type);
+}
+
+async function getTableColumns(context: any, table: string): Promise<TableColumn[]> {
+  const result = await context.env.DB.prepare(`PRAGMA table_info(${sqlIdentifier(table)})`).all();
+  return (result?.results || []).map((column: any) => ({
+    cid: Number(column.cid),
+    name: String(column.name || ""),
+    type: column.type == null ? null : String(column.type),
+    notnull: Number(column.notnull || 0),
+    dflt_value: column.dflt_value ?? null,
+    pk: Number(column.pk || 0),
+  }));
+}
+
+async function getTableColumn(context: any, table: string, column: string): Promise<TableColumn | null> {
+  const columns = await getTableColumns(context, table);
+  return columns.find((entry) => entry.name.toLowerCase() === column.toLowerCase()) || null;
+}
+
+function isIntegerPrimaryKey(column: TableColumn | null) {
+  return Boolean(column?.pk) && String(column?.type || "").trim().toUpperCase() === "INTEGER";
+}
+
+function normalizeRoundId(roundId: string, idColumn: TableColumn | null) {
+  if (!isIntegerPrimaryKey(idColumn)) return String(roundId);
+  const numericRoundId = Number(roundId);
+  if (!Number.isInteger(numericRoundId)) return null;
+  return numericRoundId;
+}
+
+function formatTableColumnForLog(column: TableColumn | null) {
+  if (!column) return "missing";
+  return `${column.name} ${String(column.type || "").trim() || "UNKNOWN"} pk=${Number(column.pk || 0)}`;
+}
+
+function sqlIdentifier(identifier: string) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) throw new Error("Invalid SQL identifier.");
+  return `"${identifier.replace(/"/g, '""')}"`;
 }
 
 async function addColumnIfMissing(context: any, table: string, column: string, type: string) {
