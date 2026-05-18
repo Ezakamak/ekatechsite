@@ -1290,7 +1290,7 @@ export function TechRoulette() {
                       onClick={() => setBetInput((current) => adjustBetInput(current, 0.5))}
                       className="rounded-full border border-white/10 bg-white/10 px-3 py-3 font-black text-white transition-all hover:bg-white/20"
                     >
-                      /2
+                      1/2
                     </button>
                     <button
                       type="button"
