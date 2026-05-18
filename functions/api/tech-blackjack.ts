@@ -270,6 +270,46 @@ async function ensureBlackjackTables(context: any) {
     )
   `,
   ).run();
+
+  const walletColumns = [
+    ["balance", "INTEGER DEFAULT 100"],
+    ["lifetime_earned", "INTEGER DEFAULT 0"],
+    ["updated_at", "TEXT DEFAULT CURRENT_TIMESTAMP"],
+  ];
+  for (const [name, type] of walletColumns) await addColumnIfMissing(context, "coin_wallets", name, type);
+
+  const transactionColumns = [
+    ["reason", "TEXT"],
+    ["created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"],
+  ];
+  for (const [name, type] of transactionColumns) await addColumnIfMissing(context, "coin_transactions", name, type);
+
+  const roundColumns = [
+    ["server_seed", "TEXT"],
+    ["server_hash", "TEXT"],
+    ["client_seed", "TEXT"],
+    ["nonce", "INTEGER"],
+    ["deck_hmac", "TEXT"],
+    ["deck_order", "TEXT"],
+    ["used_deck", "TEXT"],
+    ["settled_at", "TEXT"],
+    ["created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"],
+  ];
+  for (const [name, type] of roundColumns) await addColumnIfMissing(context, "tech_blackjack_rounds", name, type);
+
+  const handColumns = [
+    ["player_score", "INTEGER DEFAULT 0"],
+    ["dealer_score", "INTEGER DEFAULT 0"],
+    ["bet_amount", "INTEGER DEFAULT 0"],
+    ["net_amount", "INTEGER DEFAULT 0"],
+    ["payout_amount", "INTEGER DEFAULT 0"],
+    ["created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"],
+  ];
+  for (const [name, type] of handColumns) await addColumnIfMissing(context, "tech_blackjack_hands", name, type);
+}
+
+async function addColumnIfMissing(context: any, table: string, column: string, type: string) {
+  await context.env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run().catch(() => null);
 }
 
 function sanitizeSeed(value: unknown) { return String(value || "").trim().slice(0, 128); }
