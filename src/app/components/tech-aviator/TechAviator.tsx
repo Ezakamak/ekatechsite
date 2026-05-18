@@ -12,8 +12,8 @@ const BETTING_SECONDS = 8;
 const MULTIPLIER_GROWTH = 0.28;
 
 const initialPanels: BetPanelState[] = [
-  { id: "panel-a", amount: 100, autoBet: false, autoCashout: true, autoCashoutMultiplier: 2, isBetAccepted: false, hasCashedOut: false },
-  { id: "panel-b", amount: 250, autoBet: false, autoCashout: false, autoCashoutMultiplier: 3, isBetAccepted: false, hasCashedOut: false },
+  { id: "panel-a", amount: "100", autoBet: false, autoCashout: true, autoCashoutMultiplier: "2", isBetAccepted: false, hasCashedOut: false },
+  { id: "panel-b", amount: "250", autoBet: false, autoCashout: false, autoCashoutMultiplier: "3", isBetAccepted: false, hasCashedOut: false },
 ];
 
 const initialGameState: GameState = {
@@ -188,9 +188,10 @@ export function TechAviator() {
         updatePanel(panel.id, { hasCashedOut: true });
         const backendMultiplier = Number(data.multiplier);
         const backendPayout = Number(data.lockedScore ?? data.payout);
-        const payout = Number.isFinite(backendPayout) ? backendPayout : Number((panel.activeBetAmount ?? panel.amount) * (Number.isFinite(backendMultiplier) ? backendMultiplier : gameState.currentMultiplier));
+        const entryAmount = Number(panel.activeBetAmount ?? Number(panel.amount));
+        const payout = Number.isFinite(backendPayout) ? backendPayout : Number(entryAmount * (Number.isFinite(backendMultiplier) ? backendMultiplier : gameState.currentMultiplier));
         showCashoutSuccessToast(panel, payout, Number.isFinite(backendMultiplier) ? backendMultiplier : Number(gameState.currentMultiplier || 1));
-        recordSessionResult(roundMoney(payout - (panel.activeBetAmount ?? panel.amount)));
+        recordSessionResult(roundMoney(payout - entryAmount));
         setErrorMessage(undefined);
       })
       .catch((error) => {
@@ -276,7 +277,7 @@ export function TechAviator() {
       const lossKey = `${gameState.roundId}:${panel.id}`;
       if (settledCrashLossesRef.current.has(lossKey)) return;
       settledCrashLossesRef.current.add(lossKey);
-      recordSessionResult(-Number(panel.activeBetAmount ?? panel.amount));
+      recordSessionResult(-Number(panel.activeBetAmount ?? Number(panel.amount)));
     });
   }, [gameState.roundId, gameState.status, panels, recordSessionResult]);
 
@@ -284,7 +285,7 @@ export function TechAviator() {
     if (gameState.status !== "STATUS_FLYING") return;
 
     panels.forEach((panel) => {
-      if (panel.autoCashout && panel.isBetAccepted && !panel.hasCashedOut && gameState.currentMultiplier >= panel.autoCashoutMultiplier) {
+      if (panel.autoCashout && panel.isBetAccepted && !panel.hasCashedOut && Number(panel.autoCashoutMultiplier) > 0 && gameState.currentMultiplier >= Number(panel.autoCashoutMultiplier)) {
         cashOut(panel);
       }
     });

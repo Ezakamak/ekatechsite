@@ -34,7 +34,7 @@ export function TechBlackjack() {
   const [wallet, setWallet] = useState<WalletState | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [betAmount, setBetAmount] = useState(DEFAULT_BET);
+  const [betAmountInput, setBetAmountInput] = useState(String(DEFAULT_BET));
   const [deck, setDeck] = useState<Card[]>([]);
   const [dealerCards, setDealerCards] = useState<Card[]>([]);
   const [hideDealerHole, setHideDealerHole] = useState(true);
@@ -47,7 +47,8 @@ export function TechBlackjack() {
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-blackjack");
 
   const balance = Math.max(0, Math.floor(Number(wallet?.balance || 0)));
-  const safeBet = useMemo(() => sanitizeBet(betAmount ?? DEFAULT_BET, Math.max(1, balance || 1)), [betAmount, balance]);
+  const parsedBetAmount = useMemo(() => Number(betAmountInput), [betAmountInput]);
+  const safeBet = useMemo(() => (Number.isFinite(parsedBetAmount) && parsedBetAmount > 0 ? sanitizeBet(parsedBetAmount, Math.max(1, balance || 1)) : 0), [parsedBetAmount, balance]);
   const safeDeck = useMemo(() => safeCards(deck), [deck]);
   const dealerHand = useMemo(() => safeCards(dealerCards), [dealerCards]);
   const playerHands = useMemo(() => sanitizeHands(hands), [hands]);
@@ -84,10 +85,10 @@ export function TechBlackjack() {
       const saved = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
       if (saved) {
         const parsed = JSON.parse(saved) as { betAmount?: number };
-        setBetAmount(sanitizeBet(parsed.betAmount, 1_000_000));
+        setBetAmountInput(String(sanitizeBet(parsed.betAmount, 1_000_000)));
       }
     } catch {
-      setBetAmount(DEFAULT_BET);
+      setBetAmountInput(String(DEFAULT_BET));
     }
     loadState();
     window.addEventListener("ekatech-techcoin-refresh", loadState);
@@ -132,7 +133,8 @@ export function TechBlackjack() {
   }
 
   async function startRound() {
-    const amount = sanitizeBet(betAmount ?? DEFAULT_BET, balance);
+    const rawAmount = Number(betAmountInput);
+    const amount = Number.isFinite(rawAmount) && rawAmount > 0 ? sanitizeBet(rawAmount, balance) : 0;
     debugBlackjack("round start", { amount, balance, phase, deckLength: safeDeck.length, playerHandLength: activeHand?.cards?.length || 0, dealerHandLength: dealerHand.length });
     if (phase !== "betting" && phase !== "settled") return;
     if (amount < 1 || amount > balance) {
@@ -340,7 +342,7 @@ export function TechBlackjack() {
   }
 
   function adjustBet(multiplier: number) {
-    setBetAmount((current) => sanitizeBet(Math.floor(sanitizeBet(current, Math.max(balance, 1)) * multiplier), Math.max(balance, 1)));
+    setBetAmountInput((current) => String(sanitizeBet(Math.floor(sanitizeBet(Number(current), Math.max(balance, 1)) * multiplier), Math.max(balance, 1))));
   }
 
   const removeToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
@@ -417,7 +419,7 @@ export function TechBlackjack() {
             </div>
 
             <div className="mt-4 grid gap-3 rounded-[1.6rem] border border-white/10 bg-black/30 p-3 md:grid-cols-[1fr_auto_auto_1.2fr]">
-              <label className="block"><span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">{tr ? "Bahis tutarı" : "Bet Amount"}</span><input type="number" min={1} max={Math.max(1, balance)} value={betAmount} disabled={phase === "playing" || phase === "dealer"} onChange={(event) => setBetAmount(Number(event.target.value))} onBlur={() => setBetAmount((current) => sanitizeBet(current, Math.max(balance, 1)))} className="mt-1 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-black text-white outline-none focus:border-emerald-300/40" /></label>
+              <label className="block"><span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">{tr ? "Bahis tutarı" : "Bet Amount"}</span><input type="text" inputMode="decimal" min={1} max={Math.max(1, balance)} value={betAmountInput} disabled={phase === "playing" || phase === "dealer"} onChange={(event) => setBetAmountInput(normalizeDecimalInput(event.target.value))} onBlur={() => { if (safeBet > 0) setBetAmountInput(String(safeBet)); }} className="mt-1 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-black text-white outline-none focus:border-emerald-300/40" /></label>
               <button type="button" disabled={phase === "playing" || phase === "dealer"} onClick={() => adjustBet(0.5)} className="self-end rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 font-black transition hover:bg-white/10 disabled:opacity-45">1/2</button>
               <button type="button" disabled={phase === "playing" || phase === "dealer"} onClick={() => adjustBet(2)} className="self-end rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 font-black transition hover:bg-white/10 disabled:opacity-45">2x</button>
               <button type="button" disabled={walletLoading || actionLoading || safeBet < 1 || safeBet > balance || phase === "playing" || phase === "dealer"} onClick={startRound} className="self-end rounded-2xl bg-gradient-to-r from-emerald-300 to-lime-300 px-6 py-4 text-lg font-black uppercase tracking-[0.18em] text-slate-950 shadow-xl shadow-emerald-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100">{tr ? "Bahis" : "Bet"}</button>
@@ -616,6 +618,13 @@ function toastLabel(hands: PlayerHand[], totalNet: number, tr: boolean) {
   if (totalNet === 0) return tr ? "Beraberlik." : "Push.";
   return safeHands.some((hand) => hand.status === "loss" && handValue(hand.cards).total > 21) ? (tr ? "Battınız." : "Bust.") : (tr ? "Krupiye kazandı." : "Dealer wins.");
 }
+function normalizeDecimalInput(value: string) {
+  const cleaned = value.replace(",", ".").replace(/[^0-9.]/g, "");
+  const [integerPart = "", ...decimalParts] = cleaned.split(".");
+  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, "");
+  return decimalParts.length ? `${normalizedInteger || "0"}.${decimalParts.join("")}` : normalizedInteger;
+}
+
 function sanitizeBet(value: unknown, max: number) {
   const amount = Math.floor(Number(value));
   if (!Number.isFinite(amount) || amount < 1) return 1;

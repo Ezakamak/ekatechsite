@@ -39,6 +39,18 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function normalizeDecimalInput(value: string) {
+  const cleaned = value.replace(",", ".").replace(/[^0-9.]/g, "");
+  const [integerPart = "", ...decimalParts] = cleaned.split(".");
+  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, "");
+  return decimalParts.length ? `${normalizedInteger || "0"}.${decimalParts.join("")}` : normalizedInteger;
+}
+
+function parseBetAmount(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? roundTc(clamp(parsed, 0, 1000000)) : 0;
+}
+
 function roundTc(value: number) {
   return Math.max(0, Math.floor(Number(value) || 0));
 }
@@ -93,6 +105,7 @@ export function TechCoinMines() {
   const tr = language === "tr";
   const locale = tr ? "tr-TR" : "en-US";
   const [gameState, setGameState] = useState<GameState>(initialGameState);
+  const [betAmountInput, setBetAmountInput] = useState(String(initialGameState.betAmount));
   const [notice, setNotice] = useState<Notice>(null);
   const [boardPulse, setBoardPulse] = useState<"shake" | "success" | null>(null);
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
@@ -153,17 +166,21 @@ export function TechCoinMines() {
 
   const applyServerState = useCallback((data: any) => {
     const round = data?.round;
-    setGameState((current) => ({
-      ...current,
-      balance: roundTc(Number(data?.wallet?.balance ?? current.balance)),
-      betAmount: round ? roundTc(Number(round.betAmount || current.betAmount)) : current.betAmount,
-      mineCount: round ? Math.round(clamp(Number(round.mineCount || current.mineCount), 1, 24)) : current.mineCount,
-      currentRoundBet: round?.isRoundActive ? roundTc(Number(round.betAmount || 0)) : 0,
-      isRoundActive: Boolean(round?.isRoundActive),
-      grid: Array.isArray(round?.grid) ? round.grid : DEFAULT_GRID,
-      revealedDiamondsCount: Number(round?.revealedDiamondsCount || 0),
-      currentMultiplier: Number(round?.currentMultiplier || 1),
-    }));
+    setGameState((current) => {
+      const nextBetAmount = round ? roundTc(Number(round.betAmount || current.betAmount)) : current.betAmount;
+      if (round) setBetAmountInput(String(nextBetAmount));
+      return {
+        ...current,
+        balance: roundTc(Number(data?.wallet?.balance ?? current.balance)),
+        betAmount: nextBetAmount,
+        mineCount: round ? Math.round(clamp(Number(round.mineCount || current.mineCount), 1, 24)) : current.mineCount,
+        currentRoundBet: round?.isRoundActive ? roundTc(Number(round.betAmount || 0)) : 0,
+        isRoundActive: Boolean(round?.isRoundActive),
+        grid: Array.isArray(round?.grid) ? round.grid : DEFAULT_GRID,
+        revealedDiamondsCount: Number(round?.revealedDiamondsCount || 0),
+        currentMultiplier: Number(round?.currentMultiplier || 1),
+      };
+    });
   }, []);
 
   const loadLiveState = useCallback(async () => {
@@ -206,11 +223,15 @@ export function TechCoinMines() {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
     const parsed = JSON.parse(saved) as Partial<GameState>;
-    setGameState((current) => ({
-      ...current,
-      betAmount: roundTc(clamp(Number(parsed.betAmount ?? current.betAmount), 1, 1000000)),
-      mineCount: Math.round(clamp(Number(parsed.mineCount ?? current.mineCount), 1, 24)),
-    }));
+    setGameState((current) => {
+      const savedBet = roundTc(clamp(Number(parsed.betAmount ?? current.betAmount), 1, 1000000));
+      setBetAmountInput(String(savedBet));
+      return {
+        ...current,
+        betAmount: savedBet,
+        mineCount: Math.round(clamp(Number(parsed.mineCount ?? current.mineCount), 1, 24)),
+      };
+    });
   }, []);
 
   useEffect(() => {
@@ -225,10 +246,10 @@ export function TechCoinMines() {
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      betAmount: gameState.betAmount,
+      betAmount: parseBetAmount(betAmountInput),
       mineCount: gameState.mineCount,
     }));
-  }, [gameState.betAmount, gameState.mineCount]);
+  }, [betAmountInput, gameState.mineCount]);
 
   useEffect(() => {
     if (!notice) return;
@@ -236,8 +257,9 @@ export function TechCoinMines() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  const pendingBetAmount = parseBetAmount(betAmountInput);
   const nextMultiplier = calculateMultiplier(gameState.mineCount, gameState.revealedDiamondsCount + 1);
-  const nextProfit = gameState.isRoundActive ? Math.max(0, gameState.currentRoundBet * nextMultiplier - gameState.currentRoundBet) : Math.max(0, gameState.betAmount * calculateMultiplier(gameState.mineCount, 1) - gameState.betAmount);
+  const nextProfit = gameState.isRoundActive ? Math.max(0, gameState.currentRoundBet * nextMultiplier - gameState.currentRoundBet) : Math.max(0, pendingBetAmount * calculateMultiplier(gameState.mineCount, 1) - pendingBetAmount);
   const cashoutAmount = roundTc(gameState.currentRoundBet * gameState.currentMultiplier);
   const cashoutProfit = Math.max(0, roundTc(cashoutAmount - gameState.currentRoundBet));
   const maxDiamonds = GRID_SIZE - gameState.mineCount;
@@ -264,7 +286,7 @@ export function TechCoinMines() {
   }
 
   async function startRound() {
-    const betAmount = roundTc(gameState.betAmount);
+    const betAmount = roundTc(Number(betAmountInput));
     if (betAmount < 1) {
       setNotice({ type: "error", text: copy.minBet });
       playOffSound("error");
@@ -364,7 +386,7 @@ export function TechCoinMines() {
             <div className="mt-5 space-y-5">
               <label className="block">
                 <span className="text-sm font-medium text-white/70">{copy.betAmount}</span>
-                <input type="number" min="1" step="1" disabled={gameState.isRoundActive || actionLoading || walletLoading} value={gameState.betAmount} onChange={(event) => setGameState((current) => ({ ...current, betAmount: roundTc(clamp(Number(event.target.value), 0, 1000000)) }))} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0f212e] px-4 py-3 text-lg font-semibold text-white outline-none transition focus:border-emerald-300/60 disabled:cursor-not-allowed disabled:opacity-55" />
+                <input type="text" inputMode="decimal" min="1" step="1" disabled={gameState.isRoundActive || actionLoading || walletLoading} value={betAmountInput} onChange={(event) => setBetAmountInput(normalizeDecimalInput(event.target.value))} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0f212e] px-4 py-3 text-lg font-semibold text-white outline-none transition focus:border-emerald-300/60 disabled:cursor-not-allowed disabled:opacity-55" />
               </label>
 
               <label className="block">
@@ -386,7 +408,7 @@ export function TechCoinMines() {
                 </div>
               </div>
 
-              <button type="button" onClick={gameState.isRoundActive ? cashout : startRound} disabled={actionLoading || walletLoading} className="w-full rounded-2xl bg-emerald-400 px-5 py-4 text-base font-bold text-[#0f212e] shadow-xl shadow-emerald-500/20 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-55">
+              <button type="button" onClick={gameState.isRoundActive ? cashout : startRound} disabled={actionLoading || walletLoading || (!gameState.isRoundActive && pendingBetAmount <= 0)} className="w-full rounded-2xl bg-emerald-400 px-5 py-4 text-base font-bold text-[#0f212e] shadow-xl shadow-emerald-500/20 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-55">
                 {gameState.isRoundActive ? `${copy.cashout} (${formatTc(cashoutProfit, locale)} TC)` : copy.bet}
               </button>
 

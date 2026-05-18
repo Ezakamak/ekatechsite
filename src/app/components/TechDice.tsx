@@ -54,7 +54,7 @@ export function TechDice() {
   const mountedRef = useRef(true);
   const landingTimerRef = useRef<number | null>(null);
   const [wallet, setWallet] = useState<WalletState | null>(null);
-  const [amount, setAmount] = useState(25);
+  const [amountInput, setAmountInput] = useState("25");
   const [mode, setMode] = useState<DiceMode>("over");
   const [target, setTarget] = useState(50);
   const [rolling, setRolling] = useState(false);
@@ -66,7 +66,8 @@ export function TechDice() {
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-dice");
 
-  const safeAmount = useMemo(() => clampInteger(amount, 1, 10_000), [amount]);
+  const parsedAmount = useMemo(() => Number(amountInput), [amountInput]);
+  const safeAmount = useMemo(() => (Number.isFinite(parsedAmount) && parsedAmount > 0 ? clampInteger(parsedAmount, 1, 10_000) : 0), [parsedAmount]);
   const safeTarget = useMemo(() => clampTarget(target), [target]);
   const math = useMemo(() => diceMath(mode, safeTarget), [mode, safeTarget]);
   const potentialReward = Math.max(1, Math.floor(safeAmount * math.multiplier));
@@ -116,10 +117,16 @@ export function TechDice() {
 
   async function roll() {
     if (rolling) return;
-    const playAmount = clampInteger(amount, 1, 10_000);
+    const rawAmount = Number(amountInput);
+    if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+      setMessage(tr ? "Geçerli bir Tech Coin tutarı gir." : "Enter a valid Tech Coin amount.");
+      playOffSound("error");
+      return;
+    }
+    const playAmount = clampInteger(rawAmount, 1, 10_000);
     const playTarget = clampTarget(target);
 
-    setAmount(playAmount);
+    setAmountInput(String(playAmount));
     setTarget(playTarget);
     setRolling(true);
     setMarkerLanded(false);
@@ -249,7 +256,7 @@ export function TechDice() {
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label className="rounded-3xl border border-white/10 bg-black/25 p-4">
                 <span className="text-xs uppercase tracking-[0.18em] text-white/40">{tr ? "Tech Coin tutarı" : "Tech Coin amount"}</span>
-                <input type="number" min="1" max="10000" value={amount} onChange={(event) => setAmount(clampInteger(event.target.value, 1, 10_000))} className="mt-2 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-bold text-white outline-none focus:border-cyan-200/50" />
+                <input type="text" inputMode="decimal" min="1" max="10000" value={amountInput} onChange={(event) => setAmountInput(normalizeDecimalInput(event.target.value))} className="mt-2 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-bold text-white outline-none focus:border-cyan-200/50" />
               </label>
               <div className="grid grid-cols-2 gap-4">
                 <Stat label={tr ? "Çarpan" : "Multiplier"} value={`${math.multiplier.toFixed(2)}x`} glow />
@@ -257,7 +264,7 @@ export function TechDice() {
               </div>
             </div>
 
-            <button type="button" disabled={rolling} onClick={roll} className="mt-6 inline-flex w-full items-center justify-center gap-3 rounded-full bg-gradient-to-r from-cyan-100 via-white to-purple-100 px-6 py-4 text-base font-black text-black shadow-2xl shadow-cyan-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="button" disabled={rolling || safeAmount <= 0} onClick={roll} className="mt-6 inline-flex w-full items-center justify-center gap-3 rounded-full bg-gradient-to-r from-cyan-100 via-white to-purple-100 px-6 py-4 text-base font-black text-black shadow-2xl shadow-cyan-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60">
               <Sparkles className="h-5 w-5" /> {rolling ? (tr ? "Atılıyor..." : "Rolling...") : (tr ? "At" : "Roll")}
             </button>
 
@@ -396,6 +403,13 @@ function clampInteger(value: unknown, min: number, max: number) {
   const numeric = Math.floor(Number(value));
   if (!Number.isFinite(numeric)) return min;
   return Math.max(min, Math.min(max, numeric));
+}
+
+function normalizeDecimalInput(value: string) {
+  const cleaned = value.replace(",", ".").replace(/[^0-9.]/g, "");
+  const [integerPart = "", ...decimalParts] = cleaned.split(".");
+  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, "");
+  return decimalParts.length ? `${normalizedInteger || "0"}.${decimalParts.join("")}` : normalizedInteger;
 }
 
 function clampNumber(value: number, min: number, max: number) {

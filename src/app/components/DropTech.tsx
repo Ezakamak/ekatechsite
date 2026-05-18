@@ -782,13 +782,18 @@ function BattlePlayerPanel({ label, name, avatarUrl, score, item, points, strip,
   </div>;
 }
 
+function normalizeIntegerInput(value: string) {
+  return value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
+}
+
 function TradeCard({ trade, currentUserId, inventoryItems, tr, locale, copy, onAccept, onDecline, onCancel, onUpdateItems, onReady, onConfirm }: { trade: TradeOffer; currentUserId: number; inventoryItems: InventoryItem[]; tr: boolean; locale: string; copy: Record<string, string>; onAccept: () => void; onDecline: () => void; onCancel: () => void; onUpdateItems: (itemId: string, quantity: number) => void; onReady: (ready: boolean) => void; onConfirm: () => void }) {
   const isProposer = Number(trade.proposer_id) === currentUserId;
   const myReady = Boolean(Number(isProposer ? trade.proposer_ready : trade.recipient_ready));
   const otherReady = Boolean(Number(isProposer ? trade.recipient_ready : trade.proposer_ready));
   const myConfirmed = Boolean(Number(isProposer ? trade.proposer_confirmed : trade.recipient_confirmed));
   const [itemId, setItemId] = useState(isProposer ? (trade.offer_item?.id || "") : (trade.request_item?.id || ""));
-  const [quantity, setQuantity] = useState(Number(isProposer ? trade.offer_quantity : trade.request_quantity || 1));
+  const [quantityInput, setQuantityInput] = useState(String(Number(isProposer ? trade.offer_quantity : trade.request_quantity || 1)));
+  const quantity = Math.max(0, Math.floor(Number(quantityInput) || 0));
   const statusText = trade.status === "ready" ? copy.finalConfirm : trade.status === "active" ? copy.activeTrade : trade.status === "completed" || trade.status === "accepted" ? copy.completed : copy.requestPending;
   const canEdit = ["active", "ready"].includes(trade.status) && !myReady;
   const canReady = ["active", "ready"].includes(trade.status) && (isProposer ? Boolean(trade.offer_item) : Boolean(trade.request_item));
@@ -803,8 +808,8 @@ function TradeCard({ trade, currentUserId, inventoryItems, tr, locale, copy, onA
     <div className="mt-3 grid gap-3 sm:grid-cols-2"><MiniTradeItem label={copy.offer} item={trade.offer_item} quantity={Number(trade.offer_quantity || 0)} ready={Boolean(Number(trade.proposer_ready))} confirmed={Boolean(Number(trade.proposer_confirmed))} tr={tr} locale={locale} /><MiniTradeItem label={copy.request} item={trade.request_item} quantity={Number(trade.request_quantity || 0)} ready={Boolean(Number(trade.recipient_ready))} confirmed={Boolean(Number(trade.recipient_confirmed))} tr={tr} locale={locale} /></div>
     {canEdit && <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3 sm:grid-cols-[1fr_96px_auto]">
       <label className="grid gap-2 text-xs text-white/55">{copy.selectItem}<select value={itemId} onChange={(event) => setItemId(event.target.value)} className="rounded-2xl border border-white/10 bg-black/60 px-3 py-2 text-white outline-none"><option value="">—</option>{inventoryItems.map((item) => <option key={item.item_id || item.id} value={item.item_id || item.id}>{item.emoji} {nameOf(item, tr)} x{item.quantity}</option>)}</select></label>
-      <label className="grid gap-2 text-xs text-white/55">{copy.qty}<input type="number" min={1} value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value || 1)))} className="rounded-2xl border border-white/10 bg-black/60 px-3 py-2 text-white outline-none" /></label>
-      <button onClick={() => itemId && onUpdateItems(itemId, quantity)} disabled={!itemId} className="self-end rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200 disabled:opacity-40">{copy.saveItem}</button>
+      <label className="grid gap-2 text-xs text-white/55">{copy.qty}<input type="text" inputMode="numeric" min={1} value={quantityInput} onChange={(event) => setQuantityInput(normalizeIntegerInput(event.target.value))} className="rounded-2xl border border-white/10 bg-black/60 px-3 py-2 text-white outline-none" /></label>
+      <button onClick={() => itemId && quantity > 0 && onUpdateItems(itemId, quantity)} disabled={!itemId || quantity <= 0} className="self-end rounded-full bg-white px-4 py-2 text-xs font-semibold text-black hover:bg-gray-200 disabled:opacity-40">{copy.saveItem}</button>
     </div>}
     {trade.status === "ready" && <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm text-amber-100"><p className="font-semibold">{copy.finalConfirm}</p><p className="mt-1 text-xs opacity-75">{myConfirmed ? copy.waitingOther : copy.confirm}</p></div>}
     <div className="mt-4 flex flex-wrap gap-2">
