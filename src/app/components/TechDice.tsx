@@ -259,8 +259,6 @@ export function TechDice() {
                   <input type="number" min="1" max="10000" step="any" value={amountInput} onChange={(event) => setAmountInput(event.target.value)} className="mt-2 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-bold text-white outline-none focus:border-cyan-200/50" />
                 </label>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button type="button" disabled={rolling} onClick={() => setAmount((current) => adjustBetAmount(current, 0.5))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
-                    1/2
                   <button type="button" disabled={rolling} onClick={() => setAmountInput((current) => String(adjustBetAmount(Number(current), 0.5)))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
                     1/2
                   </button>
