@@ -54,7 +54,7 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
                 disabled={panel.isBetAccepted}
                 className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 py-2 text-sm font-black text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                /2
+                1/2
               </button>
               <button
                 type="button"

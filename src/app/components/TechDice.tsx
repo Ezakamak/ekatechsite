@@ -254,7 +254,7 @@ export function TechDice() {
                 </label>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button type="button" disabled={rolling} onClick={() => setAmount((current) => adjustBetAmount(current, 0.5))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
-                    /2
+                    1/2
                   </button>
                   <button type="button" disabled={rolling} onClick={() => setAmount((current) => adjustBetAmount(current, 2))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
                     x2
