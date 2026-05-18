@@ -21,7 +21,7 @@ type Tile = {
   revealed: boolean;
 };
 
-type Fairness = { algorithm?: string; hash?: string | null; clientSeed?: string | null; salt?: string | null; nonce?: number | null; serverSeed?: string | null; hashInput?: string | null };
+type Fairness = { algorithm?: string; hash?: string | null; resultAlgorithm?: string | null; resultHash?: string | null; clientSeed?: string | null; salt?: string | null; nonce?: number | null; serverSeed?: string | null; hashInput?: string | null };
 
 type Round = {
   betAmount: number;
@@ -226,13 +226,13 @@ export function EkaTowers() {
 
 
   async function verifyFairnessHash() {
-    if (!fairness?.hashInput || !fairness?.hash) {
+    if (!fairness?.serverSeed || !fairness?.hash) {
       setVerifyMessage(tr ? "Server seed round bitince gösterilir." : "Server seed is revealed after the round ends.");
       return;
     }
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fairness.hashInput));
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fairness.serverSeed));
     const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    setVerifyMessage(hex === fairness.hash ? (tr ? "SHA-256 hash doğrulandı." : "SHA-256 hash verified.") : (tr ? "Hash eşleşmedi." : "Hash mismatch."));
+    setVerifyMessage(hex === fairness.hash ? (tr ? "SHA-256(serverSeed) doğrulandı." : "SHA-256(serverSeed) verified.") : (tr ? "Server seed hash ile eşleşmedi." : "Server seed does not match the hash."));
   }
 
   async function startGame() {
@@ -389,6 +389,7 @@ export function EkaTowers() {
             </label>
             <p className="mt-3 break-all text-[11px] text-white/45">Server hash: <span className="text-cyan-100/80">{fairness?.hash || "pending"}</span></p>
             <p className="mt-1 break-all text-[11px] text-white/45">Server seed: <span className="text-emerald-100/80">{fairness?.serverSeed || (tr ? "Round bitince gösterilir" : "Revealed after round end")}</span></p>
+            <p className="mt-1 break-all text-[11px] text-white/45">Result HMAC: <span className="text-fuchsia-100/80">{fairness?.resultHash || (tr ? "Round bitince gösterilir" : "Revealed after round end")}</span></p>
             <button type="button" onClick={verifyFairnessHash} className="mt-3 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-100 transition hover:bg-cyan-300/15">{tr ? "Hash'i doğrula" : "Verify hash"}</button>
             {verifyMessage ? <p className="mt-2 text-xs text-cyan-100/80">{verifyMessage}</p> : null}
           </div>
