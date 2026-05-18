@@ -47,6 +47,10 @@ function formatTc(value: number, locale: string) {
   return new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(roundTc(value));
 }
 
+function adjustBetAmount(amount: number, multiplier: number) {
+  return Math.max(1, Math.min(1_000_000, roundTc(amount * multiplier)));
+}
+
 function combinations(n: number, k: number) {
   if (k < 0 || k > n) return 0;
   const steps = Math.min(k, n - k);
@@ -366,6 +370,15 @@ export function TechCoinMines() {
                 <span className="text-sm font-medium text-white/70">{copy.betAmount}</span>
                 <input type="number" min="1" step="1" disabled={gameState.isRoundActive || actionLoading || walletLoading} value={gameState.betAmount} onChange={(event) => setGameState((current) => ({ ...current, betAmount: roundTc(clamp(Number(event.target.value), 0, 1000000)) }))} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0f212e] px-4 py-3 text-lg font-semibold text-white outline-none transition focus:border-emerald-300/60 disabled:cursor-not-allowed disabled:opacity-55" />
               </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" disabled={gameState.isRoundActive || actionLoading || walletLoading} onClick={() => setGameState((current) => ({ ...current, betAmount: adjustBetAmount(current.betAmount, 0.5) }))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+                  /2
+                </button>
+                <button type="button" disabled={gameState.isRoundActive || actionLoading || walletLoading} onClick={() => setGameState((current) => ({ ...current, betAmount: adjustBetAmount(current.betAmount, 2) }))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+                  x2
+                </button>
+              </div>
 
               <label className="block">
                 <span className="flex items-center justify-between text-sm font-medium text-white/70"><span>{copy.mineCount}</span><span className="text-emerald-200">{gameState.mineCount}</span></span>
