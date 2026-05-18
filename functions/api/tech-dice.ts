@@ -1,4 +1,5 @@
 import { awardGameExp, expForGame } from "../_levels";
+import { createClientSeed, createNonce, createServerSeed, generateDiceRoll, sha256 } from "../../src/lib/provablyFair";
 
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const TARGET_MIN = 0.01;
@@ -38,6 +39,11 @@ export async function onRequestPost(context: any) {
     const amount = Math.floor(Number(body?.amount || 0));
     const target = clampTarget(Number(body?.target ?? 50));
     const mode = parseMode(body?.mode);
+    const clientSeed = sanitizeSeed(body?.clientSeed) || createClientSeed();
+    const commitment = await consumeDiceCommitment(context, auth.user.id, body?.commitmentId);
+    const nonce = commitment.nonce;
+    const serverSeed = commitment.serverSeed;
+    const serverHash = commitment.serverHash;
 
     if (!Number.isFinite(amount) || amount < AMOUNT_LIMITS.min)
       throw new Error("Tech Coin amount must be at least 1.");
@@ -71,7 +77,8 @@ export async function onRequestPost(context: any) {
       .bind(auth.user.id, -amount, `Tech Dice play: ${mode} ${target}`)
       .run();
 
-    const rolledNumber = Number((Math.random() * 100).toFixed(2));
+    const diceOutcome = await generateDiceRoll(serverSeed, clientSeed, nonce);
+    const rolledNumber = diceOutcome.roll;
     const won = mode === "over" ? rolledNumber > target : rolledNumber < target;
     const net = won ? potentialReward - amount : -amount;
 
@@ -80,8 +87,8 @@ export async function onRequestPost(context: any) {
     await context.env.DB.prepare(
       `
         INSERT INTO tech_dice_rolls
-          (user_id, mode, target_number, rolled_number, amount, multiplier, win_chance, reward_amount, net_amount, result, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          (user_id, mode, target_number, rolled_number, amount, multiplier, win_chance, reward_amount, net_amount, result, server_seed, server_hash, client_seed, nonce, result_hmac, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `,
     )
       .bind(
@@ -95,6 +102,11 @@ export async function onRequestPost(context: any) {
         won ? potentialReward : 0,
         net,
         won ? "win" : "loss",
+        serverSeed,
+        serverHash,
+        clientSeed,
+        nonce,
+        diceOutcome.resultHmac,
       )
       .run();
 
@@ -120,6 +132,14 @@ export async function onRequestPost(context: any) {
         lossAmount: won ? 0 : amount,
         net,
         message: won ? "Successful Roll" : "Missed Roll",
+        fairness: {
+          algorithm: "SHA-256 / HMAC-SHA256 Provably Fair",
+          clientSeed,
+          nonce,
+          serverHash,
+          revealedServerSeed: serverSeed,
+          resultHmac: diceOutcome.resultHmac,
+        },
       },
     });
   } catch (error) {
@@ -141,13 +161,25 @@ async function buildState(context: any, userId: number) {
     .bind(userId)
     .all();
 
+  const pendingFairness = await getOrCreateDiceCommitment(context, userId);
   return {
     ok: true,
     wallet,
     limits: AMOUNT_LIMITS,
     targetRange: { min: TARGET_MIN, max: TARGET_MAX },
     recent: recent?.results || [],
+    pendingFairness: {
+      algorithm: "SHA-256 / HMAC-SHA256 Provably Fair",
+      commitmentId: pendingFairness.id,
+      clientSeed: createClientSeed(),
+      nonce: pendingFairness.nonce,
+      serverHash: pendingFairness.serverHash,
+    },
   };
+}
+
+function sanitizeSeed(value: unknown) {
+  return String(value || "").trim().slice(0, 128);
 }
 
 function diceMath(mode: DiceMode, target: number) {
@@ -197,6 +229,21 @@ async function ensureDiceTables(context: any) {
 
   await context.env.DB.prepare(
     `
+    CREATE TABLE IF NOT EXISTS tech_fair_commitments (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      game_key TEXT NOT NULL,
+      server_seed TEXT NOT NULL,
+      server_hash TEXT NOT NULL,
+      nonce INTEGER NOT NULL,
+      used_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `,
+  ).run();
+
+  await context.env.DB.prepare(
+    `
     CREATE TABLE IF NOT EXISTS tech_dice_rolls (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -209,10 +256,55 @@ async function ensureDiceTables(context: any) {
       reward_amount INTEGER DEFAULT 0,
       net_amount INTEGER DEFAULT 0,
       result TEXT NOT NULL,
+      server_seed TEXT,
+      server_hash TEXT,
+      client_seed TEXT,
+      nonce INTEGER,
+      result_hmac TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `,
   ).run();
+  const fairColumns = [
+    ["server_seed", "TEXT"],
+    ["server_hash", "TEXT"],
+    ["client_seed", "TEXT"],
+    ["nonce", "INTEGER"],
+    ["result_hmac", "TEXT"],
+  ];
+  for (const [name, type] of fairColumns) {
+    await context.env.DB.prepare(`ALTER TABLE tech_dice_rolls ADD COLUMN ${name} ${type}`).run().catch(() => null);
+  }
+
+}
+
+type FairCommitment = { id: string; serverSeed: string; serverHash: string; nonce: number };
+
+async function getOrCreateDiceCommitment(context: any, userId: number): Promise<FairCommitment> {
+  const existing = await context.env.DB.prepare(
+    `SELECT id, server_seed AS serverSeed, server_hash AS serverHash, nonce FROM tech_fair_commitments WHERE user_id = ? AND game_key = 'tech-dice' AND used_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+  ).bind(userId).first();
+  if (existing?.id && existing?.serverSeed && existing?.serverHash) {
+    return { id: String(existing.id), serverSeed: String(existing.serverSeed), serverHash: String(existing.serverHash), nonce: Number(existing.nonce) };
+  }
+  const serverSeed = createServerSeed();
+  const serverHash = await sha256(serverSeed);
+  const nonce = createNonce();
+  const id = `dice-${Date.now()}-${crypto.randomUUID?.() || nonce}`;
+  await context.env.DB.prepare(
+    `INSERT INTO tech_fair_commitments (id, user_id, game_key, server_seed, server_hash, nonce, created_at) VALUES (?, ?, 'tech-dice', ?, ?, ?, datetime('now'))`,
+  ).bind(id, userId, serverSeed, serverHash, nonce).run();
+  return { id, serverSeed, serverHash, nonce };
+}
+
+async function consumeDiceCommitment(context: any, userId: number, commitmentId: unknown): Promise<FairCommitment> {
+  const id = String(commitmentId || "");
+  const existing = id ? await context.env.DB.prepare(
+    `SELECT id, server_seed AS serverSeed, server_hash AS serverHash, nonce FROM tech_fair_commitments WHERE id = ? AND user_id = ? AND game_key = 'tech-dice' AND used_at IS NULL`,
+  ).bind(id, userId).first() : null;
+  const commitment = existing?.id ? { id: String(existing.id), serverSeed: String(existing.serverSeed), serverHash: String(existing.serverHash), nonce: Number(existing.nonce) } : await getOrCreateDiceCommitment(context, userId);
+  await context.env.DB.prepare(`UPDATE tech_fair_commitments SET used_at = datetime('now') WHERE id = ?`).bind(commitment.id).run();
+  return commitment;
 }
 
 async function ensureWallet(context: any, userId: number) {

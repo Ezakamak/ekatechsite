@@ -1,4 +1,5 @@
 import { awardGameExp, expForGame } from "../_levels";
+import { createClientSeed, createNonce, createServerSeed, generateBlackjackDeck, sha256 } from "../../src/lib/provablyFair";
 
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const AMOUNT_LIMITS = { min: 1, max: 100_000 };
@@ -6,6 +7,8 @@ const AMOUNT_LIMITS = { min: 1, max: 100_000 };
 type JsonResponseInit = ResponseInit & { status?: number };
 
 type BlackjackLogBody = {
+  roundId?: string;
+  usedDeck?: unknown;
   resultType?: string;
   playerScore?: number;
   dealerScore?: number;
@@ -38,6 +41,29 @@ export async function onRequestPost(context: any) {
     const body = await context.request.json().catch(() => ({}));
     const action = String(body?.action || "").toLowerCase();
 
+    if (action === "start-round") {
+      const amount = sanitizeAmount(body?.amount);
+      const clientSeed = sanitizeSeed(body?.clientSeed) || createClientSeed();
+      const serverSeed = createServerSeed();
+      const serverHash = await sha256(serverSeed);
+      const nonce = createNonce();
+      const { deck, deckHmac } = await generateBlackjackDeck(serverSeed, clientSeed, nonce);
+      await debitWallet(context, auth.user.id, amount, "Tech Blackjack bet");
+      await awardGameExp(context, auth.user.id, expForGame("easy", 6), "Tech Blackjack bet", "blackjack");
+      const roundId = `bj-${Date.now()}-${crypto.randomUUID?.() || nonce}`;
+      await context.env.DB.prepare(
+        `INSERT INTO tech_blackjack_rounds (id, user_id, server_seed, server_hash, client_seed, nonce, deck_hmac, deck_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+      ).bind(roundId, auth.user.id, serverSeed, serverHash, clientSeed, nonce, deckHmac, JSON.stringify(deck.map((card) => card.code))).run();
+      return json({
+        ...(await buildState(context, auth.user.id)),
+        round: {
+          roundId,
+          deck,
+          fairness: { algorithm: "SHA-256 / HMAC-SHA256 Provably Fair", clientSeed, nonce, serverHash, deckHmac },
+        },
+      });
+    }
+
     if (action === "debit") {
       const amount = sanitizeAmount(body?.amount);
       await debitWallet(context, auth.user.id, amount, String(body?.reason || "Tech Blackjack bet"));
@@ -60,7 +86,8 @@ export async function onRequestPost(context: any) {
       const payoutAmount = sanitizePayoutAmount(body);
       if (payoutAmount > 0) await creditWallet(context, auth.user.id, payoutAmount, "Tech Blackjack payout");
       await insertBlackjackLog(context, auth.user.id, { ...(body || {}), payoutAmount });
-      return json(await buildState(context, auth.user.id));
+      const settledFairness = await settleBlackjackRound(context, auth.user.id, body);
+      return json({ ...(await buildState(context, auth.user.id)), fairness: settledFairness });
     }
 
     return json({ error: "Invalid Tech Blackjack action." }, { status: 400 });
@@ -139,6 +166,30 @@ async function creditWallet(context: any, userId: number, amount: number, reason
     .run();
 }
 
+async function settleBlackjackRound(context: any, userId: number, body: BlackjackLogBody & { roundId?: string; usedDeck?: unknown }) {
+  const roundId = String(body?.roundId || "");
+  if (!roundId) return null;
+  const row = await context.env.DB.prepare(
+    `SELECT id, server_seed AS serverSeed, server_hash AS serverHash, client_seed AS clientSeed, nonce, deck_hmac AS deckHmac, deck_order AS deckOrder FROM tech_blackjack_rounds WHERE id = ? AND user_id = ?`,
+  ).bind(roundId, userId).first();
+  if (!row?.id) return null;
+  const usedDeck = Array.isArray(body?.usedDeck) ? body.usedDeck.map((card: any) => String(card?.code || card)).filter(Boolean) : [];
+  await context.env.DB.prepare(
+    `UPDATE tech_blackjack_rounds SET used_deck = ?, settled_at = datetime('now') WHERE id = ? AND user_id = ?`,
+  ).bind(JSON.stringify(usedDeck), roundId, userId).run();
+  return {
+    algorithm: "SHA-256 / HMAC-SHA256 Provably Fair",
+    roundId,
+    clientSeed: String(row.clientSeed),
+    nonce: Number(row.nonce),
+    serverHash: String(row.serverHash),
+    revealedServerSeed: String(row.serverSeed),
+    deckHmac: String(row.deckHmac),
+    deckOrder: safeJsonArray(row.deckOrder),
+    usedDeck,
+  };
+}
+
 async function insertBlackjackLog(context: any, userId: number, body: BlackjackLogBody) {
   const betAmount = Math.max(0, Math.floor(Number(body?.betAmount || 0)));
   const netAmount = Math.round(Number(body?.netAmount || 0));
@@ -188,6 +239,24 @@ async function ensureBlackjackTables(context: any) {
 
   await context.env.DB.prepare(
     `
+    CREATE TABLE IF NOT EXISTS tech_blackjack_rounds (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      server_seed TEXT NOT NULL,
+      server_hash TEXT NOT NULL,
+      client_seed TEXT NOT NULL,
+      nonce INTEGER NOT NULL,
+      deck_hmac TEXT NOT NULL,
+      deck_order TEXT NOT NULL,
+      used_deck TEXT,
+      settled_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `,
+  ).run();
+
+  await context.env.DB.prepare(
+    `
     CREATE TABLE IF NOT EXISTS tech_blackjack_hands (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -202,6 +271,9 @@ async function ensureBlackjackTables(context: any) {
   `,
   ).run();
 }
+
+function sanitizeSeed(value: unknown) { return String(value || "").trim().slice(0, 128); }
+function safeJsonArray(value: unknown) { try { const parsed = JSON.parse(String(value || "[]")); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
 
 async function ensureWallet(context: any, userId: number) {
   await context.env.DB.prepare(
