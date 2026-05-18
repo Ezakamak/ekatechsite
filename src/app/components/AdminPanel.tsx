@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { Search } from "lucide-react";
-import { AdminOffManagement } from "./off/AdminOffManagement";
 import { useLanguage } from "../i18n";
 
 type User = {
@@ -103,7 +102,6 @@ export function AdminPanel() {
   const [requestSearch, setRequestSearch] = useState("");
   const [requestStatusFilter, setRequestStatusFilter] = useState("all");
   const [requestPriorityFilter, setRequestPriorityFilter] = useState("all");
-  const [adminSection, setAdminSection] = useState<"overview" | "users" | "projects" | "off">("overview");
 
   const isOwner = overview?.admin?.role === "owner";
 
@@ -361,20 +359,6 @@ export function AdminPanel() {
           </div>
         )}
 
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          {[
-            ["overview", "Overview"],
-            ["users", "Users"],
-            ["projects", "Projects"],
-            ["off", "OFF Management"],
-          ].map(([key, label]) => (
-            <button key={key} type="button" onClick={() => setAdminSection(key as any)} className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium ${adminSection === key ? "bg-white text-black" : "border border-white/10 bg-white/[0.04] text-white/60"}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {adminSection === "overview" ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard label={t.totalUsers} value={overview?.stats.totalUsers ?? 0} />
           <StatCard label={t.admins} value={overview?.stats.adminUsers ?? 0} />
@@ -382,11 +366,7 @@ export function AdminPanel() {
           <StatCard label={t.activeSessions} value={overview?.stats.activeSessions ?? 0} />
           <StatCard label={t.averageRating} value={averageRating ? averageRating.toFixed(1) : "-"} suffix={averageRating ? "/5" : ""} note={`${ratedCompletedProjects} ${t.ratedProjects}`} />
         </div>
-        ) : null}
 
-        {adminSection === "off" ? <AdminOffManagement /> : null}
-
-        {adminSection === "users" || adminSection === "projects" ? (
         <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <Panel title={t.allUsers}>
             <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_0.45fr]">
@@ -518,7 +498,6 @@ export function AdminPanel() {
             </div>
           </Panel>
         </div>
-        ) : null}
       </div>
     </section>
   );
