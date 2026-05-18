@@ -5,7 +5,7 @@ import { useLanguage } from "../../i18n";
 interface BetControlsProps {
   panels: BetPanelState[];
   status: GameStatus;
-  currentMultiplier: number;
+  visualMultiplier: number;
   onPanelChange: (panelId: string, patch: Partial<BetPanelState>) => void;
   onPlaceBet: (panel: BetPanelState) => void;
   onCashOut: (panel: BetPanelState) => void;
@@ -13,13 +13,13 @@ interface BetControlsProps {
 
 const quickBets = [50, 100, 500];
 
-export function BetControls({ panels, status, currentMultiplier, onPanelChange, onPlaceBet, onCashOut }: BetControlsProps) {
+export function BetControls({ panels, status, visualMultiplier, onPanelChange, onPlaceBet, onCashOut }: BetControlsProps) {
   const { language } = useLanguage();
   const tr = language === "tr";
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       {panels.map((panel, index) => {
-        const possibleWin = (panel.activeBetAmount ?? panel.amount) * currentMultiplier;
+        const possibleVisualScore = (panel.activeBetAmount ?? panel.amount) * visualMultiplier;
         const canPlaceBet = status === "STATUS_BETTING" && !panel.isBetAccepted;
         const canCashOut = status === "STATUS_FLYING" && panel.isBetAccepted && !panel.hasCashedOut;
 
@@ -94,7 +94,7 @@ export function BetControls({ panels, status, currentMultiplier, onPanelChange, 
 
             {panel.isBetAccepted && !panel.hasCashedOut ? (
               <p className="mt-3 text-center font-mono text-lg font-black text-emerald-300 drop-shadow-[0_0_14px_rgba(16,185,129,0.85)]">
-                {tr ? "Olası round puanı" : "Possible round score"}: {possibleWin.toFixed(2)} TC
+                {tr ? "Tahmini round puanı" : "Estimated round score"}: {possibleVisualScore.toFixed(2)} TC
               </p>
             ) : null}
             {panel.hasCashedOut ? <p className="mt-3 text-center text-sm font-bold text-cyan-200">{tr ? "Round puanı kilitlendi." : "Round score locked."}</p> : null}

@@ -38,6 +38,8 @@ export interface GameState {
   crashPoint?: number;
   currentMultiplier: number;
   startedAt: number;
+  bettingStartedAt?: number;
+  flightStartedAt?: number;
   bettingSeconds: number;
   serverNow?: number;
 }
