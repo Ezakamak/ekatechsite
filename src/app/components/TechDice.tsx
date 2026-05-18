@@ -5,6 +5,7 @@ import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
 import { playOffSound } from "./OffSoundEngine";
 import { useLanguage } from "../i18n";
+import { createClientSeed, generateDiceRoll, verifyServerHash } from "../../lib/provablyFair";
 
 type DiceMode = "over" | "under";
 
@@ -14,6 +15,8 @@ type WalletState = {
   balance: number;
   lifetime_earned: number;
 };
+
+type DiceFairness = { algorithm?: string; commitmentId?: string; clientSeed?: string; nonce?: number; serverHash?: string; revealedServerSeed?: string; resultHmac?: string };
 
 type DiceResult = {
   mode: DiceMode;
@@ -27,6 +30,7 @@ type DiceResult = {
   lossAmount: number;
   net: number;
   message: string;
+  fairness?: DiceFairness;
 };
 
 type DiceLog = {
@@ -64,6 +68,9 @@ export function TechDice() {
   const [message, setMessage] = useState("");
   const [recent, setRecent] = useState<DiceLog[]>([]);
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
+  const [clientSeed, setClientSeed] = useState(() => createClientSeed());
+  const [pendingFairness, setPendingFairness] = useState<DiceFairness | null>(null);
+  const [verifyMessage, setVerifyMessage] = useState("");
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-dice");
 
   const parsedAmount = useMemo(() => Number(amountInput), [amountInput]);
@@ -82,6 +89,10 @@ export function TechDice() {
         if (!mountedRef.current || !data) return;
         if (data.wallet) setWallet(sanitizeWallet(data.wallet));
         if (Array.isArray(data.recent)) setRecent(sanitizeRecent(data.recent));
+        if (data.pendingFairness) {
+          setPendingFairness(data.pendingFairness);
+          setClientSeed((current) => current || data.pendingFairness.clientSeed || createClientSeed());
+        }
       })
       .catch(() => {
         if (mountedRef.current) setMessage(tr ? "Tech Dice hazırlanıyor. Birazdan tekrar dene." : "Tech Dice is warming up. Try again in a moment.");
@@ -138,7 +149,7 @@ export function TechDice() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: playAmount, mode, target: playTarget }),
+        body: JSON.stringify({ amount: playAmount, mode, target: playTarget, clientSeed, commitmentId: pendingFairness?.commitmentId }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || (tr ? "Zar atışı tamamlanamadı." : "Roll could not be completed."));
@@ -151,6 +162,8 @@ export function TechDice() {
       setRecent(Array.isArray(data?.recent) ? sanitizeRecent(data.recent) : []);
       setMarkerPosition(nextResult.rolledNumber);
       setResult(nextResult);
+      if (data?.pendingFairness) setPendingFairness(data.pendingFairness);
+      setVerifyMessage("");
       setMessage(nextResult.won ? (tr ? "Başarılı zar" : "Successful Roll") : (tr ? "Kaçan zar" : "Missed Roll"));
       recordSessionBet(nextResult.amount);
       recordSessionResult(nextResult.net);
@@ -174,6 +187,19 @@ export function TechDice() {
     } finally {
       if (mountedRef.current) setRolling(false);
     }
+  }
+
+  async function verifyHashClick() {
+    const fair = result?.fairness;
+    if (!fair?.revealedServerSeed || !fair?.serverHash) return setVerifyMessage(tr ? "Server seed round bitince açıklanır." : "Server seed is revealed after the round.");
+    setVerifyMessage(await verifyServerHash(fair.revealedServerSeed, fair.serverHash) ? "Hash doğrulandı" : "Hash doğrulanamadı");
+  }
+
+  async function verifyResultClick() {
+    const fair = result?.fairness;
+    if (!fair?.revealedServerSeed || !fair?.clientSeed || fair?.nonce == null || !result) return setVerifyMessage(tr ? "Doğrulama verisi eksik." : "Verification data is missing.");
+    const computed = await generateDiceRoll(fair.revealedServerSeed, fair.clientSeed, fair.nonce);
+    setVerifyMessage(computed.roll === result.rolledNumber && computed.resultHmac === fair.resultHmac ? "Sonuç doğrulandı" : "Sonuç doğrulanamadı");
   }
 
   return (
@@ -283,6 +309,22 @@ export function TechDice() {
               <ResultLine label={tr ? "Hedef" : "Target"} value={safeTarget.toFixed(2)} />
               <ResultLine label={tr ? "Gelen" : "Rolled"} value={result ? result.rolledNumber.toFixed(2) : "--"} />
             </div>
+
+            <div className="mt-5 rounded-[1.6rem] border border-cyan-200/15 bg-black/30 p-4 text-xs text-white/60">
+              <h3 className="text-sm font-black text-cyan-100">SHA-256 / HMAC-SHA256 Provably Fair</h3>
+              <p className="mt-2 text-white/45">Round başlamadan client seed’i değiştirebilirsin. Server seed round bitene kadar gizli kalır. Round bittikten sonra server seed açıklanır; server hash, HMAC sonucu ve oyun çıktısı doğrulanabilir.</p>
+              <label className="mt-3 block"><span className="font-black uppercase tracking-[0.16em] text-white/40">Client Seed</span><input value={clientSeed} disabled={rolling} onChange={(event) => setClientSeed(event.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-white outline-none disabled:opacity-60" /></label>
+              <div className="mt-3 grid gap-2 break-all md:grid-cols-2">
+                <FairLine label="Nonce" value={String(result?.fairness?.nonce ?? pendingFairness?.nonce ?? "--")} />
+                <FairLine label="Server Hash" value={result?.fairness?.serverHash || pendingFairness?.serverHash || "--"} />
+                <FairLine label="Revealed Server Seed" value={result?.fairness?.revealedServerSeed || "Round bitince gösterilir"} />
+                <FairLine label="Result HMAC" value={result?.fairness?.resultHmac || "Round bitince gösterilir"} />
+                <FairLine label="Roll sonucu" value={result ? result.rolledNumber.toFixed(2) : "--"} />
+                <FairLine label="Mode / Target" value={`${mode === "over" ? "Over" : "Under"} / ${safeTarget.toFixed(2)}`} />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={verifyHashClick} className="rounded-full border border-white/10 bg-white/[0.07] px-4 py-2 font-black">Hash’i doğrula</button><button type="button" onClick={verifyResultClick} className="rounded-full border border-white/10 bg-white/[0.07] px-4 py-2 font-black">Sonucu doğrula</button></div>
+              {verifyMessage ? <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-cyan-100">{verifyMessage}</p> : null}
+            </div>
           </div>
 
           <aside className="space-y-6">
@@ -361,6 +403,7 @@ function sanitizeResult(value: unknown, fallback: { amount: number; mode: DiceMo
     lossAmount,
     net,
     message: won ? "Successful Roll" : "Missed Roll",
+    fairness: parsed.fairness,
   };
 }
 
@@ -402,6 +445,10 @@ function Stat({ label, value, glow = false }: { label: string; value: string | n
 
 function ResultLine({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between gap-4 rounded-2xl border border-white/10 bg-black/25 px-4 py-3"><span>{label}</span><strong className="text-white">{value}</strong></div>;
+}
+
+function FairLine({ label, value }: { label: string; value: string }) {
+  return <p className="rounded-xl border border-white/10 bg-black/25 px-3 py-2"><span className="block text-[10px] font-black uppercase tracking-[0.16em] text-white/35">{label}</span><span className="text-white/75">{value}</span></p>;
 }
 
 function clampTarget(value: number) {

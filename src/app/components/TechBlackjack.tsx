@@ -5,6 +5,7 @@ import { GameSessionStatsPanel, useGameSessionStats } from "./GameSessionStats";
 import { createToastNoFactionSuccessId, ToastNoFactionSuccess, type ToastNoFactionSuccessPayload } from "./ToastNoFactionSuccess";
 import { playOffSound } from "./OffSoundEngine";
 import { useLanguage } from "../i18n";
+import { createClientSeed, generateBlackjackDeck, verifyServerHash } from "../../lib/provablyFair";
 
 type Suit = "C" | "D" | "H" | "S";
 type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K";
@@ -15,6 +16,7 @@ type Phase = "betting" | "playing" | "dealer" | "settled";
 type WalletState = { balance: number; currency: string; symbol: string; lifetime_earned?: number };
 type ResultHistory = { id: string; resultType: string; playerScore: number; dealerScore: number; betAmount: number; netAmount: number };
 type BlackjackToast = ToastNoFactionSuccessPayload & { displayAmount?: string; displayMultiplier?: string; variant?: "success" | "danger" | "neutral"; hideHint?: boolean };
+type BlackjackFairness = { algorithm?: string; roundId?: string; clientSeed?: string; nonce?: number; serverHash?: string; revealedServerSeed?: string; deckHmac?: string; deckOrder?: string[]; usedDeck?: string[] };
 
 const SUITS: Suit[] = ["C", "D", "H", "S"];
 const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -44,6 +46,13 @@ export function TechBlackjack() {
   const [message, setMessage] = useState(tr ? "Başlamak için Tech Coin bahsi koy." : "Place a Tech Coin bet to start.");
   const [history, setHistory] = useState<ResultHistory[]>([]);
   const [toasts, setToasts] = useState<BlackjackToast[]>([]);
+  const [clientSeed, setClientSeed] = useState(() => createClientSeed());
+  const [roundFairness, setRoundFairness] = useState<BlackjackFairness | null>(null);
+  const [finalFairness, setFinalFairness] = useState<BlackjackFairness | null>(null);
+  const [fullDeckOrder, setFullDeckOrder] = useState<Card[]>([]);
+  const [verifyMessage, setVerifyMessage] = useState("");
+  const roundFairnessRef = useRef<BlackjackFairness | null>(null);
+  const fullDeckOrderRef = useRef<Card[]>([]);
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-blackjack");
 
   const balance = Math.max(0, Math.floor(Number(wallet?.balance || 0)));
@@ -143,10 +152,17 @@ export function TechBlackjack() {
       return;
     }
 
-    const debited = await runWalletAction({ action: "debit", amount, reason: "Tech Blackjack bet" });
-    if (!debited) return;
+    const started = await runWalletAction({ action: "start-round", amount, clientSeed });
+    if (!started?.round?.deck) return;
 
-    const nextDeck = shuffleDeck(createDeck());
+    const nextDeck = safeCards(started.round.deck);
+    const nextFairness = { ...started.round.fairness, roundId: started.round.roundId };
+    roundFairnessRef.current = nextFairness;
+    fullDeckOrderRef.current = nextDeck;
+    setRoundFairness(nextFairness);
+    setFinalFairness(null);
+    setFullDeckOrder(nextDeck);
+    setVerifyMessage("");
     const deal = drawCards(nextDeck, 4);
     const playerCards = safeCards([deal.cards[0], deal.cards[2]]);
     const nextDealerCards = safeCards([deal.cards[1], deal.cards[3]]);
@@ -328,7 +344,7 @@ export function TechBlackjack() {
       ...current,
     ].slice(0, 20));
 
-    await runWalletAction({
+    const settleResponse = await runWalletAction({
       action: "settle",
       resultType: primary?.status || "settled",
       playerScore: handValue(primary?.cards || []).total,
@@ -336,9 +352,28 @@ export function TechBlackjack() {
       betAmount: settled.reduce((sum, hand) => sum + hand.bet, 0),
       netAmount: totalNet,
       payoutAmount: totalPayout,
+      roundId: roundFairnessRef.current?.roundId,
+      usedDeck: fullDeckOrderRef.current.map((card) => card.code),
     });
+    if (settleResponse?.fairness) setFinalFairness(settleResponse.fairness);
     debugBlackjack("round end", { status: "settled", totalNet, totalPayout, playerHandLength: settled.map((hand) => hand.cards.length), dealerHandLength: finalDealerCards.length, deckLength: finalDeck.length });
     playOffSound(totalNet >= 0 ? "success" : "error");
+  }
+
+  async function verifyHashClick() {
+    const fair = finalFairness;
+    if (!fair?.revealedServerSeed || !fair?.serverHash) return setVerifyMessage(tr ? "Server seed round bitince açıklanır." : "Server seed is revealed after the round.");
+    setVerifyMessage(await verifyServerHash(fair.revealedServerSeed, fair.serverHash) ? "Hash doğrulandı" : "Hash doğrulanamadı");
+  }
+
+  async function verifyDeckClick() {
+    const fair = finalFairness;
+    if (!fair?.revealedServerSeed || !fair?.clientSeed || fair?.nonce == null || !fair.deckOrder?.length) return setVerifyMessage(tr ? "Deste doğrulama verisi eksik." : "Deck verification data is missing.");
+    const generated = await generateBlackjackDeck(fair.revealedServerSeed, fair.clientSeed, fair.nonce);
+    const expected = generated.deck.map((card) => card.code);
+    const matchesDeck = expected.join(",") === fair.deckOrder.join(",");
+    const matchesHmac = generated.deckHmac === fair.deckHmac;
+    setVerifyMessage(matchesDeck && matchesHmac ? "Sonuç doğrulandı" : "Sonuç doğrulanamadı");
   }
 
   function adjustBet(multiplier: number) {
@@ -428,6 +463,20 @@ export function TechBlackjack() {
 
           <aside className="space-y-5">
             <GameSessionStatsPanel gameName="Tech Blackjack" stats={sessionStats} onReset={resetSessionStats} />
+            <section className="rounded-[1.7rem] border border-cyan-200/15 bg-[#07111a]/92 p-4 text-xs text-white/60 shadow-2xl shadow-black/35">
+              <h2 className="text-lg font-black text-cyan-100">SHA-256 / HMAC-SHA256 Provably Fair</h2>
+              <p className="mt-2 text-white/45">Round başlamadan client seed’i değiştirebilirsin. Server seed round bitene kadar gizli kalır. Round bittikten sonra server seed açıklanır; server hash, HMAC sonucu ve oyun çıktısı doğrulanabilir.</p>
+              <label className="mt-3 block"><span className="font-black uppercase tracking-[0.16em] text-white/40">Client Seed</span><input value={clientSeed} disabled={phase === "playing" || phase === "dealer"} onChange={(event) => setClientSeed(event.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-white outline-none disabled:opacity-60" /></label>
+              <div className="mt-3 grid gap-2 break-all">
+                <FairLine label="Nonce" value={String((finalFairness || roundFairness)?.nonce ?? "--")} />
+                <FairLine label="Server Hash" value={(finalFairness || roundFairness)?.serverHash || "--"} />
+                <FairLine label="Revealed Server Seed" value={finalFairness?.revealedServerSeed || "Round bitince gösterilir"} />
+                <FairLine label="Deck HMAC" value={(finalFairness || roundFairness)?.deckHmac || "--"} />
+              </div>
+              <details className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3"><summary className="cursor-pointer font-black text-white/75">Deck Order</summary><p className="mt-2 break-words text-white/50">{(finalFairness?.deckOrder || fullDeckOrder.map((card) => card.code)).join(" · ") || "Round bitince gösterilir"}</p></details>
+              <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={verifyHashClick} className="rounded-full border border-white/10 bg-white/[0.07] px-4 py-2 font-black">Hash’i doğrula</button><button type="button" onClick={verifyDeckClick} className="rounded-full border border-white/10 bg-white/[0.07] px-4 py-2 font-black">Deste/Sonucu doğrula</button></div>
+              {verifyMessage ? <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-cyan-100">{verifyMessage}</p> : null}
+            </section>
             <section className="rounded-[1.7rem] border border-white/10 bg-[#07111a]/92 p-4 shadow-2xl shadow-black/35">
               <h2 className="flex items-center gap-2 text-xl font-black"><BadgeDollarSign className="h-5 w-5 text-emerald-300" /> {tr ? "Sonuç Geçmişi" : "Result History"}</h2>
               <div className="mt-4 space-y-2">
@@ -440,6 +489,10 @@ export function TechBlackjack() {
       </div>
     </main>
   );
+}
+
+function FairLine({ label, value }: { label: string; value: string }) {
+  return <p className="rounded-xl border border-white/10 bg-black/25 px-3 py-2"><span className="block text-[10px] font-black uppercase tracking-[0.16em] text-white/35">{label}</span><span className="text-white/75">{value}</span></p>;
 }
 
 function ActionButton({ children, disabled, onClick }: { children: string; disabled: boolean; onClick: () => void }) {
@@ -558,18 +611,10 @@ function debugBlackjack(message: string, payload?: Record<string, unknown>) {
 function createDeck(): Card[] {
   return SUITS.flatMap((suit) => RANKS.map((rank) => ({ suit, rank, code: `${rank}${suit}`, id: uniqueId(`${rank}${suit}`) })));
 }
-function shuffleDeck(cards: Card[]) {
-  const deck = [...cards];
-  for (let index = deck.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
-  }
-  return deck;
-}
 function drawCards(currentDeck: Card[] | null | undefined, count: number) {
   const requestedCount = Math.max(0, Math.floor(Number(count) || 0));
   const safeCurrentDeck = safeCards(currentDeck);
-  const source = safeCurrentDeck.length >= requestedCount ? [...safeCurrentDeck] : shuffleDeck(createDeck());
+  const source = safeCurrentDeck.length >= requestedCount ? [...safeCurrentDeck] : createDeck();
   return { cards: safeCards(source.slice(0, requestedCount)), deck: safeCards(source.slice(requestedCount)) };
 }
 function cardValue(card?: Card) {
@@ -634,7 +679,8 @@ function formatMultiplier(value: number) {
   const safeValue = Number.isFinite(Number(value)) ? Number(value) : 1;
   return `${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Math.max(0, safeValue))}x`;
 }
-function uniqueId(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
+function uniqueId(prefix: string) { return `${prefix}-${Date.now()}-${crypto.randomUUID?.() || cryptoRandomId()}`; }
+function cryptoRandomId() { const bytes = new Uint8Array(6); crypto.getRandomValues(bytes); return Array.from(bytes, (byte) => byte.toString(36).padStart(2, "0")).join(""); }
 function wait(ms: number) { return new Promise((resolve) => window.setTimeout(resolve, ms)); }
 function cardImage(card: Card) { return `/cards/${card.code}.png`; }
 function cardAlt(card: Card) { return `${card.rank} of ${suitName(card.suit)}`; }
