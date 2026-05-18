@@ -60,25 +60,49 @@ export async function onRequestPost(context: any) {
       await debitWallet(context, auth.user.id, amount, "Tech Blackjack bet");
       await awardGameExp(context, auth.user.id, expForGame("easy", 6), "Tech Blackjack bet", "blackjack");
       const idColumn = await getTableColumn(context, "tech_blackjack_rounds", "id");
-      console.log(`[D1_BLACKJACK_SCHEMA] tech_blackjack_rounds id column = ${formatTableColumnForLog(idColumn)}`);
+      const roundIdColumn = await getTableColumn(context, "tech_blackjack_rounds", "round_id");
+      console.log(`[D1_BLACKJACK_SCHEMA] id column = ${formatTableColumnForLog(idColumn)}`);
+      console.log(`[D1_BLACKJACK_SCHEMA] round_id column = ${formatTableColumnForLog(roundIdColumn)}`);
       const usesIntegerId = isIntegerPrimaryKey(idColumn);
-      console.log(`[D1_BLACKJACK_INSERT_MODE] ${usesIntegerId ? "integer-id" : "text-id"}`);
+      const hasRoundIdColumn = Boolean(roundIdColumn);
+      console.log(`[D1_BLACKJACK_INSERT_MODE] ${usesIntegerId ? "integer-id" : "text-id"} + ${hasRoundIdColumn ? "has-round-id" : "without-round-id"}`);
 
       const deckOrder = JSON.stringify(deck.map((card) => card.code));
+      const publicRoundId = `bj-${Date.now()}-${crypto.randomUUID?.() || nonce}`;
       let roundId: string;
 
       if (usesIntegerId) {
+        const columns = ["user_id", "server_seed", "server_hash", "client_seed", "nonce", "deck_hmac", "deck_order"];
+        const placeholders = ["?", "?", "?", "?", "?", "?", "?"];
+        const binds: unknown[] = [auth.user.id, serverSeed, serverHash, clientSeed, nonce, deckHmac, deckOrder];
+        if (hasRoundIdColumn) {
+          columns.unshift("round_id");
+          placeholders.unshift("?");
+          binds.unshift(publicRoundId);
+        }
+        columns.push("created_at");
+        placeholders.push("datetime('now')");
         const insert = await context.env.DB.prepare(
-          `INSERT INTO tech_blackjack_rounds (user_id, server_seed, server_hash, client_seed, nonce, deck_hmac, deck_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-        ).bind(auth.user.id, serverSeed, serverHash, clientSeed, nonce, deckHmac, deckOrder).run();
+          `INSERT INTO tech_blackjack_rounds (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`,
+        ).bind(...binds).run();
         const lastRowId = insert?.meta?.last_row_id;
         if (!Number.isInteger(Number(lastRowId))) throw new Error("Tech Blackjack round id could not be created.");
-        roundId = String(lastRowId);
+        roundId = hasRoundIdColumn ? publicRoundId : String(lastRowId);
       } else {
-        roundId = `bj-${Date.now()}-${crypto.randomUUID?.() || nonce}`;
+        const columns = ["id", "user_id", "server_seed", "server_hash", "client_seed", "nonce", "deck_hmac", "deck_order"];
+        const placeholders = ["?", "?", "?", "?", "?", "?", "?", "?"];
+        const binds: unknown[] = [publicRoundId, auth.user.id, serverSeed, serverHash, clientSeed, nonce, deckHmac, deckOrder];
+        if (hasRoundIdColumn) {
+          columns.splice(1, 0, "round_id");
+          placeholders.splice(1, 0, "?");
+          binds.splice(1, 0, publicRoundId);
+        }
+        columns.push("created_at");
+        placeholders.push("datetime('now')");
         await context.env.DB.prepare(
-          `INSERT INTO tech_blackjack_rounds (id, user_id, server_seed, server_hash, client_seed, nonce, deck_hmac, deck_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-        ).bind(roundId, auth.user.id, serverSeed, serverHash, clientSeed, nonce, deckHmac, deckOrder).run();
+          `INSERT INTO tech_blackjack_rounds (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`,
+        ).bind(...binds).run();
+        roundId = publicRoundId;
       }
 
       return json({
@@ -198,20 +222,24 @@ async function settleBlackjackRound(context: any, userId: number, body: Blackjac
   if (!roundId) return null;
 
   const idColumn = await getTableColumn(context, "tech_blackjack_rounds", "id");
-  const normalizedRoundId = normalizeRoundId(roundId, idColumn);
-  if (normalizedRoundId === null) return null;
+  const roundIdColumn = await getTableColumn(context, "tech_blackjack_rounds", "round_id");
+  const hasRoundIdColumn = Boolean(roundIdColumn);
+  const lookupColumn = hasRoundIdColumn ? "round_id" : "id";
+  const lookupRoundId = hasRoundIdColumn ? roundId : normalizeRoundId(roundId, idColumn);
+  if (lookupRoundId === null) return null;
 
+  const publicRoundIdSelect = hasRoundIdColumn ? "COALESCE(round_id, id) AS publicRoundId" : "id AS publicRoundId";
   const row = await context.env.DB.prepare(
-    `SELECT id, server_seed AS serverSeed, server_hash AS serverHash, client_seed AS clientSeed, nonce, deck_hmac AS deckHmac, deck_order AS deckOrder FROM tech_blackjack_rounds WHERE id = ? AND user_id = ?`,
-  ).bind(normalizedRoundId, userId).first();
+    `SELECT id, ${publicRoundIdSelect}, server_seed AS serverSeed, server_hash AS serverHash, client_seed AS clientSeed, nonce, deck_hmac AS deckHmac, deck_order AS deckOrder FROM tech_blackjack_rounds WHERE ${lookupColumn} = ? AND user_id = ?`,
+  ).bind(lookupRoundId, userId).first();
   if (!row?.id) return null;
   const usedDeck = Array.isArray(body?.usedDeck) ? body.usedDeck.map((card: any) => String(card?.code || card)).filter(Boolean) : [];
   await context.env.DB.prepare(
-    `UPDATE tech_blackjack_rounds SET used_deck = ?, settled_at = datetime('now') WHERE id = ? AND user_id = ?`,
-  ).bind(JSON.stringify(usedDeck), normalizedRoundId, userId).run();
+    `UPDATE tech_blackjack_rounds SET used_deck = ?, settled_at = datetime('now') WHERE ${lookupColumn} = ? AND user_id = ?`,
+  ).bind(JSON.stringify(usedDeck), lookupRoundId, userId).run();
   return {
     algorithm: "SHA-256 / HMAC-SHA256 Provably Fair",
-    roundId: String(row.id),
+    roundId: String(row.publicRoundId || row.id),
     clientSeed: String(row.clientSeed),
     nonce: Number(row.nonce),
     serverHash: String(row.serverHash),
