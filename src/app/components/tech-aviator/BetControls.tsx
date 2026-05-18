@@ -13,14 +13,27 @@ interface BetControlsProps {
 
 const quickBets = [50, 100, 500];
 
+function normalizeDecimalInput(value: string) {
+  const cleaned = value.replace(",", ".").replace(/[^0-9.]/g, "");
+  const [integerPart = "", ...decimalParts] = cleaned.split(".");
+  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, "");
+  return decimalParts.length ? `${normalizedInteger || "0"}.${decimalParts.join("")}` : normalizedInteger;
+}
+
+function panelNumber(value: string | number | undefined) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 export function BetControls({ panels, status, visualMultiplier, onPanelChange, onPlaceBet, onCashOut }: BetControlsProps) {
   const { language } = useLanguage();
   const tr = language === "tr";
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       {panels.map((panel, index) => {
-        const possibleVisualScore = (panel.activeBetAmount ?? panel.amount) * visualMultiplier;
-        const canPlaceBet = status === "STATUS_BETTING" && !panel.isBetAccepted;
+        const panelAmount = panelNumber(panel.amount);
+        const possibleVisualScore = (panel.activeBetAmount ?? panelAmount) * visualMultiplier;
+        const canPlaceBet = status === "STATUS_BETTING" && !panel.isBetAccepted && panelAmount > 0;
         const canCashOut = status === "STATUS_FLYING" && panel.isBetAccepted && !panel.hasCashedOut;
 
         return (
@@ -34,11 +47,12 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
             <div className="mt-2 flex items-center rounded-2xl border border-emerald-300/20 bg-black/70 px-4 py-3 focus-within:border-emerald-300/70">
               <Coins className="mr-3 h-5 w-5 text-emerald-300" />
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 min="1"
                 step="1"
                 value={panel.amount}
-                onChange={(event) => onPanelChange(panel.id, { amount: Number(event.target.value) })}
+                onChange={(event) => onPanelChange(panel.id, { amount: normalizeDecimalInput(event.target.value) })}
                 className="w-full bg-transparent font-mono text-2xl font-bold text-white outline-none"
                 disabled={panel.isBetAccepted}
               />
@@ -50,7 +64,7 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
                 <button
                   key={amount}
                   type="button"
-                  onClick={() => onPanelChange(panel.id, { amount: panel.amount + amount })}
+                  onClick={() => onPanelChange(panel.id, { amount: String(panelAmount + amount) })}
                   disabled={panel.isBetAccepted}
                   className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 py-2 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -73,11 +87,12 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
             <label className="mt-4 block text-sm text-zinc-300">{tr ? "Otomatik puan kilitleme çarpanı" : "Auto stop multiplier"}</label>
             <div className="mt-2 flex items-center rounded-2xl border border-zinc-700 bg-black/50 px-4 py-3">
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 min="1.01"
                 step="0.05"
                 value={panel.autoCashoutMultiplier}
-                onChange={(event) => onPanelChange(panel.id, { autoCashoutMultiplier: Number(event.target.value) })}
+                onChange={(event) => onPanelChange(panel.id, { autoCashoutMultiplier: normalizeDecimalInput(event.target.value) })}
                 className="w-full bg-transparent font-mono text-xl text-white outline-none"
               />
               <span className="font-mono text-cyan-300">x</span>
