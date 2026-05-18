@@ -73,6 +73,13 @@ function payoutForLevel(betAmount: number, level: number, difficulty: Difficulty
   return roundTc(betAmount * multiplierForLevel(level, difficulty));
 }
 
+async function hmacSha256Hex(secret: string, message: string) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
+  return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function adjustBetAmount(amount: number, multiplier: number) {
   return Math.max(1, Math.min(1_000_000, roundTc(amount * multiplier)));
 }
@@ -226,13 +233,21 @@ export function EkaTowers() {
 
 
   async function verifyFairnessHash() {
-    if (!fairness?.serverSeed || !fairness?.hash) {
-      setVerifyMessage(tr ? "Server seed round bitince gösterilir." : "Server seed is revealed after the round ends.");
+    if (!fairness?.serverSeed || !fairness?.hash || !fairness?.resultHash || !fairness?.clientSeed || fairness?.nonce == null) {
+      setVerifyMessage(tr ? "Server seed, client seed, nonce ve Result HMAC round bitince gösterilir." : "Server seed, client seed, nonce, and Result HMAC are revealed after the round ends.");
       return;
     }
+
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fairness.serverSeed));
-    const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    setVerifyMessage(hex === fairness.hash ? (tr ? "SHA-256(serverSeed) doğrulandı." : "SHA-256(serverSeed) verified.") : (tr ? "Server seed hash ile eşleşmedi." : "Server seed does not match the hash."));
+    const serverHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const resultHash = await hmacSha256Hex(fairness.serverSeed, `${fairness.clientSeed}:${fairness.nonce}`);
+
+    if (serverHash !== fairness.hash) {
+      setVerifyMessage(tr ? "Server seed hash ile eşleşmedi." : "Server seed does not match the hash.");
+      return;
+    }
+
+    setVerifyMessage(resultHash === fairness.resultHash ? (tr ? "SHA-256(serverSeed) ve HMAC_SHA256(serverSeed, clientSeed + ':' + nonce) doğrulandı." : "SHA-256(serverSeed) and HMAC_SHA256(serverSeed, clientSeed + ':' + nonce) verified.") : (tr ? "Result HMAC client seed ve nonce ile eşleşmedi." : "Result HMAC does not match the client seed and nonce."));
   }
 
   async function startGame() {
@@ -382,13 +397,15 @@ export function EkaTowers() {
 
           <div className="rounded-[1.6rem] border border-cyan-300/15 bg-[#1a2c38]/95 p-4 text-sm leading-6 text-white/60 backdrop-blur-xl sm:p-5">
             <div className="flex items-center gap-2 font-black text-cyan-100"><Hash className="h-4 w-4" /> {tr ? "SHA-256 provably fair" : "SHA-256 provably fair"}</div>
-            <p className="mt-1 text-xs text-white/45">{tr ? "Tırmanış başlamadan client seed'i değiştirebilirsin. Server seed round bitene kadar gizli kalır; hash kilidi sonradan doğrular." : "Change the client seed before climbing. The server seed stays hidden until the round ends; the hash commitment verifies afterward."}</p>
+            <p className="mt-1 text-xs text-white/45">{tr ? "Tırmanış başlamadan client seed'i değiştirebilirsin. Result HMAC formülü: HMAC_SHA256(serverSeed, clientSeed + ':' + nonce)." : "Change the client seed before climbing. Result HMAC formula: HMAC_SHA256(serverSeed, clientSeed + ':' + nonce)."}</p>
             <label className="mt-3 block">
               <span className="text-xs font-bold uppercase tracking-[0.16em] text-white/35">{tr ? "Client seed" : "Client seed"}</span>
               <input value={clientSeed} disabled={isPlaying || actionLoading || walletLoading} onChange={(event) => setClientSeed(event.target.value.replace(/[^a-zA-Z0-9_.:@-]/g, "").slice(0, 64))} className="mt-1 w-full rounded-xl border border-white/10 bg-[#0f212e] px-3 py-2 text-xs font-semibold text-white outline-none focus:border-cyan-300/60 disabled:opacity-55" />
             </label>
-            <p className="mt-3 break-all text-[11px] text-white/45">Server hash: <span className="text-cyan-100/80">{fairness?.hash || "pending"}</span></p>
-            <p className="mt-1 break-all text-[11px] text-white/45">Server seed: <span className="text-emerald-100/80">{fairness?.serverSeed || (tr ? "Round bitince gösterilir" : "Revealed after round end")}</span></p>
+            <p className="mt-3 break-all text-[11px] text-white/45">Client Seed: <span className="text-cyan-100/80">{fairness?.clientSeed || clientSeed || "pending"}</span></p>
+            <p className="mt-1 break-all text-[11px] text-white/45">Nonce: <span className="text-cyan-100/80">{fairness?.nonce == null ? (tr ? "Round bitince gösterilir" : "Revealed after round end") : String(fairness.nonce)}</span></p>
+            <p className="mt-1 break-all text-[11px] text-white/45">Server Hash: <span className="text-cyan-100/80">{fairness?.hash || "pending"}</span></p>
+            <p className="mt-1 break-all text-[11px] text-white/45">Revealed Server Seed: <span className="text-emerald-100/80">{fairness?.serverSeed || (tr ? "Round bitince gösterilir" : "Revealed after round end")}</span></p>
             <p className="mt-1 break-all text-[11px] text-white/45">Result HMAC: <span className="text-fuchsia-100/80">{fairness?.resultHash || (tr ? "Round bitince gösterilir" : "Revealed after round end")}</span></p>
             <button type="button" onClick={verifyFairnessHash} className="mt-3 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-100 transition hover:bg-cyan-300/15">{tr ? "Hash'i doğrula" : "Verify hash"}</button>
             {verifyMessage ? <p className="mt-2 text-xs text-cyan-100/80">{verifyMessage}</p> : null}
