@@ -20,6 +20,7 @@ type ActiveRound = {
   salt?: string | null;
   nonce?: number | null;
   hash?: string | null;
+  result_hash?: string | null;
   client_seed?: string | null;
 };
 
@@ -88,8 +89,8 @@ async function startRound(context: any, userId: number, body: any) {
   const serverSeed = randomHex(32);
   const salt = randomHex(16);
   const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-  const hashInput = fairHashInput(serverSeed, salt, nonce, clientSeed);
-  const hash = await sha256Hex(hashInput);
+  const hash = await sha256Hex(serverSeed);
+  const resultHash = await createResultHash(serverSeed, clientSeed, nonce);
   const mineIds = await buildMineIds(mineCount, serverSeed, salt, nonce, clientSeed);
 
   const debit = await context.env.DB.prepare(
@@ -116,11 +117,11 @@ async function startRound(context: any, userId: number, body: any) {
 
   await context.env.DB.prepare(
     `
-      INSERT INTO techcoin_mines_rounds (user_id, bet_amount, mine_count, mine_ids, revealed_ids, current_multiplier, status, server_seed, salt, nonce, hash, client_seed, started_at, updated_at)
-      VALUES (?, ?, ?, ?, '[]', 1, 'active', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO techcoin_mines_rounds (user_id, bet_amount, mine_count, mine_ids, revealed_ids, current_multiplier, status, server_seed, salt, nonce, hash, result_hash, client_seed, started_at, updated_at)
+      VALUES (?, ?, ?, ?, '[]', 1, 'active', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `,
   )
-    .bind(userId, betAmount, mineCount, JSON.stringify(mineIds), serverSeed, salt, nonce, hash, clientSeed)
+    .bind(userId, betAmount, mineCount, JSON.stringify(mineIds), serverSeed, salt, nonce, hash, resultHash, clientSeed)
     .run();
 
   return { ...(await buildState(context, userId)), message: "round_started" };
@@ -263,14 +264,29 @@ async function buildState(
     .bind(userId)
     .first();
   const activeRound = roundOverride || (await getActiveRound(context, userId));
+  const verifiedRound = activeRound ? await normalizeStoredFairness(context, activeRound) : null;
   return {
     wallet: {
       balance: Number(wallet?.balance || 0),
       lifetime_earned: Number(wallet?.lifetime_earned || 0),
       updated_at: wallet?.updated_at || null,
     },
-    round: activeRound ? serializeRound(activeRound) : null,
+    round: verifiedRound ? serializeRound(verifiedRound) : null,
   };
+}
+
+async function normalizeStoredFairness(context: any, round: ActiveRound) {
+  if (!round.server_seed) return round;
+  const serverHash = await sha256Hex(round.server_seed);
+  const clientSeed = round.client_seed || "";
+  const nonce = Number(round.nonce || 0);
+  const resultHash = nonce ? await createResultHash(round.server_seed, clientSeed, nonce) : round.result_hash || null;
+  if (round.hash === serverHash && (!resultHash || round.result_hash === resultHash)) return round;
+
+  await context.env.DB.prepare(`UPDATE techcoin_mines_rounds SET hash = ?, result_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .bind(serverHash, resultHash, round.id)
+    .run();
+  return { ...round, hash: serverHash, result_hash: resultHash };
 }
 
 function serializeRound(round: ActiveRound) {
@@ -292,13 +308,15 @@ function serializeRound(round: ActiveRound) {
       isRevealed: revealedIds.includes(id),
     })),
     fairness: {
-      algorithm: "SHA-256(serverSeed:salt:nonce:clientSeed)",
+      algorithm: "SHA-256(serverSeed)",
       hash: round.hash || null,
+      resultAlgorithm: "HMAC-SHA256(serverSeed, clientSeed:nonce)",
+      resultHash: canShowMines ? round.result_hash || null : null,
       clientSeed: round.client_seed || null,
       salt: canShowMines ? round.salt || null : null,
       nonce: canShowMines ? Number(round.nonce || 0) : null,
       serverSeed: canShowMines ? round.server_seed || null : null,
-      hashInput: canShowMines && round.server_seed && round.salt ? fairHashInput(round.server_seed, round.salt, Number(round.nonce || 0), round.client_seed || "") : null,
+      hashInput: canShowMines ? `${round.client_seed || ""}:${Number(round.nonce || 0)}` : null,
     },
   };
 }
@@ -340,6 +358,7 @@ async function ensureMinesTables(context: any) {
       salt TEXT,
       nonce INTEGER,
       hash TEXT,
+      result_hash TEXT,
       client_seed TEXT
     )
   `,
@@ -385,6 +404,7 @@ async function ensureMinesTables(context: any) {
   await addColumnIfMissing(context, "techcoin_mines_rounds", "salt", "TEXT");
   await addColumnIfMissing(context, "techcoin_mines_rounds", "nonce", "INTEGER");
   await addColumnIfMissing(context, "techcoin_mines_rounds", "hash", "TEXT");
+  await addColumnIfMissing(context, "techcoin_mines_rounds", "result_hash", "TEXT");
   await addColumnIfMissing(context, "techcoin_mines_rounds", "client_seed", "TEXT");
   await context.env.DB.prepare(
     `CREATE INDEX IF NOT EXISTS idx_techcoin_mines_rounds_active_user ON techcoin_mines_rounds(user_id, status)`,
@@ -418,12 +438,20 @@ async function fairShuffle<T>(items: T[], serverSeed: string, salt: string, nonc
 }
 
 async function fairRandomInt(maxExclusive: number, serverSeed: string, salt: string, nonce: number, clientSeed: string, cursor: string) {
-  const hash = await sha256Hex(`${fairHashInput(serverSeed, salt, nonce, clientSeed)}:${cursor}`);
+  void salt;
+  const hash = await hmacSha256Hex(serverSeed, `${clientSeed}:${nonce}:${cursor}`);
   return parseInt(hash.slice(0, 13), 16) % maxExclusive;
 }
 
-function fairHashInput(serverSeed: string, salt: string, nonce: number, clientSeed: string) {
-  return `${serverSeed}:${salt}:${nonce}:${clientSeed}`;
+function createResultHash(serverSeed: string, clientSeed: string, nonce: number) {
+  return hmacSha256Hex(serverSeed, `${clientSeed}:${nonce}`);
+}
+
+async function hmacSha256Hex(secret: string, message: string) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
+  return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function normalizeClientSeed(value: unknown, userId: number) {
