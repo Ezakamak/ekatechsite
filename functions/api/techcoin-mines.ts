@@ -1,4 +1,5 @@
 import { awardGameExp, expForGame } from "../_levels";
+import { recordOffMatch } from "../_offMatches";
 
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const GRID_SIZE = 25;
@@ -56,11 +57,25 @@ export async function onRequestPost(context: any) {
     }
 
     if (action === "reveal") {
-      return json(await revealTile(context, auth.user.id, body));
+      const result = await revealTile(context, auth.user.id, body);
+      if (["mine_hit", "perfect"].includes(String(result?.message))) {
+        const offSummary = await recordOffMatch(context, auth.user.id, {
+          gameKey: "mines",
+          result: result.message === "perfect" ? "win" : "loss",
+          score: Number(result?.payout || 0),
+          expAmount: 0,
+          pointsEarned: Number(result?.payout || 0),
+          perfectRound: result.message === "perfect",
+        });
+        return json({ ...result, ...offSummary });
+      }
+      return json(result);
     }
 
     if (action === "cashout") {
-      return json(await cashoutRound(context, auth.user.id));
+      const result = await cashoutRound(context, auth.user.id);
+      const offSummary = await recordOffMatch(context, auth.user.id, { gameKey: "mines", result: "completed", score: Number(result?.payout || 0), expAmount: 0, pointsEarned: Number(result?.payout || 0) });
+      return json({ ...result, ...offSummary });
     }
 
     return json({ error: "Geçersiz TechMines işlemi." }, { status: 400 });

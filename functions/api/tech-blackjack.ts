@@ -1,4 +1,5 @@
 import { awardGameExp, expForGame } from "../_levels";
+import { recordOffMatch } from "../_offMatches";
 import { createClientSeed, createNonce, createServerSeed, generateBlackjackDeck, sha256 } from "../../src/lib/provablyFair";
 
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
@@ -138,7 +139,16 @@ export async function onRequestPost(context: any) {
       if (payoutAmount > 0) await creditWallet(context, auth.user.id, payoutAmount, "Tech Blackjack payout");
       await insertBlackjackLog(context, auth.user.id, { ...(body || {}), payoutAmount });
       const settledFairness = await settleBlackjackRound(context, auth.user.id, body);
-      return json({ ...(await buildState(context, auth.user.id)), fairness: settledFairness });
+      const resultType = String(body?.resultType || "completed");
+      const offSummary = await recordOffMatch(context, auth.user.id, {
+        gameKey: "blackjack",
+        result: ["win", "blackjack"].includes(resultType) ? "win" : resultType === "lose" || resultType === "loss" ? "loss" : "completed",
+        score: Number(body?.netAmount ?? payoutAmount ?? 0),
+        expAmount: 0,
+        pointsEarned: payoutAmount,
+        metadata: { resultType, betAmount: body?.betAmount, payoutAmount },
+      });
+      return json({ ...(await buildState(context, auth.user.id)), fairness: settledFairness, ...offSummary });
     }
 
     return json({ error: "Invalid Tech Blackjack action." }, { status: 400 });

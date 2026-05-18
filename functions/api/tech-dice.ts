@@ -1,4 +1,5 @@
 import { awardGameExp, expForGame } from "../_levels";
+import { recordOffMatch } from "../_offMatches";
 import { createClientSeed, createNonce, createServerSeed, generateDiceRoll, sha256 } from "../../src/lib/provablyFair";
 
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
@@ -110,16 +111,28 @@ export async function onRequestPost(context: any) {
       )
       .run();
 
-    await awardGameExp(
+    const diceLevel = await awardGameExp(
       context,
       auth.user.id,
       expForGame(math.winChance <= 0.2 ? "hard" : math.winChance <= 0.5 ? "medium" : "easy", 8),
       `Tech Dice ${won ? "win" : "roll"}`,
       mode,
     );
+    const offSummary = await recordOffMatch(context, auth.user.id, {
+      gameKey: "dice",
+      result: won ? "win" : "loss",
+      score: net,
+      expAmount: 0,
+      pointsEarned: won ? potentialReward : 0,
+      metadata: { mode, target, rolledNumber, multiplier: math.multiplier },
+    });
 
     return json({
       ...(await buildState(context, auth.user.id)),
+      matchSummary: offSummary.matchSummary,
+      level: diceLevel || offSummary.level,
+      questUpdates: offSummary.questUpdates,
+      unlockedBadges: offSummary.unlockedBadges,
       result: {
         mode,
         target,
