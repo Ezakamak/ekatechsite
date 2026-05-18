@@ -31,8 +31,10 @@ export interface GameState {
   roundId: string;
   status: GameStatus;
   salt?: string;
+  clientSeed?: string;
   nonce?: number;
   hash: string;
+  resultHash?: string;
   hashInput?: string;
   serverSeed?: string;
   crashPoint?: number;
