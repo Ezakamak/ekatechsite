@@ -91,7 +91,7 @@ async function startRound(context: any, userId: number, body: any) {
   const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
   const hash = await sha256Hex(serverSeed);
   const resultHash = await createResultHash(serverSeed, clientSeed, nonce);
-  const mineIds = await buildMineIds(mineCount, serverSeed, salt, nonce, clientSeed);
+  const mineIds = await buildMineIds(mineCount, resultHash);
 
   const debit = await context.env.DB.prepare(
     `UPDATE coin_wallets SET balance = COALESCE(balance, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND COALESCE(balance, 0) >= ?`,
@@ -310,7 +310,7 @@ function serializeRound(round: ActiveRound) {
     fairness: {
       algorithm: "SHA-256(serverSeed)",
       hash: round.hash || null,
-      resultAlgorithm: "HMAC-SHA256(serverSeed, clientSeed:nonce)",
+      resultAlgorithm: "HMAC_SHA256(serverSeed, clientSeed + ':' + nonce)",
       resultHash: canShowMines ? round.result_hash || null : null,
       clientSeed: round.client_seed || null,
       salt: canShowMines ? round.salt || null : null,
@@ -424,22 +424,21 @@ async function ensureWallet(context: any, userId: number) {
     .run();
 }
 
-async function buildMineIds(mineCount: number, serverSeed: string, salt: string, nonce: number, clientSeed: string) {
+async function buildMineIds(mineCount: number, resultHash: string) {
   const deck = Array.from({ length: GRID_SIZE }, (_, index) => index);
-  await fairShuffle(deck, serverSeed, salt, nonce, clientSeed, "mines");
+  await fairShuffle(deck, resultHash, "mines");
   return deck.slice(0, mineCount).sort((a, b) => a - b);
 }
 
-async function fairShuffle<T>(items: T[], serverSeed: string, salt: string, nonce: number, clientSeed: string, gameKey: string) {
+async function fairShuffle<T>(items: T[], resultHash: string, gameKey: string) {
   for (let index = items.length - 1; index > 0; index -= 1) {
-    const swapIndex = (await fairRandomInt(index + 1, serverSeed, salt, nonce, clientSeed, `${gameKey}:${index}`));
+    const swapIndex = (await fairRandomInt(index + 1, resultHash, `${gameKey}:${index}`));
     [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
 }
 
-async function fairRandomInt(maxExclusive: number, serverSeed: string, salt: string, nonce: number, clientSeed: string, cursor: string) {
-  void salt;
-  const hash = await hmacSha256Hex(serverSeed, `${clientSeed}:${nonce}:${cursor}`);
+async function fairRandomInt(maxExclusive: number, resultHash: string, cursor: string) {
+  const hash = await sha256Hex(`${resultHash}:${cursor}`);
   return parseInt(hash.slice(0, 13), 16) % maxExclusive;
 }
 

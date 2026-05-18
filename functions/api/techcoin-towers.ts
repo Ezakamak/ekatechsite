@@ -99,7 +99,7 @@ async function startRound(context: any, userId: number, body: any) {
   const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
   const hash = await sha256Hex(serverSeed);
   const resultHash = await createResultHash(serverSeed, clientSeed, nonce);
-  const matrix = await createMatrix(difficultyKey, serverSeed, salt, nonce, clientSeed);
+  const matrix = await createMatrix(difficultyKey, resultHash);
 
   const debit = await context.env.DB.prepare(
     `UPDATE coin_wallets SET balance = COALESCE(balance, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND COALESCE(balance, 0) >= ?`,
@@ -326,7 +326,7 @@ function serializeRound(round: ActiveRound) {
     fairness: {
       algorithm: "SHA-256(serverSeed)",
       hash: round.hash || null,
-      resultAlgorithm: "HMAC-SHA256(serverSeed, clientSeed:nonce)",
+      resultAlgorithm: "HMAC_SHA256(serverSeed, clientSeed + ':' + nonce)",
       resultHash: showAll ? round.result_hash || null : null,
       clientSeed: round.client_seed || null,
       salt: showAll ? round.salt || null : null,
@@ -373,7 +373,7 @@ async function creditWallet(
     .run();
 }
 
-async function createMatrix(difficultyKey: DifficultyKey, serverSeed: string, salt: string, nonce: number, clientSeed: string) {
+async function createMatrix(difficultyKey: DifficultyKey, resultHash: string) {
   const difficulty = DIFFICULTIES[difficultyKey];
   const rows: TileKind[][] = [];
   for (let level = 0; level < LEVELS; level += 1) {
@@ -381,7 +381,7 @@ async function createMatrix(difficultyKey: DifficultyKey, serverSeed: string, sa
       ...Array.from({ length: difficulty.safeTiles }, () => "safe" as const),
       ...Array.from({ length: difficulty.traps }, () => "trap" as const),
     ];
-    await fairShuffle(row, serverSeed, salt, nonce, clientSeed, `tower:${difficultyKey}:${level}`);
+    await fairShuffle(row, resultHash, `tower:${difficultyKey}:${level}`);
     rows.push(row);
   }
   return rows;
@@ -395,16 +395,15 @@ function createFallbackMatrix(difficultyKey: DifficultyKey) {
   ]);
 }
 
-async function fairShuffle<T>(items: T[], serverSeed: string, salt: string, nonce: number, clientSeed: string, cursorPrefix: string) {
+async function fairShuffle<T>(items: T[], resultHash: string, cursorPrefix: string) {
   for (let index = items.length - 1; index > 0; index -= 1) {
-    const swapIndex = await fairRandomInt(index + 1, serverSeed, salt, nonce, clientSeed, `${cursorPrefix}:${index}`);
+    const swapIndex = await fairRandomInt(index + 1, resultHash, `${cursorPrefix}:${index}`);
     [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
 }
 
-async function fairRandomInt(maxExclusive: number, serverSeed: string, salt: string, nonce: number, clientSeed: string, cursor: string) {
-  void salt;
-  const hash = await hmacSha256Hex(serverSeed, `${clientSeed}:${nonce}:${cursor}`);
+async function fairRandomInt(maxExclusive: number, resultHash: string, cursor: string) {
+  const hash = await sha256Hex(`${resultHash}:${cursor}`);
   return parseInt(hash.slice(0, 13), 16) % maxExclusive;
 }
 
