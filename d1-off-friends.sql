@@ -14,3 +14,18 @@ CREATE TABLE IF NOT EXISTS off_friendships (
 CREATE INDEX IF NOT EXISTS idx_off_friendships_requester_id ON off_friendships(requester_id);
 CREATE INDEX IF NOT EXISTS idx_off_friendships_addressee_id ON off_friendships(addressee_id);
 CREATE INDEX IF NOT EXISTS idx_off_friendships_status ON off_friendships(status);
+
+CREATE TABLE IF NOT EXISTS off_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE,
+  display_name TEXT,
+  avatar_url TEXT,
+  banner_url TEXT,
+  bio TEXT,
+  selected_title TEXT,
+  selected_badge TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_off_profiles_user_id ON off_profiles(user_id);
