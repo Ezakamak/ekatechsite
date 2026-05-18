@@ -45,6 +45,7 @@ import { TechDice } from "./TechDice";
 import { TechBlackjack } from "./TechBlackjack";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
+import { OffFriendsPanel } from "./OffFriendsPanel";
 
 const TechRoulette = lazy(() =>
   import("./TechRoulette").then((module) => ({ default: module.TechRoulette })),
@@ -707,6 +708,8 @@ export function OffPage() {
             </div>
           </div>
         </section>
+
+        <OffFriendsPanel />
 
         <section className="grid gap-5 pb-40 md:grid-cols-2 xl:grid-cols-3">
           <GameCard
