@@ -151,6 +151,8 @@ async function buildState(context: any, user: any) {
       crashPoint: runtime.status === "STATUS_CRASHED" ? Number(round.crash_point || 1) : undefined,
       currentMultiplier: runtime.currentMultiplier,
       startedAt: Number(round.betting_started_at || now),
+      bettingStartedAt: Number(round.betting_started_at || now),
+      flightStartedAt: Number(round.flight_started_at || now),
       bettingSeconds: BETTING_SECONDS,
       serverNow: now,
     },

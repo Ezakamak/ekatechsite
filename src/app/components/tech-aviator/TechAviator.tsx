@@ -9,6 +9,7 @@ import { useLanguage } from "../../i18n";
 import type { AviatorRoundResult, BetPanelState, GameState, TechCoinWallet } from "./types";
 
 const BETTING_SECONDS = 8;
+const MULTIPLIER_GROWTH = 0.28;
 
 const initialPanels: BetPanelState[] = [
   { id: "panel-a", amount: 100, autoBet: false, autoCashout: true, autoCashoutMultiplier: 2, isBetAccepted: false, hasCashedOut: false },
@@ -32,6 +33,9 @@ export function TechAviator() {
   const [wallet, setWallet] = useState<TechCoinWallet>();
   const [recentMultipliers, setRecentMultipliers] = useState<AviatorRoundResult[]>([]);
   const [gameState, setGameState] = useState<GameState>(initialGameState);
+  const [visualMultiplier, setVisualMultiplier] = useState(1);
+  const [serverTimeOffset, setServerTimeOffset] = useState(0);
+  const [lastSyncedGameState, setLastSyncedGameState] = useState<GameState>(initialGameState);
   const [panels, setPanels] = useState<BetPanelState[]>(initialPanels);
   const [countdown, setCountdown] = useState(BETTING_SECONDS);
   const [connected, setConnected] = useState(false);
@@ -60,18 +64,31 @@ export function TechAviator() {
     if (data?.wallet) setWallet(data.wallet);
     if (Array.isArray(data?.recentMultipliers)) setRecentMultipliers(data.recentMultipliers);
     if (data?.gameState) {
-      if (liveRoundRef.current !== data.gameState.roundId) {
-        liveRoundRef.current = data.gameState.roundId;
+      const nextGameState = data.gameState as GameState;
+      const serverNow = Number(nextGameState.serverNow || Date.now());
+      const nextServerTimeOffset = serverNow - Date.now();
+      const roundChanged = liveRoundRef.current !== nextGameState.roundId;
+
+      if (roundChanged) {
+        liveRoundRef.current = nextGameState.roundId;
         resetPanelsForRound();
         setVerifyMessage(undefined);
         setVerifyOk(undefined);
+        setVisualMultiplier(1);
       }
-      setGameState(data.gameState);
 
-      if (data.gameState.status === "STATUS_BETTING") {
-        const serverNow = Number(data.gameState.serverNow || Date.now());
-        const secondsLeft = Math.max(0, Number(data.gameState.bettingSeconds || BETTING_SECONDS) - Math.floor((serverNow - Number(data.gameState.startedAt || serverNow)) / 1000));
+      setServerTimeOffset(nextServerTimeOffset);
+      setLastSyncedGameState(nextGameState);
+      setGameState(nextGameState);
+
+      if (nextGameState.status === "STATUS_BETTING") {
+        const bettingStartedAt = Number(nextGameState.bettingStartedAt || nextGameState.startedAt || serverNow);
+        const secondsLeft = Math.max(0, Number(nextGameState.bettingSeconds || BETTING_SECONDS) - Math.floor((serverNow - bettingStartedAt) / 1000));
+        setVisualMultiplier(1);
         setCountdown(secondsLeft);
+      } else if (nextGameState.status === "STATUS_CRASHED") {
+        setVisualMultiplier(Math.max(1, Number(nextGameState.crashPoint || nextGameState.currentMultiplier || 1)));
+        setCountdown(0);
       } else {
         setCountdown(0);
       }
@@ -169,8 +186,10 @@ export function TechAviator() {
     void postLiveAction({ action: "stop-flight", roundId: gameState.roundId, panelId: panel.id })
       .then((data) => {
         updatePanel(panel.id, { hasCashedOut: true });
-        const payout = Number(data.lockedScore || data.payout || (panel.activeBetAmount ?? panel.amount) * gameState.currentMultiplier);
-        showCashoutSuccessToast(panel, payout, Number(data.multiplier || gameState.currentMultiplier || 1));
+        const backendMultiplier = Number(data.multiplier);
+        const backendPayout = Number(data.lockedScore ?? data.payout);
+        const payout = Number.isFinite(backendPayout) ? backendPayout : Number((panel.activeBetAmount ?? panel.amount) * (Number.isFinite(backendMultiplier) ? backendMultiplier : gameState.currentMultiplier));
+        showCashoutSuccessToast(panel, payout, Number.isFinite(backendMultiplier) ? backendMultiplier : Number(gameState.currentMultiplier || 1));
         recordSessionResult(roundMoney(payout - (panel.activeBetAmount ?? panel.amount)));
         setErrorMessage(undefined);
       })
@@ -199,6 +218,48 @@ export function TechAviator() {
       window.removeEventListener("ekatech-techcoin-refresh", refresh);
     };
   }, [loadLiveState]);
+
+  useEffect(() => {
+    let animationFrame = 0;
+
+    if (lastSyncedGameState.status === "STATUS_BETTING") {
+      setVisualMultiplier(1);
+      return () => {
+        if (animationFrame) cancelAnimationFrame(animationFrame);
+      };
+    }
+
+    if (lastSyncedGameState.status === "STATUS_CRASHED") {
+      setVisualMultiplier(Math.max(1, Number(lastSyncedGameState.crashPoint || lastSyncedGameState.currentMultiplier || 1)));
+      return () => {
+        if (animationFrame) cancelAnimationFrame(animationFrame);
+      };
+    }
+
+    const flightStartedAt = Number(lastSyncedGameState.flightStartedAt);
+    if (lastSyncedGameState.status !== "STATUS_FLYING" || !Number.isFinite(flightStartedAt)) {
+      return () => {
+        if (animationFrame) cancelAnimationFrame(animationFrame);
+      };
+    }
+
+    const tick = () => {
+      const syncedNow = Date.now() + serverTimeOffset;
+      const elapsedSeconds = Math.max(0, (syncedNow - flightStartedAt) / 1000);
+      const rawMultiplier = Math.max(1, Math.exp(MULTIPLIER_GROWTH * elapsedSeconds));
+      const knownCrashPoint = Number(lastSyncedGameState.crashPoint);
+      const nextMultiplier = Number.isFinite(knownCrashPoint) && knownCrashPoint > 0 ? Math.min(rawMultiplier, knownCrashPoint) : rawMultiplier;
+
+      setVisualMultiplier(nextMultiplier);
+      animationFrame = requestAnimationFrame(tick);
+    };
+
+    animationFrame = requestAnimationFrame(tick);
+
+    return () => {
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+    };
+  }, [lastSyncedGameState, serverTimeOffset]);
 
   useEffect(() => {
     if (gameState.status !== "STATUS_BETTING" || autoBetRoundRef.current === gameState.roundId) return;
@@ -264,7 +325,7 @@ export function TechAviator() {
           </div>
         ) : null}
 
-        <TechCanvas multiplier={gameState.currentMultiplier} status={gameState.status} countdown={countdown} crashPoint={gameState.crashPoint} />
+        <TechCanvas multiplier={visualMultiplier} status={gameState.status} countdown={countdown} crashPoint={gameState.crashPoint} />
 
         <div className="my-5 grid gap-3 rounded-3xl border border-zinc-800 bg-zinc-950/80 p-4 text-xs text-zinc-400 md:grid-cols-3">
           <span className="flex items-center gap-2"><ServerCog className="h-4 w-4 text-cyan-300" /> {tr ? "Tur" : "Round"}: {gameState.roundId}</span>
@@ -280,7 +341,7 @@ export function TechAviator() {
           <GameSessionStatsPanel gameName="Tech Aviator" stats={sessionStats} onReset={resetSessionStats} />
         </div>
 
-        <BetControls panels={panels} status={gameState.status} currentMultiplier={gameState.currentMultiplier} onPanelChange={updatePanel} onPlaceBet={placeBet} onCashOut={cashOut} />
+        <BetControls panels={panels} status={gameState.status} visualMultiplier={visualMultiplier} onPanelChange={updatePanel} onPlaceBet={placeBet} onCashOut={cashOut} />
       </div>
     </main>
   );
