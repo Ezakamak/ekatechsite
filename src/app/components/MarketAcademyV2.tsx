@@ -856,7 +856,7 @@ export function MarketAcademy() {
             onReset={resetPortfolio}
           />
           <aside
-            className="space-y-6 eka-stagger"
+            className="eka-stagger order-none space-y-6 max-md:order-first"
             style={{ animationDelay: "260ms" }}
           >
             <OrderPanel
@@ -1419,10 +1419,31 @@ function OrderPanel(props: {
     onTrade,
   } = props;
   return (
-    <div className="eka-card-hover rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
-      <p className="text-sm uppercase tracking-[0.2em] text-white/35">
-        {copy.orderPanel}
-      </p>
+    <div className="eka-card-hover rounded-[2rem] border border-cyan-300/15 bg-white/[0.06] p-5 shadow-2xl shadow-cyan-500/10 backdrop-blur-xl sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm uppercase tracking-[0.2em] text-white/35">
+            {copy.orderPanel}
+          </p>
+          <h3 className="mt-2 text-3xl font-semibold tracking-tight text-white">
+            {stock.symbol}
+          </h3>
+          <p className="mt-1 text-sm text-white/45">{stock.name}</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/60">
+          <span className="block text-xs uppercase tracking-[0.16em] text-white/35">
+            {copy.price}
+          </span>
+          <span className="mt-1 block text-lg font-semibold text-cyan-100">
+            {formatPrice(stock.price, locale)}
+          </span>
+        </div>
+      </div>
+      {!online ? (
+        <div className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-medium text-amber-100">
+          {copy.marketConnectionWaiting}
+        </div>
+      ) : null}
       <div className="mt-5 grid gap-4">
         <label className="grid gap-2 text-sm text-white/45">
           {copy.symbol}
@@ -1458,12 +1479,12 @@ function OrderPanel(props: {
             value={<CoinAmount amount={orderValue} locale={locale} />}
           />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
             disabled={busy || !online}
             onClick={() => onTrade("buy")}
-            className="rounded-full bg-white px-5 py-3 font-medium text-black transition-all hover:bg-gray-200 active:scale-95 disabled:opacity-40"
+            className="rounded-full bg-emerald-300 px-4 py-4 text-base font-bold text-black shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-200 active:scale-95 disabled:cursor-not-allowed disabled:bg-white/30 disabled:text-white/50 disabled:shadow-none"
           >
             {copy.buy}
           </button>
@@ -1471,7 +1492,7 @@ function OrderPanel(props: {
             type="button"
             disabled={busy || !online || owned <= 0}
             onClick={() => onTrade("sell")}
-            className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 font-medium text-white/75 transition-all hover:bg-white/[0.1] active:scale-95 disabled:opacity-40"
+            className="rounded-full border border-red-300/30 bg-red-400/20 px-4 py-4 text-base font-bold text-red-50 shadow-lg shadow-red-500/10 transition-all hover:bg-red-400/30 active:scale-95 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.06] disabled:text-white/40 disabled:shadow-none"
           >
             {copy.sell}
           </button>
@@ -2292,6 +2313,8 @@ const trCopy = {
   loading: "Eka InvestSim verisi yükleniyor...",
   offline:
     "Online market API şu an cevap vermedi. Al/sat işlemleri devre dışı.",
+  marketConnectionWaiting:
+    "Market bağlantısı bekleniyor. Bağlantı kurulunca Al/Sat butonları aktifleşir.",
   online: "Tech Coin cüzdanı aktif",
   day: "Piyasa turu",
   cash: "Cüzdan bakiyesi",
@@ -2424,6 +2447,8 @@ const enCopy = {
     "This is an education simulation. Tech Coin is a score; no real money, real stocks, or investment advice are used.",
   loading: "Loading Eka InvestSim data...",
   offline: "The online market API did not respond. Trading is disabled.",
+  marketConnectionWaiting:
+    "Waiting for market connection. Buy/Sell buttons will activate once connected.",
   online: "Tech Coin wallet active",
   cash: "Wallet balance",
   total: "Total assets",
