@@ -32,13 +32,19 @@ export const onRequestPatch = async (context: any) => {
   const payload = {
     display_name: clean(body.display_name ?? body.displayName, 24),
     bio: clean(body.bio, 160),
-    avatar_url: clean(body.avatar_url ?? body.avatarUrl, 512),
-    banner_url: clean(body.banner_url ?? body.bannerUrl, 512),
+    avatar_url: clean(body.avatar_url ?? body.avatarUrl, 2_000_000),
+    banner_url: clean(body.banner_url ?? body.bannerUrl, 2_000_000),
     selected_title: clean(body.selected_title ?? body.selectedTitle, 64),
     selected_badge: clean(body.selected_badge ?? body.selectedBadge, 64)
   };
+
+  if (payload.selected_title) {
+    const unlocked = await context.env.DB.prepare(`SELECT 1 FROM off_user_titles WHERE user_id=? AND title_code=?`).bind(uid, payload.selected_title).first<any>();
+    if (!unlocked) return Response.json({ error: "Bu lakap henüz kazanılmadı" }, { status: 400 });
+  }
+
   await context.env.DB.prepare(`UPDATE off_profiles SET display_name=?, avatar_url=?, banner_url=?, bio=?, selected_title=?, selected_badge=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`)
-    .bind(payload.display_name, payload.avatar_url, payload.banner_url, payload.bio, payload.selected_title, payload.selected_badge, uid).run();
+    .bind(payload.display_name, payload.avatar_url, payload.banner_url, payload.bio, payload.selected_title || null, payload.selected_badge, uid).run();
   return onRequestGet(context);
 };
 

@@ -22,6 +22,7 @@ export async function requireOffUser(context: any) {
 
   await ensureFriendshipTables(context);
   await ensureOffProfile(context, Number(user.id));
+  await ensureOffTitleTables(context);
   return { ok: true, user: { id: Number(user.id), name: String(user.name || "") } };
 }
 
@@ -79,4 +80,43 @@ function getCookie(cookieHeader: string, name: string) {
     .split("; ")
     .find((row) => row.startsWith(`${name}=`))
     ?.split("=")[1];
+}
+
+
+async function ensureOffTitleTables(context: any) {
+  await context.env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS off_titles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT,
+      rarity TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  await context.env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS off_user_titles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      title_code TEXT NOT NULL,
+      unlocked_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, title_code)
+    )
+  `).run();
+  await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_off_user_titles_user_id ON off_user_titles(user_id)`).run();
+  await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_off_user_titles_title_code ON off_user_titles(title_code)`).run();
+
+  const seeds = [
+    ["first_win", "İlk Zafer", "İlk galibiyetini aldın", "common"],
+    ["sharp_reflex", "Keskin Refleks", "Hızlı reaksiyon ustası", "rare"],
+    ["coin_guardian", "Coin Muhafızı", "Coinlerini iyi korursun", "rare"],
+    ["tower_climber", "Kule Tırmanıcısı", "Towers oyununda yükseğe çıktın", "epic"],
+    ["mines_survivor", "Mayın Kaçkını", "Mines'ta hayatta kaldın", "epic"],
+    ["lucky_core", "Şanslı Çekirdek", "Şans seninle", "legendary"],
+    ["off_legend", "OFF Efsanesi", "OFF dünyasının efsanesi", "mythic"],
+  ];
+  for (const [code, name, description, rarity] of seeds) {
+    await context.env.DB.prepare(`INSERT OR IGNORE INTO off_titles (code, name, description, rarity) VALUES (?, ?, ?, ?)`)
+      .bind(code, name, description, rarity).run();
+  }
 }
