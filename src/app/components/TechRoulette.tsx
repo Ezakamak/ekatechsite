@@ -166,12 +166,17 @@ function formatTc(value: number, locale: string) {
 }
 
 function parseBetInput(value: string) {
-  return Math.floor(Number(value.replace(/[^0-9]/g, "")) || 0);
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+}
+
+function sanitizeBetInput(value: string) {
+  return value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1");
 }
 
 function adjustBetInput(value: string, multiplier: number) {
   const current = parseBetInput(value) || MIN_BET;
-  return String(Math.max(MIN_BET, Math.min(MAX_BET, Math.floor(current * multiplier))));
+  return String(Math.max(MIN_BET, Math.min(MAX_BET, Number((current * multiplier).toFixed(2)))));
 }
 
 function numberColor(number: number) {
@@ -1204,12 +1209,12 @@ export function TechRoulette() {
                 </span>
                 <input
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-white/95 px-4 py-3 text-lg font-black text-emerald-950 outline-none transition focus:border-amber-200 focus:ring-4 focus:ring-amber-200/20"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   min={MIN_BET}
                   max={MAX_BET}
                   value={betInput}
                   onChange={(event) =>
-                    setBetInput(event.target.value.replace(/[^0-9]/g, ""))
+                    setBetInput(sanitizeBetInput(event.target.value))
                   }
                   placeholder="100"
                 />

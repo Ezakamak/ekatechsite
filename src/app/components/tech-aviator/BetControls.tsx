@@ -11,7 +11,7 @@ interface BetControlsProps {
   onCashOut: (panel: BetPanelState) => void;
 }
 
-function adjustBetAmount(amount: number, multiplier: number) {
+function adjustBetAmount(amount: unknown, multiplier: number) {
   return Math.max(1, Math.min(1_000_000, Math.floor((Number(amount) || 1) * multiplier)));
 }
 
@@ -21,7 +21,9 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
   return (
     <section className="grid gap-4 lg:grid-cols-2">
       {panels.map((panel, index) => {
-        const possibleVisualScore = (panel.activeBetAmount ?? panel.amount) * visualMultiplier;
+        const panelAmount = Number(panel.amount);
+        const safePanelAmount = Number.isFinite(panelAmount) && panelAmount > 0 ? panelAmount : 0;
+        const possibleVisualScore = (panel.activeBetAmount ?? safePanelAmount) * visualMultiplier;
         const canPlaceBet = status === "STATUS_BETTING" && !panel.isBetAccepted;
         const canCashOut = status === "STATUS_FLYING" && panel.isBetAccepted && !panel.hasCashedOut;
 
@@ -38,9 +40,9 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
               <input
                 type="number"
                 min="1"
-                step="1"
+                step="any"
                 value={panel.amount}
-                onChange={(event) => onPanelChange(panel.id, { amount: Number(event.target.value) })}
+                onChange={(event) => onPanelChange(panel.id, { amount: event.target.value })}
                 className="w-full bg-transparent font-mono text-2xl font-bold text-white outline-none"
                 disabled={panel.isBetAccepted}
               />
@@ -50,7 +52,7 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => onPanelChange(panel.id, { amount: adjustBetAmount(panel.amount, 0.5) })}
+                onClick={() => onPanelChange(panel.id, { amount: String(adjustBetAmount(panel.amount, 0.5)) })}
                 disabled={panel.isBetAccepted}
                 className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 py-2 text-sm font-black text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -58,7 +60,7 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
               </button>
               <button
                 type="button"
-                onClick={() => onPanelChange(panel.id, { amount: adjustBetAmount(panel.amount, 2) })}
+                onClick={() => onPanelChange(panel.id, { amount: String(adjustBetAmount(panel.amount, 2)) })}
                 disabled={panel.isBetAccepted}
                 className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 py-2 text-sm font-black text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -82,9 +84,9 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
               <input
                 type="number"
                 min="1.01"
-                step="0.05"
+                step="any"
                 value={panel.autoCashoutMultiplier}
-                onChange={(event) => onPanelChange(panel.id, { autoCashoutMultiplier: Number(event.target.value) })}
+                onChange={(event) => onPanelChange(panel.id, { autoCashoutMultiplier: event.target.value })}
                 className="w-full bg-transparent font-mono text-xl text-white outline-none"
               />
               <span className="font-mono text-cyan-300">x</span>
