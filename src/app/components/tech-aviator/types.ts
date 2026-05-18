@@ -46,10 +46,10 @@ export interface GameState {
 
 export interface BetPanelState {
   id: string;
-  amount: number;
+  amount: string;
   autoBet: boolean;
   autoCashout: boolean;
-  autoCashoutMultiplier: number;
+  autoCashoutMultiplier: string;
   activeBetAmount?: number;
   isBetAccepted: boolean;
   hasCashedOut: boolean;

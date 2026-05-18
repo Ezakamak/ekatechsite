@@ -48,11 +48,11 @@ const DIFFICULTIES: Difficulty[] = [
 ];
 
 function roundTc(value: number) {
-  return Math.max(0, Math.floor(Number(value) || 0));
+  return Number(Math.max(0, Number(value) || 0).toFixed(2));
 }
 
 function formatTc(value: number) {
-  return new Intl.NumberFormat(document.documentElement.lang === "tr" ? "tr-TR" : "en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(roundTc(value));
+  return new Intl.NumberFormat(document.documentElement.lang === "tr" ? "tr-TR" : "en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(roundTc(value));
 }
 
 function getDifficulty(key: DifficultyKey) {
@@ -88,7 +88,7 @@ export function EkaTowers() {
   const tr = language === "tr";
   const locale = tr ? "tr-TR" : "en-US";
   const [walletBalance, setWalletBalance] = useState(0);
-  const [betAmount, setBetAmount] = useState(DEFAULT_BET);
+  const [betAmountInput, setBetAmountInput] = useState(String(DEFAULT_BET));
   const [difficultyKey, setDifficultyKey] = useState<DifficultyKey>("medium");
   const [round, setRound] = useState<Round | null>(null);
   const [matrix, setMatrix] = useState<Tile[][]>(() => createEmptyMatrix());
@@ -104,10 +104,12 @@ export function EkaTowers() {
   const isPlaying = Boolean(round?.isRoundActive);
   const currentLevel = isPlaying ? round?.currentLevel || 0 : 0;
   const clearedLevels = round?.clearedLevels || 0;
-  const activeBet = isPlaying ? round?.betAmount || betAmount : betAmount;
+  const betAmount = useMemo(() => Number(betAmountInput), [betAmountInput]);
+  const validBetAmount = Number.isFinite(betAmount) && betAmount > 0 ? roundTc(Math.min(betAmount, 1_000_000)) : 0;
+  const activeBet = isPlaying ? round?.betAmount || validBetAmount : validBetAmount;
   const cashoutValue = isPlaying ? payoutForLevel(activeBet, clearedLevels, difficulty) : 0;
   const canCashout = isPlaying && clearedLevels > 0 && !actionLoading;
-  const canStart = !isPlaying && !walletLoading && !actionLoading && betAmount >= 1 && walletBalance >= betAmount;
+  const canStart = !isPlaying && !walletLoading && !actionLoading && validBetAmount >= 1 && walletBalance >= validBetAmount;
   const previewValue = payoutForLevel(activeBet, Math.max(clearedLevels || 1, 1), difficulty);
 
   const applyServerState = useCallback((data: any) => {
@@ -116,7 +118,7 @@ export function EkaTowers() {
     setRound(nextRound);
     if (nextRound?.matrix) {
       setMatrix(nextRound.matrix);
-      setBetAmount(roundTc(Number(nextRound.betAmount || DEFAULT_BET)));
+      setBetAmountInput(String(roundTc(Number(nextRound.betAmount || DEFAULT_BET))));
       if (nextRound.difficultyKey) setDifficultyKey(nextRound.difficultyKey);
       if (["won", "cashed"].includes(String(nextRound.status))) setLastWin(roundTc(Number(nextRound.payoutAmount || 0)));
     } else {
@@ -164,13 +166,13 @@ export function EkaTowers() {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
     const parsed = JSON.parse(saved) as { betAmount?: number; difficultyKey?: DifficultyKey };
-    setBetAmount(roundTc(Math.min(Number(parsed.betAmount ?? DEFAULT_BET), 1_000_000)) || DEFAULT_BET);
+    setBetAmountInput(String(roundTc(Math.min(Number(parsed.betAmount ?? DEFAULT_BET), 1_000_000)) || DEFAULT_BET));
     if (parsed.difficultyKey && DIFFICULTIES.some((item) => item.key === parsed.difficultyKey)) setDifficultyKey(parsed.difficultyKey);
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ betAmount, difficultyKey }));
-  }, [betAmount, difficultyKey]);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ betAmount: validBetAmount, difficultyKey }));
+  }, [validBetAmount, difficultyKey]);
 
   useEffect(() => {
     loadLiveState();
@@ -205,7 +207,7 @@ export function EkaTowers() {
   }
 
   async function startGame() {
-    const nextBet = roundTc(betAmount);
+    const nextBet = validBetAmount;
     if (nextBet < 1) {
       setNotice({ type: "error", text: (tr ? "Bahis en az 1 Tech Coin olmalı." : "Bet must be at least 1 Tech Coin.") });
       return;
@@ -270,7 +272,7 @@ export function EkaTowers() {
       disabled={!canStart}
       className="rounded-2xl bg-gradient-to-r from-cyan-300 via-sky-300 to-emerald-300 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-slate-950 shadow-xl shadow-cyan-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:from-slate-600 disabled:to-slate-500 disabled:text-white/45 disabled:hover:scale-100"
     >
-      {tr ? "Tırmanışı Başlat" : "Start Climb"} ({formatTc(betAmount)} TC)
+      {tr ? "Tırmanışı Başlat" : "Start Climb"} ({formatTc(validBetAmount)} TC)
     </button>
   );
 
@@ -313,18 +315,18 @@ export function EkaTowers() {
               <input
                 type="number"
                 min="1"
-                step="1"
+                step="any"
                 disabled={isPlaying || actionLoading || walletLoading}
-                value={betAmount}
-                onChange={(event) => setBetAmount(roundTc(Math.min(Number(event.target.value), 1_000_000)))}
+                value={betAmountInput}
+                onChange={(event) => setBetAmountInput(event.target.value)}
                 className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0f212e] px-4 py-3 text-lg font-black text-white outline-none transition focus:border-cyan-300/60 disabled:cursor-not-allowed disabled:opacity-55"
               />
             </label>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <button type="button" disabled={isPlaying || actionLoading || walletLoading} onClick={() => setBetAmount((current) => adjustBetAmount(current, 0.5))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+              <button type="button" disabled={isPlaying || actionLoading || walletLoading} onClick={() => setBetAmountInput((current) => String(adjustBetAmount(Number(current), 0.5)))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
                 /2
               </button>
-              <button type="button" disabled={isPlaying || actionLoading || walletLoading} onClick={() => setBetAmount((current) => adjustBetAmount(current, 2))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+              <button type="button" disabled={isPlaying || actionLoading || walletLoading} onClick={() => setBetAmountInput((current) => String(adjustBetAmount(Number(current), 2)))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
                 x2
               </button>
             </div>
