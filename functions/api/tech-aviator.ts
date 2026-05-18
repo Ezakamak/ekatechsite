@@ -10,7 +10,7 @@ const MULTIPLIER_GROWTH = 0.28;
 const HASH_SLICE_HEX_CHARS = 13;
 const UINT_52_RANGE = 2 ** 52;
 
-type AviatorAction = "join-flight" | "stop-flight" | "place-bet" | "cash-out" | "record-round" | "settle-crash";
+type AviatorAction = "join-flight" | "stop-flight" | "place-bet" | "cash-out" | "record-round" | "settle-crash" | "set-client-seed";
 type AviatorStatus = "STATUS_BETTING" | "STATUS_FLYING" | "STATUS_CRASHED";
 
 export async function onRequestGet(context: any) {
@@ -43,6 +43,7 @@ export async function onRequestPost(context: any) {
     await ensureAviatorTables(context);
     await ensureWallet(context, auth.user.id);
 
+    if (action === "set-client-seed") return setClientSeedForRound(context, auth.user, body);
     if (action === "join-flight" || action === "place-bet") return joinFlight(context, auth.user, body);
     if (action === "stop-flight" || action === "cash-out") return stopFlight(context, auth.user, body);
     if (action === "record-round" || action === "settle-crash") return settleCrashInternal(context, auth.user, body);
@@ -64,6 +65,13 @@ async function joinFlight(context: any, user: any, body: any) {
   if (!requestedRoundId || requestedRoundId !== round.round_id) return Response.json({ error: "Bu round artık aktif değil; SQL canlı roundu yenilendi." }, { status: 409 });
   if (runtime.status !== "STATUS_BETTING") return Response.json({ error: "Uçuşa katılım süresi kapandı." }, { status: 409 });
   if (!Number.isFinite(amount) || amount <= 0) return Response.json({ error: "Geçerli bir Tech Coin katılım puanı girin." }, { status: 400 });
+
+  const requestedClientSeed = normalizeClientSeed(body.clientSeed, round.client_seed || round.salt || defaultClientSeed(round.nonce));
+  if (requestedClientSeed !== (round.client_seed || round.salt || defaultClientSeed(round.nonce))) {
+    const updatedRound = await updateRoundClientSeed(context, round, requestedClientSeed, now);
+    if (!updatedRound) return Response.json({ error: "Client seed yalnızca round başlamadan ve bahis kilitlenmeden değiştirilebilir." }, { status: 409 });
+    Object.assign(round, updatedRound);
+  }
 
   const existing = await context.env.DB.prepare(`SELECT id FROM tech_aviator_bets WHERE user_id = ? AND round_id = ? AND panel_id = ?`).bind(user.id, round.round_id, panelId).first();
   if (existing) return Response.json({ error: "Bu panel için round katılımı zaten kilitlendi." }, { status: 409 });
@@ -87,6 +95,39 @@ async function joinFlight(context: any, user: any, body: any) {
   }
 
   return Response.json({ ok: true, entry: { roundId: round.round_id, panelId, amount }, ...(await buildState(context, user)) });
+}
+
+async function setClientSeedForRound(context: any, user: any, body: any) {
+  const requestedRoundId = normalizeText(body.roundId, 96);
+  const now = Date.now();
+  const round = await getSharedRound(context, now);
+  const runtime = getRoundRuntime(round, now);
+  if (!requestedRoundId || requestedRoundId !== round.round_id) return Response.json({ error: "Bu round artık aktif değil; SQL canlı roundu yenilendi." }, { status: 409 });
+  if (runtime.status !== "STATUS_BETTING") return Response.json({ error: "Client seed maç başladıktan sonra kilitlenir." }, { status: 409 });
+
+  const clientSeed = normalizeClientSeed(body.clientSeed, round.client_seed || round.salt || defaultClientSeed(round.nonce));
+  const updatedRound = await updateRoundClientSeed(context, round, clientSeed, now);
+  if (!updatedRound) return Response.json({ error: "Client seed yalnızca round başlamadan ve bahis kilitlenmeden değiştirilebilir." }, { status: 409 });
+
+  return Response.json({ ok: true, ...(await buildState(context, user)) });
+}
+
+async function updateRoundClientSeed(context: any, round: any, clientSeed: string, now: number) {
+  const activeBets = await context.env.DB.prepare(`SELECT COUNT(*) AS count FROM tech_aviator_bets WHERE round_id = ?`).bind(round.round_id).first();
+  if (Number(activeBets?.count || 0) > 0) return null;
+
+  if (!round.server_seed) return null;
+  const nonce = Number(round.nonce || 0);
+  const resultHash = await createResultHash(round.server_seed, clientSeed, nonce);
+  const crashPoint = createCrashPointFromHash(resultHash);
+  const flightStartedAt = Number(round.flight_started_at || now + BETTING_SECONDS * 1000);
+  const crashedAt = flightStartedAt + getFlightDurationMs(crashPoint);
+  await context.env.DB
+    .prepare(`UPDATE tech_aviator_rounds SET client_seed = ?, result_hash = ?, crash_point = ?, crashed_at = ? WHERE round_id = ?`)
+    .bind(clientSeed, resultHash, crashPoint, crashedAt, round.round_id)
+    .run();
+
+  return context.env.DB.prepare(`SELECT * FROM tech_aviator_rounds WHERE round_id = ?`).bind(round.round_id).first();
 }
 
 async function stopFlight(context: any, user: any, body: any) {
@@ -138,15 +179,17 @@ async function buildState(context: any, user: any) {
   const wallet = await context.env.DB.prepare(`SELECT balance, lifetime_earned, updated_at FROM coin_wallets WHERE user_id = ?`).bind(user.id).first();
   const transactions = await context.env.DB.prepare(`SELECT id, amount, reason, created_at FROM coin_transactions WHERE user_id = ? ORDER BY id DESC LIMIT 10`).bind(user.id).all();
   const rounds = await context.env.DB.prepare(`SELECT round_id, crash_point, hash, created_at FROM tech_aviator_rounds WHERE crashed_at <= ? ORDER BY betting_started_at DESC LIMIT 10`).bind(now).all();
+  const exposedClientSeed = round.client_seed || round.salt || defaultClientSeed(round.nonce);
 
   return {
     gameState: {
       roundId: round.round_id,
       status: runtime.status,
-      salt: runtime.status === "STATUS_CRASHED" ? (round.salt || undefined) : undefined,
+      clientSeed: exposedClientSeed,
       nonce: runtime.status === "STATUS_CRASHED" ? Number(round.nonce || 0) : undefined,
       hash: round.hash || "pending",
-      hashInput: runtime.status === "STATUS_CRASHED" && round.server_seed && round.salt ? `${round.server_seed}:${round.salt}:${Number(round.nonce || 0)}` : undefined,
+      resultHash: runtime.status === "STATUS_CRASHED" ? (round.result_hash || undefined) : undefined,
+      hashInput: runtime.status === "STATUS_CRASHED" ? `${exposedClientSeed}:${Number(round.nonce || 0)}` : undefined,
       serverSeed: runtime.status === "STATUS_CRASHED" ? round.server_seed : undefined,
       crashPoint: runtime.status === "STATUS_CRASHED" ? Number(round.crash_point || 1) : undefined,
       currentMultiplier: runtime.currentMultiplier,
@@ -191,17 +234,18 @@ async function getSharedRound(context: any, now: number): Promise<any> {
 
 async function createSharedRound(context: any, latest: any, now: number) {
   const seed = randomHex(32);
-  const salt = randomHex(16);
   const nonce = await createRoundNonce(context, now);
-  const hash = await sha256Hex(`${seed}:${salt}:${nonce}`);
-  const crashPoint = createCrashPointFromHash(hash);
+  const clientSeed = defaultClientSeed(nonce);
+  const hash = await sha256Hex(seed);
+  const resultHash = await createResultHash(seed, clientSeed, nonce);
+  const crashPoint = createCrashPointFromHash(resultHash);
   const roundId = `sql_${nonce}_${hash.slice(0, 10)}`;
   const bettingStartedAt = Math.max(now, Number(latest?.crashed_at || 0) + ROUND_GRACE_MS);
   const flightStartedAt = bettingStartedAt + BETTING_SECONDS * 1000;
   const crashedAt = flightStartedAt + getFlightDurationMs(crashPoint);
 
-  await context.env.DB.prepare(`INSERT OR IGNORE INTO tech_aviator_rounds (round_id, crash_point, hash, server_seed, salt, nonce, betting_started_at, flight_started_at, crashed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`)
-    .bind(roundId, crashPoint, hash, seed, salt, nonce, bettingStartedAt, flightStartedAt, crashedAt)
+  await context.env.DB.prepare(`INSERT OR IGNORE INTO tech_aviator_rounds (round_id, crash_point, hash, server_seed, client_seed, result_hash, nonce, betting_started_at, flight_started_at, crashed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`)
+    .bind(roundId, crashPoint, hash, seed, clientSeed, resultHash, nonce, bettingStartedAt, flightStartedAt, crashedAt)
     .run();
 
   return context.env.DB.prepare(`SELECT * FROM tech_aviator_rounds WHERE round_id = ?`).bind(roundId).first();
@@ -257,6 +301,8 @@ async function ensureAviatorTables(context: any) {
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS tech_aviator_bets (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, round_id TEXT NOT NULL, panel_id TEXT NOT NULL, amount REAL NOT NULL, status TEXT NOT NULL DEFAULT 'active', cashout_multiplier REAL, payout REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, round_id, panel_id))`).run();
   await ensureColumn(context, "tech_aviator_rounds", "server_seed", "TEXT");
   await ensureColumn(context, "tech_aviator_rounds", "salt", "TEXT");
+  await ensureColumn(context, "tech_aviator_rounds", "client_seed", "TEXT");
+  await ensureColumn(context, "tech_aviator_rounds", "result_hash", "TEXT");
   await ensureColumn(context, "tech_aviator_rounds", "nonce", "INTEGER");
   await ensureColumn(context, "tech_aviator_rounds", "betting_started_at", "INTEGER");
   await ensureColumn(context, "tech_aviator_rounds", "flight_started_at", "INTEGER");
@@ -305,6 +351,15 @@ function normalizeText(value: unknown, maxLength: number) {
   return String(value || "").replace(/[^a-zA-Z0-9_.:-]/g, "").slice(0, maxLength);
 }
 
+function normalizeClientSeed(value: unknown, fallback: string) {
+  const normalized = normalizeText(value, 64);
+  return normalized || fallback || "tech-aviator-client";
+}
+
+function defaultClientSeed(nonce: unknown) {
+  return "tech-aviator-client";
+}
+
 function randomHex(bytes: number) {
   const values = new Uint8Array(bytes);
   crypto.getRandomValues(values);
@@ -315,6 +370,17 @@ async function sha256Hex(value: string) {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacSha256Hex(secret: string, message: string) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
+  return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function createResultHash(serverSeed: string, clientSeed: string, nonce: number) {
+  return hmacSha256Hex(serverSeed, `${clientSeed}:${nonce}`);
 }
 
 function roundTc(value: number) {

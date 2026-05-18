@@ -43,6 +43,7 @@ export function TechAviator() {
   const [connectionNotice, setConnectionNotice] = useState<string>(tr ? "SQL canlı motoruna bağlanıyor; tüm pilotlar aynı roundu görecek." : "Connecting to the live SQL engine; every pilot will see the same round.");
   const [verifyMessage, setVerifyMessage] = useState<string>();
   const [verifyOk, setVerifyOk] = useState<boolean>();
+  const [clientSeedDraft, setClientSeedDraft] = useState("");
   const [successToasts, setSuccessToasts] = useState<ToastNoFactionSuccessPayload[]>([]);
   const [, setCashoutToastTriggers] = useState<Record<string, boolean>>({});
   const { stats: sessionStats, recordBet: recordSessionBet, recordResult: recordSessionResult, resetStats: resetSessionStats } = useGameSessionStats("tech-aviator");
@@ -75,6 +76,9 @@ export function TechAviator() {
         setVerifyMessage(undefined);
         setVerifyOk(undefined);
         setVisualMultiplier(1);
+        setClientSeedDraft(nextGameState.clientSeed || "");
+      } else if (nextGameState.status !== "STATUS_BETTING") {
+        setClientSeedDraft(nextGameState.clientSeed || "");
       }
 
       setServerTimeOffset(nextServerTimeOffset);
@@ -135,14 +139,14 @@ export function TechAviator() {
       return;
     }
 
-    void postLiveAction({ action: "join-flight", roundId: gameState.roundId, panelId: panel.id, amount })
+    void postLiveAction({ action: "join-flight", roundId: gameState.roundId, panelId: panel.id, amount, clientSeed: clientSeedDraft })
       .then(() => {
         updatePanel(panel.id, { isBetAccepted: true, hasCashedOut: false, activeBetAmount: amount });
         recordSessionBet(amount);
         setErrorMessage(undefined);
       })
       .catch((error) => setErrorMessage(error instanceof Error ? error.message : "Uçuş katılımı reddedildi."));
-  }, [gameState.roundId, gameState.status, postLiveAction, updatePanel, wallet?.techCoinBalance]);
+  }, [clientSeedDraft, gameState.roundId, gameState.status, postLiveAction, updatePanel, wallet?.techCoinBalance]);
 
 
   const removeCashoutSuccessToast = useCallback((id: string) => {
@@ -172,6 +176,17 @@ export function TechAviator() {
       },
     ]));
   }, [panels]);
+
+  const saveClientSeed = useCallback(() => {
+    if (gameState.status !== "STATUS_BETTING") {
+      setErrorMessage(tr ? "Client seed maç başladıktan sonra kilitlenir." : "Client seed is locked after the round starts.");
+      return;
+    }
+
+    void postLiveAction({ action: "set-client-seed", roundId: gameState.roundId, clientSeed: clientSeedDraft })
+      .then(() => setErrorMessage(undefined))
+      .catch((error) => setErrorMessage(error instanceof Error ? error.message : (tr ? "Client seed kaydedilemedi." : "Client seed could not be saved.")));
+  }, [clientSeedDraft, gameState.roundId, gameState.status, postLiveAction, tr]);
 
   const cashOut = useCallback((panel: BetPanelState) => {
     if (gameState.status !== "STATUS_FLYING" || !panel.isBetAccepted || panel.hasCashedOut) {
@@ -335,7 +350,16 @@ export function TechAviator() {
           <span>{tr ? "Durum" : "Status"}: <strong className="text-white">{sqlModeLabel} / {gameState.status}</strong></span>
         </div>
 
-        <VerifyRound gameState={gameState} tr={tr} verifyMessage={verifyMessage} verifyOk={verifyOk} onVerify={(message, ok) => { setVerifyMessage(message); setVerifyOk(ok); }} />
+        <VerifyRound
+          gameState={gameState}
+          tr={tr}
+          clientSeedDraft={clientSeedDraft}
+          onClientSeedChange={setClientSeedDraft}
+          onSaveClientSeed={saveClientSeed}
+          verifyMessage={verifyMessage}
+          verifyOk={verifyOk}
+          onVerify={(message, ok) => { setVerifyMessage(message); setVerifyOk(ok); }}
+        />
 
         <RecentMultipliers rounds={recentMultipliers} tr={tr} />
 
@@ -350,8 +374,9 @@ export function TechAviator() {
 }
 
 
-function VerifyRound({ gameState, tr, verifyMessage, verifyOk, onVerify }: { gameState: GameState; tr: boolean; verifyMessage?: string; verifyOk?: boolean; onVerify: (message: string, ok: boolean) => void }) {
-  const canVerify = gameState.status === "STATUS_CRASHED" && Boolean(gameState.serverSeed && gameState.salt && gameState.nonce && gameState.hash);
+function VerifyRound({ gameState, tr, clientSeedDraft, onClientSeedChange, onSaveClientSeed, verifyMessage, verifyOk, onVerify }: { gameState: GameState; tr: boolean; clientSeedDraft: string; onClientSeedChange: (value: string) => void; onSaveClientSeed: () => void; verifyMessage?: string; verifyOk?: boolean; onVerify: (message: string, ok: boolean) => void }) {
+  const canEditClientSeed = gameState.status === "STATUS_BETTING";
+  const canVerify = gameState.status === "STATUS_CRASHED" && Boolean(gameState.serverSeed && gameState.nonce && gameState.hash);
 
   const verifyRound = async () => {
     if (!canVerify) {
@@ -359,13 +384,12 @@ function VerifyRound({ gameState, tr, verifyMessage, verifyOk, onVerify }: { gam
       return;
     }
 
-    const input = `${gameState.serverSeed}:${gameState.salt}:${gameState.nonce}`;
-    const computedHash = await sha256Hex(input);
+    const computedHash = await sha256Hex(String(gameState.serverSeed));
     const ok = computedHash === gameState.hash;
     onVerify(
       ok
-        ? (tr ? "Doğrulandı: Bu düşüş değeri round başlamadan önce kilitlenen hash ile uyumlu." : "Verified: this drop value matches the hash locked before the round started.")
-        : (tr ? "Doğrulama başarısız: hash uyuşmuyor." : "Verification failed: hash mismatch."),
+        ? (tr ? "Doğrulandı" : "Verified")
+        : (tr ? "Hash eşleşmiyor, sonuç doğrulanamadı" : "Hash mismatch; the result could not be verified."),
       ok,
     );
   };
@@ -376,7 +400,7 @@ function VerifyRound({ gameState, tr, verifyMessage, verifyOk, onVerify }: { gam
         <div>
           <h2 className="flex items-center gap-2 text-lg font-black text-cyan-100"><ShieldCheck className="h-5 w-5 text-emerald-300" /> {tr ? "Adalet / Round Doğrulama" : "Fairness / Verify Round"}</h2>
           <p className="mt-1 text-sm text-zinc-400">
-            {tr ? "Server seed round bitene kadar gizlidir; başlangıçta yalnızca kilitli SHA-256 hash gösterilir." : "The server seed stays hidden until the round ends; only the locked SHA-256 hash is shown at the start."}
+            {tr ? "Tırmanış başlamadan client seed’i değiştirebilirsin. Round başlamadan yalnızca server hash gösterilir. Round bittikten sonra server seed açıklanır ve SHA-256 hash’i ile doğrulanır." : "You can change the client seed before climb starts. Before the round starts, only the server hash is shown. After the round ends, the server seed is revealed and verified with its SHA-256 hash."}
           </p>
         </div>
         <button
@@ -385,19 +409,35 @@ function VerifyRound({ gameState, tr, verifyMessage, verifyOk, onVerify }: { gam
           disabled={!canVerify}
           className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-2 text-sm font-black uppercase tracking-[0.18em] text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-45"
         >
-          {tr ? "Bu roundu doğrula" : "Verify this round"}
+          {tr ? "Hash’i doğrula" : "Verify hash"}
         </button>
       </div>
 
       <div className="grid gap-3 text-xs text-zinc-300 md:grid-cols-2 xl:grid-cols-3">
+        <div className="rounded-2xl border border-zinc-800 bg-black/35 p-3 md:col-span-2 xl:col-span-3">
+          <label className="mb-1 block text-[0.65rem] uppercase tracking-[0.22em] text-zinc-500">Client Seed</label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={clientSeedDraft}
+              disabled={!canEditClientSeed}
+              onChange={(event) => onClientSeedChange(event.target.value.replace(/[^a-zA-Z0-9_.:-]/g, "").slice(0, 64))}
+              className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#0f212e] px-3 py-2 font-mono text-xs font-semibold text-white outline-none focus:border-cyan-300/60 disabled:opacity-55"
+            />
+            <button type="button" onClick={onSaveClientSeed} disabled={!canEditClientSeed} className="rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-45">
+              {tr ? "Kaydet" : "Save"}
+            </button>
+          </div>
+          <p className="mt-2 text-[0.7rem] text-zinc-500">{tr ? "Maç başladıktan sonra client seed kilitlenir." : "Client seed locks after the round starts."}</p>
+        </div>
         <FairValue label={tr ? "Round" : "Round"} value={gameState.roundId} />
         <FairValue label={tr ? "Durum" : "Status"} value={gameState.status} />
-        <FairValue label={tr ? "Kilitli hash" : "Locked hash"} value={gameState.hash} mono />
-        <FairValue label="Server seed" value={gameState.serverSeed || (tr ? "Round bitince açıklanır" : "Revealed after round ends")} mono muted={!gameState.serverSeed} />
-        <FairValue label={tr ? "Salt / client seed" : "Salt / client seed"} value={gameState.salt || (tr ? "Round bitince açıklanır" : "Revealed after round ends")} mono muted={!gameState.salt} />
-        <FairValue label="Nonce" value={gameState.nonce ? String(gameState.nonce) : (tr ? "Round bitince açıklanır" : "Revealed after round ends")} mono muted={!gameState.nonce} />
+        <FairValue label="Server Hash" value={gameState.hash} mono />
+        <FairValue label="Revealed Server Seed" value={gameState.serverSeed || (tr ? "Round bitince açıklanır" : "Revealed after round ends")} mono muted={!gameState.serverSeed} />
+        <FairValue label="Client Seed" value={gameState.clientSeed || clientSeedDraft || "pending"} mono />
+        <FairValue label="Nonce" value={gameState.nonce ? String(gameState.nonce) : "pending"} mono muted={!gameState.nonce} />
         <FairValue label={tr ? "Düşüş noktası" : "Drop point"} value={gameState.crashPoint ? `${gameState.crashPoint.toFixed(2)}x` : (tr ? "Round bitince açıklanır" : "Revealed after round ends")} muted={!gameState.crashPoint} />
-        <FairValue label={tr ? "Hash girdisi" : "Hash input"} value={gameState.hashInput || (tr ? "serverSeed:salt:nonce" : "serverSeed:salt:nonce")} mono muted={!gameState.hashInput} />
+        <FairValue label={tr ? "Sonuç HMAC girdisi" : "Result HMAC input"} value={gameState.hashInput || "clientSeed:nonce"} mono muted={!gameState.hashInput} />
+        <FairValue label={tr ? "Sonuç HMAC-SHA256" : "Result HMAC-SHA256"} value={gameState.resultHash || (tr ? "Round bitince açıklanır" : "Revealed after round ends")} mono muted={!gameState.resultHash} />
       </div>
 
       {verifyMessage ? (
