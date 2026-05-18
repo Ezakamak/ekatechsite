@@ -7,7 +7,7 @@ export async function onRequestGet(context: any) {
 
   const incoming = await context.env.DB.prepare(
     `SELECT f.id AS friendship_id, f.requester_id, f.addressee_id, f.created_at, u.id AS user_id, u.name, u.username, u.display_name, op.display_name AS off_display_name,
-            COALESCE(op.avatar_url, u.avatar_url) AS avatar_url, op.selected_title, COALESCE(l.level,1) as level, COALESCE(l.xp,0) as xp
+            COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url, op.selected_title, COALESCE(l.level,1) as level, COALESCE(l.xp,0) as xp
      FROM off_friendships f
      JOIN users u ON u.id = f.requester_id
      LEFT JOIN off_profiles op ON op.user_id = u.id
@@ -17,7 +17,7 @@ export async function onRequestGet(context: any) {
 
   const outgoing = await context.env.DB.prepare(
     `SELECT f.id AS friendship_id, f.requester_id, f.addressee_id, f.created_at, u.id AS user_id, u.name, u.username, u.display_name, op.display_name AS off_display_name,
-            COALESCE(op.avatar_url, u.avatar_url) AS avatar_url, op.selected_title, COALESCE(l.level,1) as level, COALESCE(l.xp,0) as xp
+            COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url, op.selected_title, COALESCE(l.level,1) as level, COALESCE(l.xp,0) as xp
      FROM off_friendships f
      JOIN users u ON u.id = f.addressee_id
      LEFT JOIN off_profiles op ON op.user_id = u.id
