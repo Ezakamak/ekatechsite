@@ -66,10 +66,14 @@ export async function ensureOffProfile(context: any, userId: number) {
       bio TEXT,
       selected_title TEXT,
       selected_badge TEXT,
+      avatar_data TEXT,
+      banner_data TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `).run();
+  await context.env.DB.prepare(`ALTER TABLE off_profiles ADD COLUMN avatar_data TEXT`).run().catch(() => null);
+  await context.env.DB.prepare(`ALTER TABLE off_profiles ADD COLUMN banner_data TEXT`).run().catch(() => null);
   await context.env.DB.prepare(
     `INSERT INTO off_profiles (user_id) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM off_profiles WHERE user_id=?)`
   ).bind(userId, userId).run();

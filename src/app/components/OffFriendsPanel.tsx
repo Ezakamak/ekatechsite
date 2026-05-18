@@ -22,6 +22,7 @@ export function OffFriendsPanel() {
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const load = async () => {
     try {
@@ -110,39 +111,38 @@ export function OffFriendsPanel() {
     return new File([blob], `${kind}.webp`, { type: "image/webp" });
   };
 
-  const uploadImage = async (type: "avatar" | "banner", file: File) => {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("type", type);
-    const res = await fetch("/api/off/profile/upload", { method: "POST", body: form });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "Görsel yüklenemedi");
-    return data.url as string;
-  };
+  const fileToDataUrl = async (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Görsel okunamadı"));
+    reader.readAsDataURL(file);
+  });
 
   const saveProfile = async () => {
+    if (savingProfile) return;
     try {
-      let avatarUrl = profile.avatarUrl ?? null;
-      let bannerUrl = profile.bannerUrl ?? null;
-      if (avatarFile) avatarUrl = await uploadImage("avatar", await compressImage(avatarFile, "avatar"));
-      if (bannerFile) bannerUrl = await uploadImage("banner", await compressImage(bannerFile, "banner"));
-      const payload = {
+      setSavingProfile(true);
+      const unlockedTitleCodes = new Set(titles.map((title) => title.code));
+      const nextSelectedTitle = profile.selectedTitle && unlockedTitleCodes.has(profile.selectedTitle) ? profile.selectedTitle : null;
+      const payload: Record<string, unknown> = {
         display_name: profile.displayName,
-        avatar_url: avatarUrl,
-        banner_url: bannerUrl,
         bio: profile.bio,
-        selected_title: profile.selectedTitle ?? null,
+        selected_title: nextSelectedTitle,
         selected_badge: profile.selectedBadge,
       };
+      if (avatarFile) payload.avatar_data = await fileToDataUrl(await compressImage(avatarFile, "avatar"));
+      if (bannerFile) payload.banner_data = await fileToDataUrl(await compressImage(bannerFile, "banner"));
       const res = await fetch("/api/off/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Profil kaydedilemedi");
       setProfile(data.profile || { displayName: "" });
       setAvatarFile(null);
       setBannerFile(null);
-      toast.success("OFF profil güncellendi");
+      toast.success("OFF profil kaydedildi");
     } catch (error: any) {
       toast.error(error?.message || "Profil kaydedilemedi");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -174,7 +174,7 @@ export function OffFriendsPanel() {
     <div className="rounded-2xl border border-white/10 bg-black/20 p-3 space-y-3"><p className="text-sm font-medium">OFF Profilim</p>
       {(bannerPreview || profile.bannerUrl) ? <img src={bannerPreview || profile.bannerUrl || ""} alt="Banner preview" className="h-24 w-full rounded-2xl object-cover border border-white/20" /> : null}
       <div className="flex items-center gap-3">{(avatarPreview || profile.avatarUrl) ? <img src={avatarPreview || profile.avatarUrl || ""} alt="Avatar preview" className="h-16 w-16 rounded-full object-cover border border-cyan-300/40 shadow-[0_0_18px_rgba(34,211,238,0.35)]" /> : <div className="h-16 w-16 rounded-full bg-gradient-to-br from-cyan-500/40 to-purple-500/40" />}<div className="flex gap-2"><label className={`${btn} cursor-pointer border-cyan-300/40 bg-gradient-to-r from-cyan-400/25 to-purple-500/25`}>Avatar yükle<input type="file" accept="image/*" className="hidden" onChange={pickFile("avatar")} /></label><label className={`${btn} cursor-pointer border-cyan-300/30 bg-cyan-500/10`}>Banner yükle<input type="file" accept="image/*" className="hidden" onChange={pickFile("banner")} /></label></div></div>
-      <div className="grid gap-2 md:grid-cols-2"><input value={profile.displayName || ""} onChange={(e)=>setProfile((s)=>({ ...s, displayName: e.target.value.slice(0,24) }))} placeholder="OFF görünen ad" className="rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-sm"/><select value={profile.selectedTitle || ""} onChange={(e)=>setProfile((s)=>({ ...s, selectedTitle: e.target.value || null }))} disabled={!titles.length} className="rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-sm disabled:opacity-60"><option value="">{titleSelectLabel}</option>{titles.map((t)=><option key={t.code} value={t.code}>{t.name}</option>)}</select></div><textarea value={profile.bio || ""} onChange={(e)=>setProfile((s)=>({ ...s, bio: e.target.value.slice(0,160) }))} placeholder="Bio" className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-sm"/><button onClick={saveProfile} className={`${btn} border-cyan-300/40 bg-gradient-to-r from-cyan-400/25 to-purple-500/25 hover:shadow-[0_0_18px_rgba(34,211,238,0.35)]`}>Kaydet</button></div>
+      <div className="grid gap-2 md:grid-cols-2"><input value={profile.displayName || ""} onChange={(e)=>setProfile((s)=>({ ...s, displayName: e.target.value.slice(0,24) }))} placeholder="OFF görünen ad" className="rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-sm"/><select value={profile.selectedTitle || ""} onChange={(e)=>setProfile((s)=>({ ...s, selectedTitle: e.target.value || null }))} disabled={!titles.length} className="rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-sm disabled:opacity-60"><option value="">{titleSelectLabel}</option>{titles.map((t)=><option key={t.code} value={t.code}>{t.name}</option>)}</select></div><textarea value={profile.bio || ""} onChange={(e)=>setProfile((s)=>({ ...s, bio: e.target.value.slice(0,160) }))} placeholder="Bio" className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-sm"/><button type="button" onClick={saveProfile} disabled={savingProfile} className={`${btn} border-cyan-300/40 bg-gradient-to-r from-cyan-400/25 to-purple-500/25 hover:shadow-[0_0_18px_rgba(34,211,238,0.35)] disabled:opacity-60`}>{savingProfile ? "Kaydediliyor..." : "Kaydet"}</button></div>
     <div className="flex gap-2"><input value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key === "Enter") void searchUsers(); }} placeholder="Kullanıcı ara (en az 2 karakter)" className="flex-1 rounded-xl bg-black/40 border border-white/10 px-3 py-2"/><button onClick={searchUsers} disabled={searching} className={`${btn} border-cyan-300/40 bg-cyan-500/20 disabled:opacity-60`}>{searching ? "Aranıyor..." : "Ara"}</button></div>
     <div className="grid gap-2 md:grid-cols-2">{search.map((u)=> userRow(u, <button onClick={()=>sendRequest(u.id)} className={`${btn} border-cyan-300/40 bg-gradient-to-r from-cyan-400/25 to-purple-500/25 text-cyan-100`}>Arkadaş ekle</button>))}</div>
     {hasSearched && !searching && search.length === 0 ? <p className="text-sm text-white/70">Kullanıcı bulunamadı</p> : null}

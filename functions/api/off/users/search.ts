@@ -9,7 +9,7 @@ export async function onRequestGet(context: any) {
 
   const rows = await context.env.DB.prepare(
     `SELECT u.id, u.name, u.username, u.display_name, op.display_name AS off_display_name,
-            COALESCE(op.avatar_url, u.avatar_url) AS avatar_url,
+            COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
             op.selected_title,
             COALESCE(l.level, 1) as level,
             COALESCE(l.xp, 0) as xp,
