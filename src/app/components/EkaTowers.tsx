@@ -69,6 +69,10 @@ function payoutForLevel(betAmount: number, level: number, difficulty: Difficulty
   return roundTc(betAmount * multiplierForLevel(level, difficulty));
 }
 
+function adjustBetAmount(amount: number, multiplier: number) {
+  return Math.max(1, Math.min(1_000_000, roundTc(amount * multiplier)));
+}
+
 function createEmptyMatrix() {
   return Array.from({ length: LEVELS }, (_, rowIndex) =>
     Array.from({ length: TILES_PER_ROW }, (_, tileIndex) => ({
@@ -316,12 +320,13 @@ export function EkaTowers() {
                 className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0f212e] px-4 py-3 text-lg font-black text-white outline-none transition focus:border-cyan-300/60 disabled:cursor-not-allowed disabled:opacity-55"
               />
             </label>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {[10, 25, 50].map((amount) => (
-                <button key={amount} type="button" disabled={isPlaying || actionLoading || walletLoading} onClick={() => setBetAmount(amount)} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
-                  {amount} TC
-                </button>
-              ))}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" disabled={isPlaying || actionLoading || walletLoading} onClick={() => setBetAmount((current) => adjustBetAmount(current, 0.5))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+                /2
+              </button>
+              <button type="button" disabled={isPlaying || actionLoading || walletLoading} onClick={() => setBetAmount((current) => adjustBetAmount(current, 2))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+                x2
+              </button>
             </div>
           </div>
 

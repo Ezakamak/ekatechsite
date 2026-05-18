@@ -247,10 +247,20 @@ export function TechDice() {
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <label className="rounded-3xl border border-white/10 bg-black/25 p-4">
-                <span className="text-xs uppercase tracking-[0.18em] text-white/40">{tr ? "Tech Coin tutarı" : "Tech Coin amount"}</span>
-                <input type="number" min="1" max="10000" value={amount} onChange={(event) => setAmount(clampInteger(event.target.value, 1, 10_000))} className="mt-2 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-bold text-white outline-none focus:border-cyan-200/50" />
-              </label>
+              <div className="rounded-3xl border border-white/10 bg-black/25 p-4">
+                <label className="block">
+                  <span className="text-xs uppercase tracking-[0.18em] text-white/40">{tr ? "Tech Coin tutarı" : "Tech Coin amount"}</span>
+                  <input type="number" min="1" max="10000" value={amount} onChange={(event) => setAmount(clampInteger(event.target.value, 1, 10_000))} className="mt-2 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-lg font-bold text-white outline-none focus:border-cyan-200/50" />
+                </label>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button type="button" disabled={rolling} onClick={() => setAmount((current) => adjustBetAmount(current, 0.5))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+                    /2
+                  </button>
+                  <button type="button" disabled={rolling} onClick={() => setAmount((current) => adjustBetAmount(current, 2))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+                    x2
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <Stat label={tr ? "Çarpan" : "Multiplier"} value={`${math.multiplier.toFixed(2)}x`} glow />
                 <Stat label={tr ? "Ödül" : "Reward"} value={`${formatNumber(potentialReward, locale)} TC`} glow />
@@ -396,6 +406,10 @@ function clampInteger(value: unknown, min: number, max: number) {
   const numeric = Math.floor(Number(value));
   if (!Number.isFinite(numeric)) return min;
   return Math.max(min, Math.min(max, numeric));
+}
+
+function adjustBetAmount(amount: number, multiplier: number) {
+  return clampInteger(Math.floor((Number(amount) || 1) * multiplier), 1, 10_000);
 }
 
 function clampNumber(value: number, min: number, max: number) {

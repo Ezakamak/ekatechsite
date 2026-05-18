@@ -11,7 +11,9 @@ interface BetControlsProps {
   onCashOut: (panel: BetPanelState) => void;
 }
 
-const quickBets = [50, 100, 500];
+function adjustBetAmount(amount: number, multiplier: number) {
+  return Math.max(1, Math.min(1_000_000, Math.floor((Number(amount) || 1) * multiplier)));
+}
 
 export function BetControls({ panels, status, visualMultiplier, onPanelChange, onPlaceBet, onCashOut }: BetControlsProps) {
   const { language } = useLanguage();
@@ -45,18 +47,23 @@ export function BetControls({ panels, status, visualMultiplier, onPanelChange, o
               <span className="font-mono text-emerald-300">TC</span>
             </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {quickBets.map((amount) => (
-                <button
-                  key={amount}
-                  type="button"
-                  onClick={() => onPanelChange(panel.id, { amount: panel.amount + amount })}
-                  disabled={panel.isBetAccepted}
-                  className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 py-2 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  +{amount} TC
-                </button>
-              ))}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onPanelChange(panel.id, { amount: adjustBetAmount(panel.amount, 0.5) })}
+                disabled={panel.isBetAccepted}
+                className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 py-2 text-sm font-black text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                /2
+              </button>
+              <button
+                type="button"
+                onClick={() => onPanelChange(panel.id, { amount: adjustBetAmount(panel.amount, 2) })}
+                disabled={panel.isBetAccepted}
+                className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 py-2 text-sm font-black text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                x2
+              </button>
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">

@@ -130,16 +130,6 @@ type RouletteChatMessage = {
   created_at?: string;
 };
 
-const QUICK_BETS = [
-  { label: "10", value: 10 },
-  { label: "50", value: 50 },
-  { label: "100", value: 100 },
-  { label: "500", value: 500 },
-  { label: "1K", value: 1_000 },
-  { label: "5K", value: 5_000 },
-  { label: "10K", value: 10_000 },
-];
-
 const MIN_BET = 10;
 const MAX_BET = 10_000;
 const ROULETTE_WHEEL = [
@@ -177,6 +167,11 @@ function formatTc(value: number, locale: string) {
 
 function parseBetInput(value: string) {
   return Math.floor(Number(value.replace(/[^0-9]/g, "")) || 0);
+}
+
+function adjustBetInput(value: string, multiplier: number) {
+  const current = parseBetInput(value) || MIN_BET;
+  return String(Math.max(MIN_BET, Math.min(MAX_BET, Math.floor(current * multiplier))));
 }
 
 function numberColor(number: number) {
@@ -1282,19 +1277,23 @@ export function TechRoulette() {
               {stakeMode === "coin" && (
                 <div>
                   <p className="mb-3 text-xs uppercase tracking-[0.18em] text-white/45">
-                    Hızlı miktar
+                    Bahis çarpanı
                   </p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-3 2xl:grid-cols-5">
-                    {QUICK_BETS.map((chip) => (
-                      <button
-                        key={chip.value}
-                        type="button"
-                        onClick={() => setBetInput(String(chip.value))}
-                        className={`rounded-full border px-3 py-3 font-semibold transition-all ${betAmount === chip.value ? "border-amber-200 bg-amber-200 text-black shadow-lg shadow-amber-500/20" : "border-white/10 bg-white/10 text-white hover:bg-white/20"}`}
-                      >
-                        {chip.label}
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBetInput((current) => adjustBetInput(current, 0.5))}
+                      className="rounded-full border border-white/10 bg-white/10 px-3 py-3 font-black text-white transition-all hover:bg-white/20"
+                    >
+                      /2
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBetInput((current) => adjustBetInput(current, 2))}
+                      className="rounded-full border border-white/10 bg-white/10 px-3 py-3 font-black text-white transition-all hover:bg-white/20"
+                    >
+                      x2
+                    </button>
                   </div>
                 </div>
               )}
