@@ -10,7 +10,7 @@ type Notice = { type: "success" | "error" | "info"; text: string } | null;
 
 type GameState = {
   balance: number;
-  betAmount: number;
+  betAmount: string;
   mineCount: number;
   currentRoundBet: number;
   isRoundActive: boolean;
@@ -26,7 +26,7 @@ const STORAGE_KEY = "ekatech:techmines-techcoin:v1";
 const DEFAULT_GRID = Array.from({ length: GRID_SIZE }, (_, id) => ({ id, isMine: false, isRevealed: false }));
 const initialGameState: GameState = {
   balance: 0,
-  betAmount: 10,
+  betAmount: "10",
   mineCount: 3,
   currentRoundBet: 0,
   isRoundActive: false,
@@ -39,16 +39,16 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function roundTc(value: number) {
-  return Math.max(0, Math.floor(Number(value) || 0));
+function roundTc(value: unknown) {
+  return Number(Math.max(0, Number(value) || 0).toFixed(2));
 }
 
 function formatTc(value: number, locale: string) {
-  return new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(roundTc(value));
+  return new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(roundTc(value));
 }
 
-function adjustBetAmount(amount: number, multiplier: number) {
-  return Math.max(1, Math.min(1_000_000, roundTc(amount * multiplier)));
+function adjustBetAmount(amount: unknown, multiplier: number) {
+  return Math.max(1, Math.min(1_000_000, roundTc(Number(amount) * multiplier)));
 }
 
 function combinations(n: number, k: number) {
@@ -160,7 +160,7 @@ export function TechCoinMines() {
     setGameState((current) => ({
       ...current,
       balance: roundTc(Number(data?.wallet?.balance ?? current.balance)),
-      betAmount: round ? roundTc(Number(round.betAmount || current.betAmount)) : current.betAmount,
+      betAmount: round ? String(roundTc(Number(round.betAmount || current.betAmount))) : current.betAmount,
       mineCount: round ? Math.round(clamp(Number(round.mineCount || current.mineCount), 1, 24)) : current.mineCount,
       currentRoundBet: round?.isRoundActive ? roundTc(Number(round.betAmount || 0)) : 0,
       isRoundActive: Boolean(round?.isRoundActive),
@@ -212,7 +212,7 @@ export function TechCoinMines() {
     const parsed = JSON.parse(saved) as Partial<GameState>;
     setGameState((current) => ({
       ...current,
-      betAmount: roundTc(clamp(Number(parsed.betAmount ?? current.betAmount), 1, 1000000)),
+      betAmount: String(roundTc(clamp(Number(parsed.betAmount ?? current.betAmount), 1, 1000000))),
       mineCount: Math.round(clamp(Number(parsed.mineCount ?? current.mineCount), 1, 24)),
     }));
   }, []);
@@ -240,8 +240,10 @@ export function TechCoinMines() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  const betAmountNumber = Number(gameState.betAmount);
+  const validBetAmount = Number.isFinite(betAmountNumber) && betAmountNumber > 0 ? roundTc(Math.min(betAmountNumber, 1_000_000)) : 0;
   const nextMultiplier = calculateMultiplier(gameState.mineCount, gameState.revealedDiamondsCount + 1);
-  const nextProfit = gameState.isRoundActive ? Math.max(0, gameState.currentRoundBet * nextMultiplier - gameState.currentRoundBet) : Math.max(0, gameState.betAmount * calculateMultiplier(gameState.mineCount, 1) - gameState.betAmount);
+  const nextProfit = gameState.isRoundActive ? Math.max(0, gameState.currentRoundBet * nextMultiplier - gameState.currentRoundBet) : Math.max(0, validBetAmount * calculateMultiplier(gameState.mineCount, 1) - validBetAmount);
   const cashoutAmount = roundTc(gameState.currentRoundBet * gameState.currentMultiplier);
   const cashoutProfit = Math.max(0, roundTc(cashoutAmount - gameState.currentRoundBet));
   const maxDiamonds = GRID_SIZE - gameState.mineCount;
@@ -268,7 +270,7 @@ export function TechCoinMines() {
   }
 
   async function startRound() {
-    const betAmount = roundTc(gameState.betAmount);
+    const betAmount = validBetAmount;
     if (betAmount < 1) {
       setNotice({ type: "error", text: copy.minBet });
       playOffSound("error");
@@ -368,14 +370,14 @@ export function TechCoinMines() {
             <div className="mt-5 space-y-5">
               <label className="block">
                 <span className="text-sm font-medium text-white/70">{copy.betAmount}</span>
-                <input type="number" min="1" step="1" disabled={gameState.isRoundActive || actionLoading || walletLoading} value={gameState.betAmount} onChange={(event) => setGameState((current) => ({ ...current, betAmount: roundTc(clamp(Number(event.target.value), 0, 1000000)) }))} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0f212e] px-4 py-3 text-lg font-semibold text-white outline-none transition focus:border-emerald-300/60 disabled:cursor-not-allowed disabled:opacity-55" />
+                <input type="number" min="1" step="any" disabled={gameState.isRoundActive || actionLoading || walletLoading} value={gameState.betAmount} onChange={(event) => setGameState((current) => ({ ...current, betAmount: event.target.value }))} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0f212e] px-4 py-3 text-lg font-semibold text-white outline-none transition focus:border-emerald-300/60 disabled:cursor-not-allowed disabled:opacity-55" />
               </label>
 
               <div className="grid grid-cols-2 gap-2">
-                <button type="button" disabled={gameState.isRoundActive || actionLoading || walletLoading} onClick={() => setGameState((current) => ({ ...current, betAmount: adjustBetAmount(current.betAmount, 0.5) }))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+                <button type="button" disabled={gameState.isRoundActive || actionLoading || walletLoading} onClick={() => setGameState((current) => ({ ...current, betAmount: String(adjustBetAmount(current.betAmount, 0.5)) }))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
                   /2
                 </button>
-                <button type="button" disabled={gameState.isRoundActive || actionLoading || walletLoading} onClick={() => setGameState((current) => ({ ...current, betAmount: adjustBetAmount(current.betAmount, 2) }))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
+                <button type="button" disabled={gameState.isRoundActive || actionLoading || walletLoading} onClick={() => setGameState((current) => ({ ...current, betAmount: String(adjustBetAmount(current.betAmount, 2)) }))} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45">
                   x2
                 </button>
               </div>
