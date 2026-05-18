@@ -8,6 +8,7 @@ const STARTING_HAND = 3;
 const MAX_HAND = 6;
 const INACTIVE_MATCH_TIMEOUT_MINUTES = 5;
 export const TURN_SECONDS = 20;
+const RESOLVED_TURN_FAILSAFE_SECONDS = 3;
 
 type CardType = "attack" | "defense" | "utility" | "trap" | "overload";
 type Card = { id: string; name: string; type: CardType; cost: number; tags?: string[]; description?: string; text?: string };
@@ -205,25 +206,59 @@ export async function ensureTurnIfReady(context: any, lobbyId: number) {
   const players = await getPlayers(context, lobbyId);
   if (players.length < 2 || players.some((p: any) => !p.entered_at)) return;
   const activeTurn = await context.env.DB.prepare("SELECT id FROM core_clash_turns WHERE lobby_id = ? AND status = 'active' LIMIT 1").bind(lobbyId).first();
-  const latest = await context.env.DB.prepare("SELECT status FROM core_clash_turns WHERE lobby_id = ? ORDER BY turn_number DESC LIMIT 1").bind(lobbyId).first();
-  if (activeTurn || latest?.status === "resolved") return;
+  const latest = await context.env.DB.prepare("SELECT * FROM core_clash_turns WHERE lobby_id = ? ORDER BY turn_number DESC LIMIT 1").bind(lobbyId).first();
+  if (activeTurn) return;
+  if (latest?.status === "resolved") {
+    await advanceStaleResolvedTurn(context, lobbyId, "ensureTurnIfReady");
+    return;
+  }
   if (Number(lobby.turn_number || 0) === 0) await startNextTurn(context, lobbyId, 1);
 }
 
 export async function startNextTurn(context: any, lobbyId: number, turnNumber: number) {
-  if (await finalizeIfHpDepleted(context, lobbyId)) return;
+  if (await finalizeIfHpDepleted(context, lobbyId)) return false;
   const lobby = await getLobby(context, lobbyId);
-  if (!lobby || lobby.status !== "in_progress") return;
+  if (!lobby || lobby.status !== "in_progress") return false;
 
   const players = await getPlayers(context, lobbyId);
-  if (players.length < 2) return;
-  for (const p of players) await refreshPlayerForTurn(context, p, turnNumber);
+  if (players.length < 2) return false;
 
-  if (await finalizeIfHpDepleted(context, lobbyId)) return;
+  const existingActive = await context.env.DB.prepare("SELECT id FROM core_clash_turns WHERE lobby_id = ? AND status = 'active' LIMIT 1").bind(lobbyId).first();
+  if (existingActive) return false;
 
   const deadline = new Date(Date.now() + TURN_SECONDS * 1000).toISOString();
-  await context.env.DB.prepare("INSERT OR IGNORE INTO core_clash_turns (lobby_id, turn_number, deadline_at, status) VALUES (?, ?, ?, 'active')").bind(lobbyId, turnNumber, deadline).run();
+  const inserted = await context.env.DB.prepare("INSERT OR IGNORE INTO core_clash_turns (lobby_id, turn_number, deadline_at, status) VALUES (?, ?, ?, 'active')").bind(lobbyId, turnNumber, deadline).run();
+  if (Number(inserted?.meta?.changes || 0) <= 0) {
+    console.log("[CoreClash][round-flow] duplicate next round ignored", { lobbyId, round: turnNumber, phase: "roundTransition" });
+    return false;
+  }
+
+  for (const p of players) await refreshPlayerForTurn(context, p, turnNumber);
+
+  if (await finalizeIfHpDepleted(context, lobbyId)) return true;
+
   await context.env.DB.prepare("UPDATE core_clash_lobbies SET turn_number = ?, deadline_at = ?, updated_at = datetime('now') WHERE id = ? AND status = 'in_progress'").bind(turnNumber, deadline, lobbyId).run();
+  console.log("[CoreClash][round-flow] phase changed to playing", { lobbyId, round: turnNumber, phase: "playing" });
+  return true;
+}
+
+export async function advanceStaleResolvedTurn(context: any, lobbyId: number, reason = "failsafe") {
+  const lobby = await getLobby(context, lobbyId);
+  if (!lobby || lobby.status !== "in_progress") return false;
+  const turn = await context.env.DB.prepare("SELECT * FROM core_clash_turns WHERE lobby_id = ? ORDER BY turn_number DESC LIMIT 1").bind(lobbyId).first();
+  if (!turn || turn.status !== "resolved") return false;
+  const resolvedAt = parseDateMs(turn.resolved_at);
+  if (Number.isFinite(resolvedAt) && resolvedAt > 0 && Date.now() - resolvedAt < RESOLVED_TURN_FAILSAFE_SECONDS * 1000) return false;
+  console.log("[CoreClash][round-flow] resolved turn failsafe advancing", {
+    lobbyId,
+    round: Number(turn.turn_number || 0),
+    phase: "roundTransition",
+    playerActionResolved: Boolean(turn.creator_card_id),
+    opponentActionResolved: Boolean(turn.opponent_card_id),
+    isTransitioning: false,
+    reason,
+  });
+  return await startNextTurn(context, lobbyId, Number(turn.turn_number || 0) + 1);
 }
 
 export async function refreshPlayerForTurn(context: any, player: PlayerState, turnNumber: number) {
@@ -239,7 +274,7 @@ export async function refreshPlayerForTurn(context: any, player: PlayerState, tu
       if (drawn) hand.push(drawn);
     }
   }
-  const baseEnergy = Number(player.energy || STARTING_ENERGY) + 1;
+  const baseEnergy = Number(player.energy ?? STARTING_ENERGY) + 1;
   const nextEnergy = Math.max(0, Math.min(MAX_ENERGY, baseEnergy + Number(player.energy_delta_next || 0)));
   const nextHeat = Number(player.heat || 0) >= 3 ? Math.max(0, Number(player.heat || 0) - 2) : Number(player.heat || 0);
   await context.env.DB.prepare("UPDATE core_clash_players SET energy = ?, heat = ?, deck_json = ?, hand_json = ?, discard_json = ?, energy_delta_next = 0, draw_block_next = 0, updated_at = datetime('now') WHERE id = ?").bind(nextEnergy, nextHeat, JSON.stringify(deck), JSON.stringify(hand.slice(0, MAX_HAND)), JSON.stringify(discard), player.id).run();

@@ -1,4 +1,4 @@
-import { buildState, CARDS, ensureTurnIfReady, getLobby, getPlayers, requireUser, startNextTurn } from "./core-clash-v2";
+import { advanceStaleResolvedTurn, buildState, CARDS, ensureTurnIfReady, getLobby, getPlayers, requireUser, startNextTurn } from "./core-clash-v2";
 
 type CardType = "attack" | "defense" | "utility" | "trap" | "overload" | "pass";
 type Card = { id: string; name: string; type: CardType; cost: number; tags?: string[] };
@@ -32,6 +32,7 @@ export async function onRequestGet(context: any) {
     await maybePlayBotCard(context, lobbyId);
     await resolveIfReady(context, lobbyId);
     await resolveExpiredTurn(context, lobbyId);
+    await advanceStaleResolvedTurn(context, lobbyId, "get watchdog");
     return Response.json(await buildState(context, lobbyId, auth.user.id));
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Core Clash maçı alınamadı." }, { status: 500 });
@@ -52,6 +53,7 @@ export async function onRequestPost(context: any) {
     await maybePlayBotCard(context, lobbyId);
     await resolveIfReady(context, lobbyId);
     await resolveExpiredTurn(context, lobbyId);
+    if (action !== "next") await advanceStaleResolvedTurn(context, lobbyId, "post watchdog");
 
     if (action === "next") {
       await advanceAfterResolved(context, lobbyId, auth.user.id);
@@ -116,7 +118,17 @@ async function resolveExpiredTurn(context: any, lobbyId: number) {
 
 async function resolveIfReady(context: any, lobbyId: number) {
   const turn = await context.env.DB.prepare("SELECT * FROM core_clash_turns WHERE lobby_id = ? AND status = 'active' ORDER BY turn_number DESC LIMIT 1").bind(lobbyId).first();
-  if (turn && turn.creator_card_id && turn.opponent_card_id) await resolveTurn(context, lobbyId, turn);
+  if (turn && turn.creator_card_id && turn.opponent_card_id) {
+    console.log("[CoreClash][round-flow] resolving round", {
+      lobbyId,
+      round: Number(turn.turn_number || 0),
+      phase: "resolving",
+      playerActionResolved: true,
+      opponentActionResolved: true,
+      isTransitioning: false,
+    });
+    await resolveTurn(context, lobbyId, turn);
+  }
 }
 
 async function maybePlayBotCard(context: any, lobbyId: number) {
@@ -216,7 +228,8 @@ async function resolveTurn(context: any, lobbyId: number, turn: any) {
   await context.env.DB.prepare("UPDATE core_clash_turns SET status = 'resolved', resolution = ?, resolved_at = datetime('now') WHERE id = ? AND status = 'active'").bind(payload, turn.id).run();
 
   if (winner) {
-    await context.env.DB.prepare("UPDATE core_clash_lobbies SET status = 'completed', winner_user_id = ?, updated_at = datetime('now') WHERE id = ?").bind(winner, lobbyId).run();
+    await context.env.DB.prepare("UPDATE core_clash_lobbies SET status = 'completed', winner_user_id = ?, deadline_at = NULL, updated_at = datetime('now') WHERE id = ?").bind(winner, lobbyId).run();
+    console.log("[CoreClash][round-flow] phase changed to finished", { lobbyId, round: Number(turn.turn_number || 0), phase: "finished" });
   }
 }
 
@@ -227,6 +240,14 @@ async function advanceAfterResolved(context: any, lobbyId: number, userId: numbe
   if (!player) return;
   const turn = await context.env.DB.prepare("SELECT * FROM core_clash_turns WHERE lobby_id = ? ORDER BY turn_number DESC LIMIT 1").bind(lobbyId).first();
   if (!turn || turn.status !== "resolved") return;
+  console.log("[CoreClash][round-flow] nextRound requested", {
+    lobbyId,
+    round: Number(turn.turn_number || 0),
+    phase: "roundTransition",
+    playerActionResolved: Boolean(turn.creator_card_id),
+    opponentActionResolved: Boolean(turn.opponent_card_id),
+    isTransitioning: true,
+  });
   await startNextTurn(context, lobbyId, Number(turn.turn_number || 0) + 1);
 }
 

@@ -102,8 +102,11 @@ export function CoreClash() {
   const [mapReveal, setMapReveal] = useState(false);
   const holdTimer = useRef<number | null>(null);
   const sequenceTimers = useRef<number[]>([]);
+  const nextRoundTimer = useRef<number | null>(null);
+  const watchdogTimer = useRef<number | null>(null);
   const activeResolution = useRef<string | null>(null);
   const autoAdvanced = useRef<string | null>(null);
+  const isTransitioning = useRef(false);
   const revealKey = useRef("");
 
   const c = useMemo(() => tr ? {
@@ -111,14 +114,37 @@ export function CoreClash() {
   : {
     title: "Core Clash", create: "Create lobby with random map", join: "Join", enter: "Enter match", open: "Open lobbies", mine: "My matches", empty: "No open lobby yet.", hand: "Your hand", selected: "Card selected · waiting for opponent", opponentSelected: "Opponent selected", both: "Match will not start before both players enter the lobby.", timer: "Turn timer", hp: "Core HP", energy: "Energy", heat: "Heat", cost: "Energy", anti: "Countered by", boost: "Map boost", refresh: "Refresh", waiting: "Waiting for Player 2", live: "Live match", completed: "Completed", rule: "Starting hand: 3 cards. Draw 1 each turn. Hand limit: 6. Turn timer: 20 seconds. Skip passes the turn. When time ends, missing choices become skip; damage is shown step by step.", host: "Host", player2: "Player 2", emptySlot: "Waiting for join", backOff: "OFF Hub", mapReveal: "Battlefield selected", resolving: "Sequential round flow", nextRound: "Starting next round", skip: "Skip", pause: "Short pause · preparing the next player action.", done: "Both actions are complete. Next round starts automatically.", damageBar: "The target HP bar drains slowly.", healBar: "The HP bar restores slowly.", close: "Close lobby", closed: "Lobby closed." }, [tr]);
 
+  const clearNextRoundTimers = () => {
+    if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current);
+    if (watchdogTimer.current) window.clearTimeout(watchdogTimer.current);
+    nextRoundTimer.current = null;
+    watchdogTimer.current = null;
+  };
+
   const clearSequenceTimers = () => {
     sequenceTimers.current.forEach((timer) => window.clearTimeout(timer));
     sequenceTimers.current = [];
+    clearNextRoundTimers();
+  };
+
+  const logRoundFlow = (event: string, state: MatchState | null = match, extra: Record<string, unknown> = {}) => {
+    const me = state?.me || "creator";
+    const opponent = state?.opponent || "opponent";
+    console.info("[CoreClash][round-flow]", {
+      event,
+      round: state?.turn_number ?? null,
+      phase: state?.lobby.status === "completed" ? "finished" : state?.turn_status ?? "waiting",
+      playerActionResolved: Boolean(state?.selected?.[me]),
+      opponentActionResolved: Boolean(state?.selected?.[opponent]),
+      isTransitioning: isTransitioning.current,
+      ...extra,
+    });
   };
 
   const schedule = (callback: () => void, delay: number) => {
     const timer = window.setTimeout(callback, delay);
     sequenceTimers.current.push(timer);
+    return timer;
   };
 
   const ownedOpenLobbyIds = useMemo(() => [...open, ...mine].filter((lobby) => lobby.status === "open" && user?.id === lobby.creator_user_id).map((lobby) => lobby.id), [open, mine, user?.id]);
@@ -126,9 +152,9 @@ export function CoreClash() {
 
   const hydrateHand = (cards: Card[]) => (cards || []).map((card) => CARD_BY_ID[card.id] || card);
   const loadLobbies = async (silent = false) => { if (!silent) { setBusy(true); setNotice(null); } try { const response = await fetch("/api/core-clash-v2", { credentials: "same-origin", cache: "no-store" }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "Core Clash yüklenemedi."); setUser(data.user || null); setOpen(data.open || []); setMine(data.mine || []); } catch (error) { if (!silent) setNotice({ type: "error", text: error instanceof Error ? error.message : "Core Clash yüklenemedi." }); } finally { if (!silent) setBusy(false); } };
-  const loadMatch = async (id = activeLobby, silent = true) => { if (!id) return; try { const response = await fetch(`/api/core-clash-v2-action?lobby_id=${id}`, { credentials: "same-origin", cache: "no-store" }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "Maç yüklenemedi."); data.hand = hydrateHand(data.hand || []); setMatch(data); setActiveLobby(data.lobby?.id || id); if (data.turn_status !== "resolved" && activeResolution.current !== data.resolution_id) setDisplayHp(data.hp); } catch (error) { if (!silent) setNotice({ type: "error", text: error instanceof Error ? error.message : "Maç yüklenemedi." }); } };
+  const loadMatch = async (id = activeLobby, silent = true) => { if (!id) return; try { const response = await fetch(`/api/core-clash-v2-action?lobby_id=${id}`, { credentials: "same-origin", cache: "no-store" }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "Maç yüklenemedi."); data.hand = hydrateHand(data.hand || []); setMatch(data); setActiveLobby(data.lobby?.id || id); logRoundFlow("match loaded", data); if (data.turn_status !== "resolved") { clearNextRoundTimers(); isTransitioning.current = false; if (activeResolution.current !== data.resolution_id) setDisplayHp(data.hp); logRoundFlow(data.turn_status === "completed" ? "phase changed to finished" : "phase changed to playing", data); } } catch (error) { if (!silent) setNotice({ type: "error", text: error instanceof Error ? error.message : "Maç yüklenemedi." }); } };
 
-  const submitAction = async (payload: Record<string, string>, silent = false) => { if (!match && !payload.lobby_id) return; if (!silent) { setBusy(true); setNotice(null); } try { const response = await fetch("/api/core-clash-v2-action", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lobby_id: match?.lobby.id, ...payload }) }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "İşlem yapılamadı."); data.hand = hydrateHand(data.hand || []); setMatch(data); if (data.turn_status !== "resolved") { activeResolution.current = null; setActiveStep(null); setPhaseText(""); setSequenceDone(false); setDisplayHp(data.hp); } } catch (error) { if (!silent) setNotice({ type: "error", text: error instanceof Error ? error.message : "İşlem yapılamadı." }); } finally { if (!silent) setBusy(false); } };
+  const submitAction = async (payload: Record<string, string>, silent = false) => { if (!match && !payload.lobby_id) return false; if (!silent) { setBusy(true); setNotice(null); } try { const response = await fetch("/api/core-clash-v2-action", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lobby_id: match?.lobby.id, ...payload }) }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "İşlem yapılamadı."); data.hand = hydrateHand(data.hand || []); setMatch(data); logRoundFlow(payload.action === "next" ? "nextRound executed" : "player action submitted", data); if (data.turn_status !== "resolved") { activeResolution.current = null; clearNextRoundTimers(); setActiveStep(null); setPhaseText(""); setSequenceDone(false); setDisplayHp(data.hp); logRoundFlow(data.turn_status === "completed" ? "phase changed to finished" : "phase changed to playing", data); } return payload.action === "next" ? data.turn_status !== "resolved" : true; } catch (error) { if (!silent) setNotice({ type: "error", text: error instanceof Error ? error.message : "İşlem yapılamadı." }); console.warn("[CoreClash][round-flow] action failed", { action: payload.action, error }); return false; } finally { if (!silent) setBusy(false); } };
 
   useEffect(() => { loadLobbies(); const ticker = window.setInterval(() => setNow(Date.now()), 250); const poll = window.setInterval(() => activeLobby ? loadMatch(activeLobby, true) : loadLobbies(true), 1500); return () => { window.clearInterval(ticker); window.clearInterval(poll); }; }, [activeLobby, language]);
   useEffect(() => () => clearSequenceTimers(), []);
@@ -142,6 +168,34 @@ export function CoreClash() {
       window.setTimeout(() => setMapReveal(false), 2400);
     }
   }, [match?.lobby.id, match?.map.key, match?.turn_number]);
+
+  const triggerNextRound = async (resolutionId: string | null | undefined, reason: string, state: MatchState) => {
+    if (!resolutionId || state.lobby.status === "completed") {
+      logRoundFlow("phase changed to finished", state, { reason });
+      return;
+    }
+    if (isTransitioning.current) {
+      logRoundFlow("nextRound skipped: already transitioning", state, { reason });
+      return;
+    }
+    isTransitioning.current = true;
+    logRoundFlow("nextRound executing", state, { reason });
+    let ok = false;
+    try {
+      ok = await submitAction({ action: "next" }, true);
+      if (ok) autoAdvanced.current = resolutionId;
+    } finally {
+      isTransitioning.current = false;
+      logRoundFlow("transition guard reset", state, { reason });
+    }
+    if (!ok && autoAdvanced.current !== resolutionId) {
+      logRoundFlow("nextRound retry timer started", state, { reason, delayMs: 1500 });
+      if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current);
+      nextRoundTimer.current = window.setTimeout(() => {
+        void triggerNextRound(resolutionId, "retry", state);
+      }, 1500);
+    }
+  };
 
   useEffect(() => {
     if (!match?.resolution_id || activeResolution.current === match.resolution_id) return;
@@ -207,11 +261,26 @@ export function CoreClash() {
     }, delay);
 
     schedule(() => {
-      if (match.lobby.status !== "completed" && autoAdvanced.current !== match.resolution_id) {
-        autoAdvanced.current = match.resolution_id || null;
-        submitAction({ action: "next" }, true);
+      clearNextRoundTimers();
+      if (match.lobby.status === "completed") {
+        logRoundFlow("phase changed to finished", match);
+        return;
       }
-    }, delay + 1200);
+      if (autoAdvanced.current === match.resolution_id) return;
+      logRoundFlow("nextRound timer started", match, { delayMs: 1200 });
+      nextRoundTimer.current = window.setTimeout(() => {
+        void triggerNextRound(match.resolution_id, "transition timer", match);
+      }, 1200);
+      watchdogTimer.current = window.setTimeout(() => {
+        if (autoAdvanced.current !== match.resolution_id) {
+          setActiveStep(null);
+          setDamageFlash({ creator: 0, opponent: 0 });
+          setSequenceDone(false);
+          logRoundFlow("roundTransition watchdog fired", match, { timeoutMs: 3000 });
+          void triggerNextRound(match.resolution_id, "watchdog", match);
+        }
+      }, 3000);
+    }, delay);
   }, [match?.resolution_id]);
 
   const createLobby = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); setNotice(null); try { const response = await fetch("/api/core-clash-v2", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }); const data = await response.json().catch(() => null); if (!response.ok) throw new Error(data?.error || "Lobi oluşturulamadı."); await loadLobbies(true); setNotice({ type: "success", text: data?.message || "Core Clash lobisi oluşturuldu." }); } catch (error) { setNotice({ type: "error", text: error instanceof Error ? error.message : "Lobi oluşturulamadı." }); } finally { setBusy(false); } };
