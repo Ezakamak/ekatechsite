@@ -1,4 +1,5 @@
 import { awardGameExp, expForGame } from "../_levels";
+import { recordOffMatch } from "../_offMatches";
 
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const LEVELS = 9;
@@ -63,10 +64,26 @@ export async function onRequestPost(context: any) {
 
     if (action === "start")
       return json(await startRound(context, auth.user.id, body));
-    if (action === "reveal")
-      return json(await revealTile(context, auth.user.id, body));
-    if (action === "cashout")
-      return json(await cashoutRound(context, auth.user.id));
+    if (action === "reveal") {
+      const result = await revealTile(context, auth.user.id, body);
+      if (["trap_hit", "tower_cleared"].includes(String(result?.message))) {
+        const offSummary = await recordOffMatch(context, auth.user.id, {
+          gameKey: "towers",
+          result: result.message === "tower_cleared" ? "win" : "loss",
+          score: Number(result?.payout || 0),
+          expAmount: 0,
+          pointsEarned: Number(result?.payout || 0),
+          perfectRound: result.message === "tower_cleared",
+        });
+        return json({ ...result, ...offSummary });
+      }
+      return json(result);
+    }
+    if (action === "cashout") {
+      const result = await cashoutRound(context, auth.user.id);
+      const offSummary = await recordOffMatch(context, auth.user.id, { gameKey: "towers", result: "completed", score: Number(result?.payout || 0), expAmount: 0, pointsEarned: Number(result?.payout || 0) });
+      return json({ ...result, ...offSummary });
+    }
 
     return json({ error: "Geçersiz Eka Towers işlemi." }, { status: 400 });
   } catch (error) {

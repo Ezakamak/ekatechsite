@@ -46,6 +46,16 @@ import { TechBlackjack } from "./TechBlackjack";
 import { TechCoinWalletBadge } from "./TechCoinWalletBadge";
 import { playOffSound } from "./OffSoundEngine";
 
+import { OffProfile } from "./off/OffProfile";
+import { OffQuests } from "./off/OffQuests";
+import { OffBadges } from "./off/OffBadges";
+import { OffCosmetics } from "./off/OffCosmetics";
+import { OffLeaderboard } from "./off/OffLeaderboard";
+import { OffSeasonCard } from "./off/OffSeasonCard";
+import { OffEvents } from "./off/OffEvents";
+import { OffFriends } from "./off/OffFriends";
+import { OffMatchHistory } from "./off/OffMatchHistory";
+
 const TechRoulette = lazy(() =>
   import("./TechRoulette").then((module) => ({ default: module.TechRoulette })),
 );
@@ -136,6 +146,8 @@ type LevelProgress = {
   verified: boolean;
 };
 
+type OffHubTab = "overview" | "games" | "profile" | "quests" | "leaderboard" | "cosmetics" | "friends" | "events" | "matchHistory";
+
 type GameKey =
   | "hub"
   | "duel"
@@ -191,6 +203,7 @@ export function OffPage() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeGame, setActiveGame] = useState<GameKey>("hub");
+  const [activeTab, setActiveTab] = useState<OffHubTab>("overview");
   const [shopCatalog, setShopCatalog] = useState<ShopCatalogItem[]>([]);
   const [tlPackages, setTlPackages] = useState<TechStoreTlPackage[]>([]);
   const [shopInventory, setShopInventory] = useState<ShopInventoryItem[]>([]);
@@ -276,7 +289,7 @@ export function OffPage() {
         packageIncludes: "Paket içeriği",
         levelTitle: "OFF Level",
         expToNext: "sonraki levele",
-        verifiedName: "Level 5+ mavi tik",
+        verifiedName: "Level 10+ mavi tik",
       }
     : {
         loading: "Checking OFF access...",
@@ -357,7 +370,7 @@ export function OffPage() {
         packageIncludes: "Package includes",
         levelTitle: "OFF Level",
         expToNext: "to next level",
-        verifiedName: "Level 5+ blue check",
+        verifiedName: "Level 10+ blue check",
       };
 
   useEffect(() => {
@@ -491,6 +504,29 @@ export function OffPage() {
     user?.role === "off" || user?.role === "admin" || user?.role === "owner";
 
   const handleGameBoundaryBack = () => setActiveGame("hub");
+
+  const hubTabs: Array<{ key: OffHubTab; label: string }> = [
+    { key: "overview", label: "Overview" },
+    { key: "games", label: "Games" },
+    { key: "profile", label: "Profile" },
+    { key: "quests", label: "Quests" },
+    { key: "leaderboard", label: "Leaderboard" },
+    { key: "cosmetics", label: "Cosmetics" },
+    { key: "friends", label: "Friends" },
+    { key: "events", label: "Events" },
+    { key: "matchHistory", label: "Match History" },
+  ];
+
+  const renderTabContent = () => {
+    if (activeTab === "profile") return <OffProfile />;
+    if (activeTab === "quests") return <><OffQuests /><div className="mt-5"><OffBadges /></div></>;
+    if (activeTab === "leaderboard") return <OffLeaderboard />;
+    if (activeTab === "cosmetics") return <OffCosmetics />;
+    if (activeTab === "friends") return <OffFriends />;
+    if (activeTab === "events") return <OffEvents />;
+    if (activeTab === "matchHistory") return <OffMatchHistory />;
+    return null;
+  };
 
   if (loading) {
     return (
@@ -671,7 +707,27 @@ export function OffPage() {
           </div>
         </motion.section>
 
-        <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+        <nav className="sticky top-20 z-30 -mx-4 overflow-x-auto border-y border-white/10 bg-black/80 px-4 py-3 backdrop-blur-xl sm:rounded-full sm:border sm:px-3" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div className="flex min-w-max gap-2">
+            {hubTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => { playOffSound("click"); setActiveTab(tab.key); }}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${activeTab === tab.key ? "bg-white text-black" : "border border-white/10 bg-white/[0.04] text-white/60 hover:text-white"}`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        {activeTab !== "overview" && activeTab !== "games" ? (
+          <section className="pb-40">{renderTabContent()}</section>
+        ) : null}
+
+        {activeTab === "overview" ? (
+          <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
           <CoinWalletCard
             wallet={wallet}
             copy={copy}
@@ -707,7 +763,20 @@ export function OffPage() {
             </div>
           </div>
         </section>
+        ) : null}
 
+        {activeTab === "overview" ? (
+          <section className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+            <OffSeasonCard />
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 text-white/60 backdrop-blur-xl sm:p-6">
+              <p className="text-xs uppercase tracking-[0.24em] text-cyan-100/50">Daily Quest Preview</p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">Görevler, rozetler ve son maç özeti hazır.</h2>
+              <p className="mt-3 text-sm leading-6">Detaylar için Quests ve Match History sekmelerine geç. Mevcut oyun grid'i aşağıda aynı aktifGame yapısıyla korunur.</p>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "overview" || activeTab === "games" ? (
         <section className="grid gap-5 pb-40 md:grid-cols-2 xl:grid-cols-3">
           <GameCard
             icon={<Store className="h-6 w-6" />}
@@ -890,6 +959,7 @@ export function OffPage() {
             }}
           />
         </section>
+        ) : null}
       </div>
     </main>
   );

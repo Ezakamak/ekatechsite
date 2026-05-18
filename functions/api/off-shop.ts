@@ -1,4 +1,5 @@
 import { awardGameExp, getLevelProgress } from "../_levels";
+import { ensureCoinTables, ensureWallet, getWallet } from "../_coinWallet";
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 
 type TechStorePackage = {
@@ -230,46 +231,6 @@ async function ensureShopTables(context: any) {
   ).run();
 }
 
-async function ensureCoinTables(context: any) {
-  await context.env.DB.prepare(
-    `CREATE TABLE IF NOT EXISTS coin_wallets (user_id INTEGER PRIMARY KEY, balance REAL DEFAULT 100, lifetime_earned REAL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
-  ).run();
-  await context.env.DB.prepare(
-    `CREATE TABLE IF NOT EXISTS coin_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, amount REAL NOT NULL, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
-  ).run();
-}
-
-async function ensureWallet(context: any, userId: number) {
-  await context.env.DB.prepare(
-    `INSERT OR IGNORE INTO coin_wallets (user_id, balance, lifetime_earned, updated_at) VALUES (?, 100, 0, datetime('now'))`,
-  )
-    .bind(userId)
-    .run();
-}
-
-async function getWallet(context: any, userId: number) {
-  const wallet = await context.env.DB.prepare(
-    `SELECT balance, lifetime_earned, updated_at FROM coin_wallets WHERE user_id = ?`,
-  )
-    .bind(userId)
-    .first();
-  return {
-    currency: "Tech Coin",
-    symbol: "TC",
-    balance: Number(wallet?.balance || 0),
-    lifetime_earned: Number(wallet?.lifetime_earned || 0),
-    updated_at: wallet?.updated_at || null,
-  };
-}
-
-function loadInventory(context: any, userId: number) {
-  return context.env.DB.prepare(
-    `SELECT id, item_slug, item_name, emoji, roulette_value, status, acquired_at, used_at, roulette_bet_id FROM off_shop_inventory WHERE user_id = ? ORDER BY id DESC LIMIT 80`,
-  )
-    .bind(userId)
-    .all()
-    .then((result: any) => result?.results || []);
-}
 
 async function requireOffUser(context: any) {
   const token = getCookie(

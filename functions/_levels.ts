@@ -9,7 +9,7 @@ export type LevelProgress = {
 };
 
 const MAX_LEVEL = 99;
-const VERIFIED_LEVEL = 5;
+const VERIFIED_LEVEL = 10;
 
 export function expForLevel(level: number) {
   const safeLevel = Math.max(1, Math.floor(Number(level) || 1));
