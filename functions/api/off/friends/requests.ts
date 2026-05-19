@@ -6,23 +6,21 @@ export async function onRequestGet(context: any) {
   const uid = auth.user.id;
 
   const incoming = await context.env.DB.prepare(
-    `SELECT f.id AS friendship_id, f.requester_id, f.addressee_id, f.created_at, u.id AS user_id, u.name, NULL AS display_name, NULL AS username, u.email, op.display_name AS off_display_name,
-            COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url, op.selected_title, COALESCE(l.level,1) as level, COALESCE(l.xp,0) as xp
+    `SELECT f.id AS friendship_id, f.requester_id, f.addressee_id, f.created_at, u.id AS user_id, u.name, u.email, op.display_name AS off_display_name,
+            COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url, op.selected_title, 1 as level, 0 as xp
      FROM off_friendships f
      JOIN users u ON u.id = f.requester_id
      LEFT JOIN off_profiles op ON op.user_id = u.id
-     LEFT JOIN user_levels l ON l.user_id = u.id
-     WHERE f.status='pending' AND f.addressee_id=? ORDER BY f.created_at DESC`
+          WHERE f.status='pending' AND f.addressee_id=? ORDER BY f.created_at DESC`
   ).bind(uid).all();
 
   const outgoing = await context.env.DB.prepare(
-    `SELECT f.id AS friendship_id, f.requester_id, f.addressee_id, f.created_at, u.id AS user_id, u.name, NULL AS display_name, NULL AS username, u.email, op.display_name AS off_display_name,
-            COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url, op.selected_title, COALESCE(l.level,1) as level, COALESCE(l.xp,0) as xp
+    `SELECT f.id AS friendship_id, f.requester_id, f.addressee_id, f.created_at, u.id AS user_id, u.name, u.email, op.display_name AS off_display_name,
+            COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url, op.selected_title, 1 as level, 0 as xp
      FROM off_friendships f
      JOIN users u ON u.id = f.addressee_id
      LEFT JOIN off_profiles op ON op.user_id = u.id
-     LEFT JOIN user_levels l ON l.user_id = u.id
-     WHERE f.status='pending' AND f.requester_id=? ORDER BY f.created_at DESC`
+          WHERE f.status='pending' AND f.requester_id=? ORDER BY f.created_at DESC`
   ).bind(uid).all();
 
   const mapItem = (row: any, status: string) => ({

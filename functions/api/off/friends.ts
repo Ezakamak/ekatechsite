@@ -7,16 +7,15 @@ export async function onRequestGet(context: any) {
 
   const rows = await context.env.DB.prepare(
     `SELECT f.id, f.requester_id, f.addressee_id, f.updated_at,
-            u.id as friend_id, u.name, NULL AS display_name, NULL AS username, u.email, op.display_name AS off_display_name,
+            u.id as friend_id, u.name, u.email, op.display_name AS off_display_name,
             COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
             op.selected_title,
-            COALESCE(l.level, 1) as level,
-            COALESCE(l.xp, 0) as xp
+            1 as level,
+            0 as xp
      FROM off_friendships f
      JOIN users u ON u.id = CASE WHEN f.requester_id = ? THEN f.addressee_id ELSE f.requester_id END
      LEFT JOIN off_profiles op ON op.user_id = u.id
-     LEFT JOIN user_levels l ON l.user_id = u.id
-     WHERE f.status = 'accepted' AND (f.requester_id = ? OR f.addressee_id = ?)
+          WHERE f.status = 'accepted' AND (f.requester_id = ? OR f.addressee_id = ?)
      ORDER BY f.updated_at DESC`
   ).bind(uid, uid, uid).all();
 
