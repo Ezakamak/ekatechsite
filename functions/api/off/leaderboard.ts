@@ -4,10 +4,16 @@ import { ensureOffLeaderboardSchema } from '../../_offLeaderboardSchema';
 export async function onRequestGet(context: any) {
   await ensureOffLeaderboardSchema(context);
   const u = new URL(context.request.url);
-  const seasonId = Number(u.searchParams.get('seasonId') || 0);
+  const seasonParam = u.searchParams.get('seasonId');
+  const requestedSeasonId = Number(seasonParam || 0);
   const gameKey = (u.searchParams.get('gameKey') || '').trim();
   const limit = Math.min(100, Math.max(1, Number(u.searchParams.get('limit') || 50)));
-  const season = await context.env.DB.prepare(`SELECT id, slug, name, status, starts_at, ends_at FROM off_seasons WHERE id=? LIMIT 1`).bind(seasonId).first<any>() || { id: 0, slug: 'all-time', name: 'All Time', status: 'active', starts_at: null, ends_at: null };
+
+  const activeSeason = await context.env.DB.prepare(`SELECT id, slug, name, status, starts_at, ends_at FROM off_seasons WHERE status='active' ORDER BY id DESC LIMIT 1`).first<any>();
+  const explicitSeason = Number.isFinite(requestedSeasonId) && requestedSeasonId > 0
+    ? await context.env.DB.prepare(`SELECT id, slug, name, status, starts_at, ends_at FROM off_seasons WHERE id=? LIMIT 1`).bind(requestedSeasonId).first<any>()
+    : null;
+  const season = explicitSeason || activeSeason || { id: 0, slug: 'all-time', name: 'All Time', status: 'active', starts_at: null, ends_at: null };
 
   const gameFilter = gameKey === 'tech_duel' ? 's.tech_duel_matches > 0' : gameKey === 'cipher_break' ? 's.cipher_break_matches > 0' : gameKey === 'core_clash' ? 's.core_clash_matches > 0' : '1=1';
   const rows = await context.env.DB.prepare(`SELECT s.*, u.name, u.email, u.nickname, u.role, op.display_name off_display_name, op.avatar_url, op.avatar_data
@@ -16,7 +22,7 @@ export async function onRequestGet(context: any) {
     LEFT JOIN off_profiles op ON op.user_id=u.id
     WHERE s.season_id=? AND ${gameFilter} AND lower(COALESCE(u.role,'')) <> 'blocked'
     ORDER BY s.total_points DESC, s.win_rate DESC, s.total_matches DESC, s.user_id ASC
-    LIMIT ?`).bind(seasonId, limit).all<any>();
+    LIMIT ?`).bind(season.id, limit).all<any>();
   const leaderboard = (rows.results || []).map((r: any, i: number) => ({
     rank: i + 1, userId: r.user_id, displayName: resolveDisplayName(r), avatarUrl: r.avatar_data || r.avatar_url || null,
     totalPoints: r.total_points, totalMatches: r.total_matches, wins: r.wins, losses: r.losses, draws: r.draws, abandoned: r.abandoned,
