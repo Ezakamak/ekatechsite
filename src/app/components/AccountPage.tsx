@@ -7,6 +7,7 @@ import { CustomerProjectDetails } from "./CustomerProjectDetails";
 type User = {
   id: number;
   name: string;
+  displayName?: string;
   email: string;
   role?: string;
   avatar_url?: string;
@@ -51,19 +52,19 @@ export function AccountPage() {
   const publicDisplayName = useMemo(() => {
     const normalized = String(displayName || "").trim();
     if (normalized) return normalized;
-    if (user?.id) return `Guest ${100 + (user.id % 900)}`;
+    if (user?.id) return `Guest ${user.id}`;
     return "Guest";
   }, [displayName, user?.id]);
 
   const initials = useMemo(() => {
-    const source = user?.name || user?.email || "E";
+    const source = publicDisplayName || user?.email || "E";
     return source
       .split(/\s+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
       .join("") || "E";
-  }, [user]);
+  }, [publicDisplayName, user?.email]);
 
   const loadRequests = () => {
     return fetch("/api/my-project-requests", { credentials: "same-origin" })
@@ -87,6 +88,7 @@ export function AccountPage() {
         const nextUser = data?.user || null;
         setUser(nextUser);
         if (nextUser) {
+          setDisplayName(String(nextUser.displayName || ""));
           await loadRequests();
           const profileRes = await fetch("/api/account/profile", { credentials: "same-origin", cache: "no-store" });
           const profile = await profileRes.json().catch(() => null);
@@ -223,6 +225,7 @@ export function AccountPage() {
       setDisplayName(String(data.displayName || ""));
       setStatus({ type: "success", message: tr ? "Nickname güncellendi." : "Nickname updated." });
       window.dispatchEvent(new Event("ekatech-auth-change"));
+      await loadUser();
     } catch (error) {
       setStatus({ type: "error", message: error instanceof Error ? error.message : tr ? "Nickname kaydedilemedi." : "Nickname could not be saved." });
     } finally {

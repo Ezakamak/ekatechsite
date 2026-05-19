@@ -12,7 +12,7 @@ export async function ensureUsersNicknameColumn(context: any) {
 
 export function guestNameFromId(id: number) {
   const safeId = Number.isFinite(id) ? Math.max(0, Math.trunc(id)) : 0;
-  return `Guest ${100 + (safeId % 900)}`;
+  return `Guest ${safeId}`;
 }
 
 export function isEmailLike(value: string) {
@@ -33,7 +33,5 @@ export function resolvePublicDisplayName(row: any) {
   const userId = Number(row?.id || row?.user_id || 0);
   const nickname = String(row?.nickname || "").trim();
   if (nickname && !isEmailLike(nickname)) return nickname;
-  const name = String(row?.name || "").trim();
-  if (name && !isEmailLike(name)) return name;
   return guestNameFromId(userId);
 }

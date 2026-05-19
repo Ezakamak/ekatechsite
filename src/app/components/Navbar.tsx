@@ -8,6 +8,7 @@ import { NotificationBell } from "./NotificationBell";
 type User = {
   id: number;
   name: string;
+  displayName?: string;
   email: string;
   role?: string;
   avatar_url?: string;
@@ -17,7 +18,7 @@ type SwitchAccount = User & {
   active?: boolean;
 };
 
-const USER_CACHE_KEY = "ekatech-current-user";
+const USER_CACHE_KEY = "ekatech-current-user-v2";
 
 function readCachedUser(): User | null {
   if (typeof window === "undefined") return null;
@@ -95,9 +96,10 @@ export function Navbar() {
         };
 
   const initials = useMemo(() => {
-    const source = user?.name || user?.email || "E";
+    const source = user?.displayName || (user?.id ? `Guest ${user.id}` : "Guest");
     return getInitials(source);
   }, [user]);
+  const shownName = user?.displayName || (user?.id ? `Guest ${user.id}` : "Guest");
 
   const canUseAdmin = user?.role === "admin" || user?.role === "owner";
   const canUseOff = user?.role === "off" || user?.role === "admin" || user?.role === "owner";
@@ -255,7 +257,7 @@ export function Navbar() {
 
   const Avatar = ({ size = "small", account }: { size?: "small" | "medium"; account?: User | null }) => {
     const target = account || user;
-    const source = target?.name || target?.email || "E";
+    const source = target?.displayName || (target?.id ? `Guest ${target.id}` : "Guest");
 
     return (
       <span className={`${size === "medium" ? "h-10 w-10" : "h-9 w-9"} flex overflow-hidden items-center justify-center rounded-full bg-white text-sm font-semibold text-black`}>
@@ -326,7 +328,7 @@ export function Navbar() {
                 aria-label={nav.account}
               >
                 <Avatar />
-                <span className="hidden max-w-28 truncate text-sm font-medium sm:block">{user.name}</span>
+                <span className="hidden max-w-28 truncate text-sm font-medium sm:block">{shownName}</span>
                 <ChevronDown className="hidden h-4 w-4 text-white/45 sm:block" />
               </button>
 
@@ -346,7 +348,7 @@ export function Navbar() {
                     >
                       <Avatar size="medium" />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{user.name}</p>
+                        <p className="truncate text-sm font-medium">{shownName}</p>
                         <p className="truncate text-xs text-white/45">{user.email}</p>
                       </div>
                     </a>
@@ -365,7 +367,7 @@ export function Navbar() {
                         >
                           <Avatar account={account} />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">{account.name}</p>
+                            <p className="truncate text-sm font-medium">{account.displayName || (account.id ? `Guest ${account.id}` : "Guest")}</p>
                             <p className="truncate text-xs text-white/40">{account.email}</p>
                           </div>
                           {switchingAccountId === account.id ? (

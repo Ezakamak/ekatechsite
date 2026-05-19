@@ -1,3 +1,5 @@
+import { resolvePublicDisplayName } from "../_displayName";
+
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const BROWSER_COOKIE = "ekatech_browser_id";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -12,7 +14,7 @@ export async function onRequestGet(context: any) {
     if (!activeToken) {
       const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store, no-cache, must-revalidate" });
       if (browser.setCookie) headers.append("Set-Cookie", browser.setCookie);
-      return new Response(JSON.stringify({ accounts: [], activeUserId: null }), { headers });
+      return new Response(JSON.stringify({ user: null, accounts: [], activeUserId: null }), { headers });
     }
 
     const activeUser = await getUserBySession(context, activeToken);
@@ -21,7 +23,7 @@ export async function onRequestGet(context: any) {
       const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store, no-cache, must-revalidate" });
       if (browser.setCookie) headers.append("Set-Cookie", browser.setCookie);
       headers.append("Set-Cookie", `session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
-      return new Response(JSON.stringify({ accounts: [], activeUserId: null }), { headers });
+      return new Response(JSON.stringify({ user: null, accounts: [], activeUserId: null }), { headers });
     }
 
     await attachSessionToBrowser(context, browser.browserId, activeToken);
@@ -32,6 +34,7 @@ export async function onRequestGet(context: any) {
         SELECT
           users.id,
           users.name,
+          users.nickname,
           users.email,
           users.avatar_url,
           CASE
@@ -63,6 +66,7 @@ export async function onRequestGet(context: any) {
       .map((row: any) => ({
         id: row.id,
         name: row.name,
+        displayName: resolvePublicDisplayName(row),
         email: row.email,
         role: row.role,
         avatar_url: row.avatar_url || "",
@@ -72,7 +76,17 @@ export async function onRequestGet(context: any) {
     const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store, no-cache, must-revalidate" });
     if (browser.setCookie) headers.append("Set-Cookie", browser.setCookie);
 
-    return new Response(JSON.stringify({ accounts, activeUserId: activeUser.id }), { headers });
+    return new Response(JSON.stringify({
+      user: {
+        id: activeUser.id,
+        name: activeUser.name,
+        displayName: resolvePublicDisplayName(activeUser),
+        email: activeUser.email,
+        role: activeUser.role,
+      },
+      accounts,
+      activeUserId: activeUser.id,
+    }), { headers });
   } catch (error) {
     return json({ error: "Hesap geçiş listesi alınamadı. account_switch_sessions tablosunu oluşturduğundan emin ol." }, 500);
   }
@@ -98,6 +112,7 @@ export async function onRequestPost(context: any) {
         SELECT
           users.id,
           users.name,
+          users.nickname,
           users.email,
           users.avatar_url,
           CASE
@@ -134,6 +149,7 @@ export async function onRequestPost(context: any) {
       user: {
         id: target.id,
         name: target.name,
+        displayName: resolvePublicDisplayName(target),
         email: target.email,
         role: target.role,
         avatar_url: target.avatar_url || "",
@@ -192,6 +208,7 @@ async function getUserBySession(context: any, token: string) {
       SELECT
         users.id,
         users.name,
+        users.nickname,
         users.email,
         CASE
           WHEN lower(users.email) = ? THEN 'owner'
