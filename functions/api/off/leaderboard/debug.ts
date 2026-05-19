@@ -44,6 +44,7 @@ export async function onRequestGet(context: any) {
     techDuelCompletedLobbies: Number(duelCompleted?.count || 0),
     cipherBreakCompletedLobbies: Number(cipherCompleted?.count || 0),
     coreClashCompletedLobbies: Number(coreCompleted?.count || 0),
+    total: Number(duelCompleted?.count || 0) + Number(cipherCompleted?.count || 0) + Number(coreCompleted?.count || 0),
   };
   const historyCoverage = {
     techDuelHistoryRows: Number(techHistory?.count || 0),
@@ -54,10 +55,11 @@ export async function onRequestGet(context: any) {
   const likelyProblem = !schemaOk ? 'schema_error'
     : counts.matchHistoryCount === 0 && totalCompletedLobbies > 0 ? 'completed_lobbies_not_backfilled'
     : counts.matchHistoryCount === 0 ? 'no_match_history'
-    : counts.seasonPointsCount === 0 ? 'points_not_applied'
+    : counts.completedOrDrawCount === 0 ? 'no_completed_matches'
+    : counts.matchHistoryCount > 0 && counts.seasonPointsCount === 0 ? 'points_not_applied'
     : counts.seasonPointsCount > 0 && counts.snapshotCount === 0 ? 'snapshots_not_built'
     : counts.snapshotCount > 0 ? 'ok'
-    : 'unknown';
+    : 'needs_inspection';
   return Response.json({ ok: schemaOk, schemaOk, schemaError, counts, health: {
     hasHistory: counts.matchHistoryCount > 0, hasCompletedMatches: counts.completedOrDrawCount > 0, hasPoints: counts.seasonPointsCount > 0, hasSnapshots: counts.snapshotCount > 0, likelyProblem
   }, completedLobbyCounts, historyCoverage, sampleMatches: sampleMatches.results || [], samplePoints: samplePoints.results || [], sampleSnapshots: sampleSnapshots.results || [], lastErrors: schemaError ? [{ step: 'ensureOffLeaderboardSchema', error: schemaError }] : [] }, { status: schemaOk ? 200 : 500 });

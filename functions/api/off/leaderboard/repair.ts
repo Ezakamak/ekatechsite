@@ -88,7 +88,7 @@ async function backfillMatchHistoryFromCompletedLobbies(context: any) {
 
   return {
     backfilledHistory: { ...backfilledHistory, total: backfilledHistory.techDuel + backfilledHistory.cipherBreak + backfilledHistory.coreClash },
-    completedLobbyCounts,
+    completedLobbyCounts: { ...completedLobbyCounts, total: completedLobbyCounts.techDuel + completedLobbyCounts.cipherBreak + completedLobbyCounts.coreClash },
   };
 }
 
@@ -102,7 +102,7 @@ export async function onRequestPost(context: any) {
   } catch (error: any) {
     return Response.json({ ok: false, failedStep: 'ensure_schema', error: String(error?.message || error || 'Unknown schema error'), partialCounts: {}, steps }, { status: 500 });
   }
-  let backfillInfo = { backfilledHistory: { techDuel: 0, cipherBreak: 0, coreClash: 0, total: 0 }, completedLobbyCounts: { techDuel: 0, cipherBreak: 0, coreClash: 0 } };
+  let backfillInfo = { backfilledHistory: { techDuel: 0, cipherBreak: 0, coreClash: 0, total: 0 }, completedLobbyCounts: { techDuel: 0, cipherBreak: 0, coreClash: 0, total: 0 } };
   try {
     backfillInfo = await backfillMatchHistoryFromCompletedLobbies(context);
     steps.push({ step: 'backfill_completed_lobbies', ok: true, ...backfillInfo });
