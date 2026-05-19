@@ -11,7 +11,7 @@ export async function onRequestGet(context: any) {
     await ensureOffProfilesSchema(context);
 
     const rows = await context.env.DB.prepare(
-      `SELECT u.id, u.name,
+      `SELECT u.id, u.name, u.nickname,
               op.display_name AS off_display_name,
               COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
               op.selected_title,
@@ -31,7 +31,7 @@ export async function onRequestGet(context: any) {
         AND lower(COALESCE(u.email, '')) NOT LIKE '%@ekatech.local'
         AND upper(COALESCE(u.name, '')) NOT LIKE '%BOT%'
         AND COALESCE(lower(u.role), 'client') NOT IN ('bot', 'system', 'test')
-      ORDER BY COALESCE(op.display_name, u.name, CAST(u.id AS TEXT)) ASC
+      ORDER BY COALESCE(op.display_name, u.nickname, u.name, CAST(u.id AS TEXT)) ASC
       LIMIT 100`
     ).bind(uid, uid, uid).all();
 

@@ -41,6 +41,9 @@ export function AccountPage() {
   const [requestError, setRequestError] = useState("");
   const [lastUpdated, setLastUpdated] = useState("");
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [nickname, setNickname] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [nicknameSaving, setNicknameSaving] = useState(false);
 
   const tr = language === "tr";
   const canUseAdmin = user?.role === "admin" || user?.role === "owner";
@@ -76,7 +79,13 @@ export function AccountPage() {
       .then(async (data) => {
         const nextUser = data?.user || null;
         setUser(nextUser);
-        if (nextUser) await loadRequests();
+        if (nextUser) {
+          await loadRequests();
+          const profileRes = await fetch("/api/account/profile", { credentials: "same-origin", cache: "no-store" });
+          const profile = await profileRes.json().catch(() => null);
+          setNickname(String(profile?.nickname || ""));
+          setDisplayName(String(profile?.displayName || ""));
+        }
         else setRequests([]);
       })
       .catch(() => {
@@ -189,6 +198,30 @@ export function AccountPage() {
     }
   };
 
+
+
+  const saveNickname = async () => {
+    setStatus(null);
+    setNicknameSaving(true);
+    try {
+      const response = await fetch("/api/account/profile", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nickname }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) throw new Error(data?.error || (tr ? "Nickname kaydedilemedi." : "Nickname could not be saved."));
+      setNickname(String(data.nickname || ""));
+      setDisplayName(String(data.displayName || ""));
+      setStatus({ type: "success", message: tr ? "Nickname güncellendi." : "Nickname updated." });
+      window.dispatchEvent(new Event("ekatech-auth-change"));
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : tr ? "Nickname kaydedilemedi." : "Nickname could not be saved." });
+    } finally {
+      setNicknameSaving(false);
+    }
+  };
   if (loading) {
     return (
       <main className="relative min-h-screen overflow-hidden bg-black px-4 pb-20 pt-32 sm:px-6">
@@ -282,6 +315,24 @@ export function AccountPage() {
               {status.message}
             </div>
           )}
+
+          <div className="mt-8 rounded-2xl border border-white/10 bg-black/30 p-4">
+            <p className="text-sm text-white/60">{tr ? "Herkese görünen ad" : "Public display name"}</p>
+            <p className="mt-1 text-lg font-medium text-white">{displayName || user?.name || "-"}</p>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <input
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                minLength={3}
+                maxLength={24}
+                placeholder={`${displayName || "Guest 384"} gibi görüneceksin`}
+                className="w-full rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/35 focus:border-cyan-300/40 focus:outline-none"
+              />
+              <button type="button" onClick={saveNickname} disabled={nicknameSaving} className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-60">
+                {nicknameSaving ? "..." : tr ? "Nickname kaydet" : "Save nickname"}
+              </button>
+            </div>
+          </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             <InfoCard label={tr ? "Kullanıcı ID" : "User ID"} value={user?.id ? String(user.id) : "-"} />

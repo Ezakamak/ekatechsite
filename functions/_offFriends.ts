@@ -1,3 +1,5 @@
+import { ensureUsersNicknameColumn, resolvePublicDisplayName } from "./_displayName";
+
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 
 export async function requireOffUser(context: any) {
@@ -20,6 +22,7 @@ export async function requireOffUser(context: any) {
     return { ok: false, status: 403, error: "OFF access required" };
   }
 
+  await ensureUsersNicknameColumn(context);
   await ensureFriendshipTables(context);
   await ensureOffProfile(context, Number(user.id));
   await ensureOffTitleTables(context);
@@ -46,6 +49,7 @@ export async function requireOffSocialUser(context: any) {
   const role = isOwner ? "owner" : rawRole;
   if (role === "blocked") return { ok: false, status: 403, error: "Bu hesap site erişiminden engellendi." };
 
+  await ensureUsersNicknameColumn(context);
   await ensureFriendshipTables(context);
   await ensureOffProfile(context, Number(user.id));
   await touchOffPresence(context, Number(user.id));
@@ -80,12 +84,8 @@ export async function ensureFriendshipTables(context: any) {
 
 export function resolveDisplayName(row: any) {
   const profileName = String(row?.off_display_name || "").trim();
-  const name = String(row?.name || "").trim();
-  const email = String(row?.email || "").trim();
   if (profileName) return profileName;
-  if (name) return name;
-  if (email) return email;
-  return `Player #${Number(row?.id || row?.user_id || 0)}`;
+  return resolvePublicDisplayName(row);
 }
 
 export async function ensureOffProfile(context: any, userId: number) {
