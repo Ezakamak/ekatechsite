@@ -7,7 +7,7 @@ export async function onRequestGet(context: any) {
 
   const rows = await context.env.DB.prepare(
     `SELECT f.id, f.requester_id, f.addressee_id, f.updated_at,
-            u.id as friend_id, u.name, u.display_name, u.email, op.display_name AS off_display_name,
+            u.id as friend_id, u.name, NULL AS display_name, NULL AS username, u.email, op.display_name AS off_display_name,
             COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
             op.selected_title,
             COALESCE(l.level, 1) as level,

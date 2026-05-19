@@ -80,11 +80,11 @@ export async function ensureFriendshipTables(context: any) {
 
 export function resolveDisplayName(row: any) {
   const profileName = String(row?.off_display_name || "").trim();
-  const displayName = String(row?.display_name || "").trim();
   const name = String(row?.name || "").trim();
+  const email = String(row?.email || "").trim();
   if (profileName) return profileName;
-  if (displayName) return displayName;
   if (name) return name;
+  if (email) return email;
   return `Player #${Number(row?.id || row?.user_id || 0)}`;
 }
 

@@ -8,7 +8,7 @@ export async function onRequestGet(context: any) {
   if (q.length < 2) return Response.json({ ok: true, users: [] });
 
   const rows = await context.env.DB.prepare(
-    `SELECT u.id, u.name, u.display_name, u.email, op.display_name AS off_display_name,
+    `SELECT u.id, u.name, NULL AS display_name, NULL AS username, u.email, op.display_name AS off_display_name,
             COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
             op.selected_title,
             COALESCE(l.level, 1) as level,
@@ -23,13 +23,12 @@ export async function onRequestGet(context: any) {
      LEFT JOIN user_levels l ON l.user_id = u.id
      WHERE u.id != ? AND (
        lower(COALESCE(op.display_name, '')) LIKE ? OR
-       lower(COALESCE(u.display_name, '')) LIKE ? OR
        lower(COALESCE(u.name, '')) LIKE ? OR
        lower(COALESCE(u.email, '')) LIKE ?
      )
-     ORDER BY COALESCE(op.display_name, u.display_name, u.name, u.email) ASC
+     ORDER BY COALESCE(op.display_name, u.name, u.email) ASC
      LIMIT 20`
-  ).bind(uid, uid, uid, `%${q.toLowerCase()}%`, `%${q.toLowerCase()}%`, `%${q.toLowerCase()}%`, `%${q.toLowerCase()}%`).all();
+  ).bind(uid, uid, uid, `%${q.toLowerCase()}%`, `%${q.toLowerCase()}%`, `%${q.toLowerCase()}%`).all();
 
   const users = (rows.results || []).map((row: any) => ({
     id: Number(row.id),

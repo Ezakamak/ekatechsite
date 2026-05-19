@@ -11,7 +11,7 @@ export async function onRequestGet(context: any) {
     await ensureOffProfilesSchema(context);
 
     const rows = await context.env.DB.prepare(
-      `SELECT u.id, u.name, u.display_name, u.email,
+      `SELECT u.id, u.name, NULL AS display_name, NULL AS username, u.email,
               op.display_name AS off_display_name,
               COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
               op.selected_title,
@@ -29,7 +29,7 @@ export async function onRequestGet(context: any) {
       LEFT JOIN user_levels l ON l.user_id = u.id
       WHERE u.id != ?
         AND COALESCE(lower(u.role), 'client') != 'blocked'
-      ORDER BY COALESCE(op.display_name, u.display_name, u.name, u.email) ASC
+      ORDER BY COALESCE(op.display_name, u.name, u.email) ASC
       LIMIT 100`
     ).bind(uid, uid, uid).all();
 
@@ -44,7 +44,7 @@ export async function onRequestGet(context: any) {
         xp: Number(row.xp || 0),
         selectedTitle: row.selected_title || null,
         friendshipStatus: row.friendship_status || "none",
-        secondaryLabel: row.display_name || row.email || null,
+        secondaryLabel: row.email || null,
         lastSeenAt: row.last_seen_at || null,
         isOnline: Boolean(row.last_seen_at),
       }));
