@@ -159,15 +159,18 @@ export function NotificationBell() {
       await markRead(item.id);
       setHandledById((prev) => ({ ...prev, [item.id]: true }));
       if (action === "accept") {
-        toast.success("Tech Duel daveti kabul edildi");
+        toast.success("Oyun daveti kabul edildi");
         const redirectTo = typeof data?.redirectTo === "string" && data.redirectTo ? data.redirectTo : "/off";
         window.history.pushState({}, "", redirectTo);
         window.dispatchEvent(new Event("ekatech-route-change"));
         window.dispatchEvent(new CustomEvent("ekatech-tech-duel-open-lobby", { detail: { lobbyId: data?.lobbyId || null } }));
         window.dispatchEvent(new Event("ekatech-off-invites-refresh"));
         window.dispatchEvent(new Event("ekatech-tech-duel-refresh"));
+        window.dispatchEvent(new Event("ekatech-cipher-refresh"));
+        window.dispatchEvent(new Event("ekatech-core-clash-refresh"));
       } else {
-        toast.success("Tech Duel daveti reddedildi");
+        toast.success("Oyun daveti reddedildi");
+        window.dispatchEvent(new Event("ekatech-off-invites-refresh"));
         await load();
       }
     } catch (error: any) {

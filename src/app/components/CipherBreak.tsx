@@ -79,7 +79,7 @@ function parseLocks(round: Round | null): LockItem[] {
   return [{ target: round.target_code, options: [] }];
 }
 
-export function CipherBreak() {
+export function CipherBreak({ initialLobbyId }: { initialLobbyId?: number | null } = {}) {
   const { language } = useLanguage();
   const tr = language === "tr";
   const [user, setUser] = useState<User | null>(null);
@@ -91,6 +91,8 @@ export function CipherBreak() {
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [now, setNow] = useState(Date.now());
   const [syncedAt, setSyncedAt] = useState(Date.now());
+
+  useEffect(() => { if (initialLobbyId && initialLobbyId > 0) { setActiveLobby({ id: initialLobbyId } as any); void loadState(initialLobbyId); } }, [initialLobbyId]);
 
   const c = useMemo(() => tr ? {
     title: "Cipher Break",

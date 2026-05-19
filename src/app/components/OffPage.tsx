@@ -193,6 +193,8 @@ export function OffPage() {
   const [loading, setLoading] = useState(true);
   const [activeGame, setActiveGame] = useState<GameKey>("hub");
   const [duelInitialLobbyId, setDuelInitialLobbyId] = useState<number | null>(null);
+  const [cipherInitialLobbyId, setCipherInitialLobbyId] = useState<number | null>(null);
+  const [clashInitialLobbyId, setClashInitialLobbyId] = useState<number | null>(null);
   const [shopCatalog, setShopCatalog] = useState<ShopCatalogItem[]>([]);
   const [tlPackages, setTlPackages] = useState<TechStoreTlPackage[]>([]);
   const [shopInventory, setShopInventory] = useState<ShopInventoryItem[]>([]);
@@ -206,8 +208,11 @@ export function OffPage() {
       const game = params.get("game");
       const lobbyIdRaw = params.get("lobbyId");
       const lobbyId = Number(lobbyIdRaw || 0);
-      if (game === "duel") setActiveGame("duel");
-      setDuelInitialLobbyId(Number.isFinite(lobbyId) && lobbyId > 0 ? lobbyId : null);
+      if (game === "duel" || game === "cipher" || game === "clash") setActiveGame(game as any);
+      const v = Number.isFinite(lobbyId) && lobbyId > 0 ? lobbyId : null;
+      setDuelInitialLobbyId(game === "duel" ? v : null);
+      setCipherInitialLobbyId(game === "cipher" ? v : null);
+      setClashInitialLobbyId(game === "clash" ? v : null);
     };
 
     syncFromRoute();
@@ -578,7 +583,11 @@ export function OffPage() {
           </GameErrorBoundary>
         ) : activeGame === "cipher" ? (
           <GameErrorBoundary gameName="Cipher Break" onBack={handleGameBoundaryBack}>
-            <CipherBreak />
+            <CipherBreak initialLobbyId={cipherInitialLobbyId} />
+          </GameErrorBoundary>
+        ) : activeGame === "clash" ? (
+          <GameErrorBoundary gameName="Core Clash" onBack={handleGameBoundaryBack}>
+            <CoreClash initialLobbyId={clashInitialLobbyId} />
           </GameErrorBoundary>
         ) : activeGame === "raid" ? (
           <GameErrorBoundary gameName="Core Raid" onBack={handleGameBoundaryBack}>

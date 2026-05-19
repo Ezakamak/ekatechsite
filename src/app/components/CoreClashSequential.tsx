@@ -82,7 +82,7 @@ function Avatar({ player, size = "md" }: { player: Player; size?: "sm" | "md" | 
   return <span className={`flex ${sizeClass} shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white font-semibold text-black shadow-lg shadow-black/30`}>{player.avatar_url ? <img src={player.avatar_url} alt="" className="h-full w-full object-cover" /> : initials(player.name, player.email)}</span>;
 }
 
-export function CoreClash() {
+export function CoreClash({ initialLobbyId }: { initialLobbyId?: number | null } = {}) {
   const { language } = useLanguage();
   const tr = language === "tr";
   const [user, setUser] = useState<User | null>(null);
@@ -108,6 +108,8 @@ export function CoreClash() {
   const autoAdvanced = useRef<string | null>(null);
   const isTransitioning = useRef(false);
   const revealKey = useRef("");
+
+  useEffect(() => { if (initialLobbyId && initialLobbyId > 0) { setActiveLobby(initialLobbyId); void loadMatch(initialLobbyId, false); } }, [initialLobbyId]);
 
   const c = useMemo(() => tr ? {
     title: "Core Clash", create: "Rastgele harita ile lobi oluştur", join: "Katıl", enter: "Maça gir", open: "Açık lobiler", mine: "Benim maçlarım", empty: "Henüz açık lobi yok.", hand: "Elindeki kartlar", selected: "Kart seçildi · rakip bekleniyor", opponentSelected: "Rakip seçti", both: "İki oyuncu da lobiye girmeden maç başlamaz.", timer: "Tur süresi", hp: "Core HP", energy: "Enerji", heat: "Heat", cost: "Enerji", anti: "Anti", boost: "Harita boostu", refresh: "Yenile", waiting: "Player 2 bekleniyor", live: "Canlı maç", completed: "Tamamlandı", rule: "Başlangıç eli 3 kart. Her tur +1 kart. El limiti 6. Tur süresi 20 saniye. Skip basarsan pas geçersin. Süre bitince eksik seçim skip sayılır; hasarlar sırayla gösterilir.", host: "Host", player2: "Player 2", emptySlot: "Join bekleniyor", backOff: "OFF Hub", mapReveal: "Savaş alanı seçildi", resolving: "Sıralı round akışı", nextRound: "Yeni tur başlatılıyor", skip: "Skip", pause: "Kısa ara · sıradaki oyuncunun hamlesi hazırlanıyor.", done: "İki oyuncunun hamlesi bitti. Yeni round otomatik açılıyor.", damageBar: "Rakibin can barı yavaşça azalıyor.", healBar: "Can barı yavaşça yenileniyor.", close: "Lobiyi kapat", closed: "Lobby kapatıldı." }
