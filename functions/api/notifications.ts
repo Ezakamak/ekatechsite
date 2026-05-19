@@ -1,3 +1,5 @@
+import { markNotificationRead } from "../_notifications";
+
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 
 export async function onRequestGet(context: any) {
@@ -5,24 +7,36 @@ export async function onRequestGet(context: any) {
   if (!user.ok) return Response.json({ error: user.error }, { status: user.status });
 
   try {
+    const url = new URL(context.request.url);
+    const category = String(url.searchParams.get("category") || "").trim();
+    const allowedCategories = new Set(["site", "off", "invest", "miner", "event", "reward"]);
+    const hasCategory = category && allowedCategories.has(category);
+
     const result = await context.env.DB
       .prepare(`
-        SELECT id, title, body, link, is_read, created_at
+        SELECT id, type, category, title, body, link, action_label, action_payload, priority, is_read, created_at, expires_at
         FROM notifications
         WHERE user_id = ?
+          AND (expires_at IS NULL OR expires_at > datetime('now'))
+          AND (? = '' OR category = ?)
         ORDER BY id DESC
         LIMIT 50
       `)
-      .bind(user.user.id)
+      .bind(user.user.id, hasCategory ? category : "", hasCategory ? category : "")
       .all();
 
     const unread = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND COALESCE(is_read, 0) = 0")
-      .bind(user.user.id)
+      .prepare(`SELECT COUNT(*) AS count
+        FROM notifications
+        WHERE user_id = ?
+          AND COALESCE(is_read, 0) = 0
+          AND (expires_at IS NULL OR expires_at > datetime('now'))
+          AND (? = '' OR category = ?)`)
+      .bind(user.user.id, hasCategory ? category : "", hasCategory ? category : "")
       .first();
 
     return Response.json({ notifications: result?.results || [], unread: unread?.count || 0 });
-  } catch (error) {
+  } catch {
     return Response.json({ error: "Bildirimler alınamadı. notifications tablosunu oluşturduğundan emin ol." }, { status: 500 });
   }
 }
@@ -34,19 +48,7 @@ export async function onRequestPatch(context: any) {
   try {
     const body = await context.request.json().catch(() => null);
     const id = Number(body?.id || 0);
-
-    if (id) {
-      await context.env.DB
-        .prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?")
-        .bind(id, user.user.id)
-        .run();
-    } else {
-      await context.env.DB
-        .prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ?")
-        .bind(user.user.id)
-        .run();
-    }
-
+    await markNotificationRead(context, user.user.id, id || undefined);
     return Response.json({ success: true });
   } catch {
     return Response.json({ error: "Bildirim güncellenemedi." }, { status: 500 });

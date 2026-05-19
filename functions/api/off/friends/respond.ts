@@ -1,4 +1,5 @@
 import { requireOffUser } from "../../../_offFriends";
+import { createOffFriendAcceptedNotification } from "../../../_notifications";
 
 export async function onRequestPost(context: any) {
   const auth = await requireOffUser(context);
@@ -16,5 +17,15 @@ export async function onRequestPost(context: any) {
 
   const next = action === "accept" ? "accepted" : "rejected";
   await context.env.DB.prepare(`UPDATE off_friendships SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(next, friendshipId).run();
+
+  if (next === 'accepted') {
+    const accepter = await context.env.DB.prepare(`SELECT COALESCE(name, email, 'Bir kullanıcı') AS display_name FROM users WHERE id = ?`).bind(uid).first<any>();
+    await createOffFriendAcceptedNotification(context, {
+      requesterId: Number(row.requester_id),
+      addresseeDisplayName: String(accepter?.display_name || 'Bir kullanıcı'),
+      friendshipId,
+    });
+  }
+
   return Response.json({ ok: true, status: next });
 }
