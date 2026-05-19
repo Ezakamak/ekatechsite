@@ -1,3 +1,5 @@
+import { resolvePublicDisplayName } from "../_displayName";
+
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 
 export async function onRequestGet(context: any) {
@@ -13,6 +15,7 @@ export async function onRequestGet(context: any) {
         SELECT
           users.id,
           users.name,
+          users.nickname,
           users.email,
           CASE
             WHEN lower(users.email) = ? THEN 'owner'
@@ -44,6 +47,7 @@ export async function onRequestGet(context: any) {
       user: {
         id: user.id,
         name: user.name,
+        displayName: resolvePublicDisplayName(user),
         email: user.email,
         role: user.role,
         avatar_url: user.avatar_url || "",
