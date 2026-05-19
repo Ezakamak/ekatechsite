@@ -1,0 +1,5 @@
+import { requireOffUser } from '../../_offFriends';
+import { runOffCleanup } from '../../_offCleanup';
+const ADMIN = new Set(['admin','owner']);
+export async function onRequestPost(context:any){ const auth=await requireOffUser(context); if(!auth.ok) return Response.json({error:auth.error},{status:auth.status}); if(!ADMIN.has(String(auth.user.role||''))) return Response.json({error:'Yetkisiz.'},{status:403}); const b=await context.request.json().catch(()=>({})); const r=await runOffCleanup(context,{triggerType:'admin',triggeredByUserId:auth.user.id,dryRun:Boolean(b?.dryRun)}); return Response.json({ok:true,...r}); }
+export async function onRequestGet(context:any){ const auth=await requireOffUser(context); if(!auth.ok) return Response.json({error:auth.error},{status:auth.status}); if(!ADMIN.has(String(auth.user.role||''))) return Response.json({error:'Yetkisiz.'},{status:403}); const runs=await context.env.DB.prepare('SELECT * FROM off_cleanup_runs ORDER BY id DESC LIMIT 30').all<any>(); return Response.json({ok:true,runs:runs.results||[]}); }

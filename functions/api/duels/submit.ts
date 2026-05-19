@@ -1,3 +1,4 @@
+import { recordOffMatchHistory, getGameLabel } from '../../_offMatchHistory';
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
 const OFF_ROLES = ["off", "admin", "owner"];
 
@@ -139,6 +140,10 @@ async function completeLobby(context: any, lobby: any, winner: number) {
 
   if (Number(update?.meta?.changes || 0) > 0) {
     await awardSystemCoins(context, winner, Number(lobby.reward_amount || 50), Number(lobby.id));
+    const score = await getScore(context, Number(lobby.id));
+    const creatorWins = Number(score[lobby.creator_user_id] || 0); const opponentWins = Number(score[lobby.opponent_user_id] || 0);
+    const loser = Number(winner) === Number(lobby.creator_user_id) ? Number(lobby.opponent_user_id) : Number(lobby.creator_user_id);
+    await recordOffMatchHistory(context,{gameKey:'tech_duel',gameLabel:getGameLabel('tech_duel'),lobbyTable:'duel_lobbies',lobbyId:Number(lobby.id),hostUserId:Number(lobby.creator_user_id),opponentUserId:Number(lobby.opponent_user_id),winnerUserId:Number(winner),loserUserId:loser,status:creatorWins===opponentWins?'draw':'completed',resultJson:{mode:lobby.mode,round_count:lobby.round_count,scores:{creator:creatorWins,opponent:opponentWins},winner_user_id:winner,final_round:lobby.round_count,reward_amount:lobby.reward_amount},startedAt:lobby.created_at,completedAt:new Date().toISOString()});
   }
 }
 
