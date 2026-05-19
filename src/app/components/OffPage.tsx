@@ -933,6 +933,17 @@ function OffLeaderboardCard({ tr, role }: { tr: boolean; role: string }) {
   const [debugData, setDebugData] = useState<any>(null);
   const [busyAction, setBusyAction] = useState<'debug' | 'repair' | ''>('');
   const isAdmin = role === 'admin' || role === 'owner';
+  const likelyProblem =
+    debugData?.health?.likelyProblem ||
+    debugData?.failedStep ||
+    debugData?.error ||
+    'debug_not_run';
+  const likelyProblemLabel =
+    likelyProblem === 'debug_not_run'
+      ? 'Debug çalıştırılmadı'
+      : likelyProblem === 'needs_inspection'
+      ? 'Debug response eksik'
+      : String(likelyProblem);
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -961,6 +972,9 @@ function OffLeaderboardCard({ tr, role }: { tr: boolean; role: string }) {
       const d = await r.json().catch(() => ({}));
       setDebugData(d || {});
       window.dispatchEvent(new CustomEvent('ekatech-toast', { detail: { type: r.ok ? 'success' : 'error', message: r.ok ? 'Leaderboard repair tamamlandı.' : (d?.error || 'Leaderboard repair başarısız.') } }));
+      const debugRes = await fetch('/api/off/leaderboard/debug', { credentials: 'same-origin' });
+      const debugJson = await debugRes.json().catch(() => ({}));
+      setDebugData({ ...(d || {}), debug: debugJson || {} });
       const u = new URL('/api/off/leaderboard', window.location.origin);
       u.searchParams.set('seasonId', String(seasonId)); u.searchParams.set('limit', '10'); if (gameKey) u.searchParams.set('gameKey', gameKey);
       const rr = await fetch(u.toString(), { credentials: 'same-origin' }); const dd = await rr.json().catch(() => ({})); setRows(Array.isArray(dd?.leaderboard) ? dd.leaderboard : []);
@@ -976,7 +990,12 @@ function OffLeaderboardCard({ tr, role }: { tr: boolean; role: string }) {
         {isAdmin ? <button onClick={runDebug} disabled={busyAction!==''} className="rounded-full border border-cyan-300/30 bg-cyan-500/10 px-3 py-1.5 text-cyan-100 disabled:opacity-60">Debug Leaderboard</button> : null}
         {isAdmin ? <button onClick={runRepair} disabled={busyAction!==''} className="rounded-full border border-emerald-300/30 bg-emerald-500/10 px-3 py-1.5 text-emerald-100 disabled:opacity-60">Repair Leaderboard</button> : null}
       </div></div>
-    {loading ? <p className="mt-4 text-white/50">...</p> : rows.length === 0 ? <div className="mt-4 space-y-2"><p className="text-white/50">{isAdmin ? `Leaderboard boş. Muhtemel sebep: ${String(debugData?.health?.likelyProblem || 'unknown')}` : 'Henüz leaderboard verisi yok.'}</p>{isAdmin ? <p className="text-xs text-amber-100/80">Debug / Repair çalıştır.</p> : null}</div> : <div className="mt-4 space-y-2">{rows.map((r, i) => <div key={r.userId} className={`flex items-center justify-between rounded-2xl border p-3 ${i===0?'border-amber-300/30 bg-amber-300/10':i<3?'border-purple-300/20 bg-purple-300/10':'border-white/10 bg-black/30'}`}><div className="flex items-center gap-3"><span className="w-6 text-white/70">#{r.rank}</span><img src={r.avatarUrl || '/og-image.svg'} className="h-8 w-8 rounded-full object-cover" /><div><p className="text-white">{r.displayName}</p><p className="text-xs text-white/45">{r.wins}/{r.totalMatches} · %{Number(r.winRate||0).toFixed(1)}</p></div></div><p className="font-semibold text-cyan-100">{r.totalPoints}</p></div>)}</div>}
+    {loading ? <p className="mt-4 text-white/50">...</p> : rows.length === 0 ? <div className="mt-4 space-y-2"><p className="text-white/50">{isAdmin ? `Leaderboard boş. Muhtemel sebep: ${likelyProblemLabel}` : 'Henüz leaderboard verisi yok.'}</p>{isAdmin ? <p className="text-xs text-amber-100/80">Debug / Repair çalıştır.</p> : null}</div> : <div className="mt-4 space-y-2">{rows.map((r, i) => <div key={r.userId} className={`flex items-center justify-between rounded-2xl border p-3 ${i===0?'border-amber-300/30 bg-amber-300/10':i<3?'border-purple-300/20 bg-purple-300/10':'border-white/10 bg-black/30'}`}><div className="flex items-center gap-3"><span className="w-6 text-white/70">#{r.rank}</span><img src={r.avatarUrl || '/og-image.svg'} className="h-8 w-8 rounded-full object-cover" /><div><p className="text-white">{r.displayName}</p><p className="text-xs text-white/45">{r.wins}/{r.totalMatches} · %{Number(r.winRate||0).toFixed(1)}</p></div></div><p className="font-semibold text-cyan-100">{r.totalPoints}</p></div>)}</div>}
+    {isAdmin && Array.isArray(debugData?.steps) ? <div className="mt-3 space-y-1 rounded-xl border border-white/10 bg-black/30 p-3 text-xs text-white/80">
+      <p className="font-semibold text-white/90">Repair Steps</p>
+      {debugData.steps.map((step: any, idx: number) => <p key={`${String(step?.step || 'step')}-${idx}`}>{String(step?.step || 'step')}: {step?.ok === false ? 'fail' : 'ok'}</p>)}
+      {debugData.steps.find((s: any) => s?.step === 'final_counts') ? <p className="pt-1 text-emerald-200">Final counts hazır.</p> : null}
+    </div> : null}
     {isAdmin && debugData ? <pre className="mt-3 max-h-64 overflow-auto rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-white/75">{JSON.stringify(debugData, null, 2)}</pre> : null}
   </section>
 }

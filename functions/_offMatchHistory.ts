@@ -17,11 +17,6 @@ import { ensureOffLeaderboardSchema } from './_offLeaderboardSchema';
 export async function recordOffMatchHistory(context: any, payload: any) {
   try {
     await ensureOffLeaderboardSchema(context);
-  } catch (error) {
-    console.warn('[off_match_history] schema ensure failed', { error: String(error) });
-    return { inserted: false, matchId: 0, reason: 'schema_ensure_failed' };
-  }
-  try {
     const started = payload.startedAt ? Date.parse(payload.startedAt) : NaN;
     const ended = payload.completedAt ? Date.parse(payload.completedAt) : NaN;
     const duration = Number.isFinite(started) && Number.isFinite(ended) && ended >= started ? Math.round((ended-started)/1000) : null;
@@ -44,5 +39,9 @@ export async function recordOffMatchHistory(context: any, payload: any) {
       }
     }
     return { inserted, matchId };
-  } catch (error) { console.warn('[off_match_history] failed', { payload, error: String(error) }); }
+  } catch (error) {
+    console.warn('[off_match_history] failed', { payload, error: String(error) });
+    return { inserted: false, error: String(error) };
+  }
 }
+
