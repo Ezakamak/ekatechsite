@@ -1,7 +1,9 @@
+import { ensureOffLeaderboardSchema } from './_offLeaderboardSchema';
 const POINTS = { winner: 30, loser: 10, draw: 15 };
 const MATCH_STATUSES = "('completed','draw','abandoned','expired','cancelled')";
 
 export async function getActiveSeason(context: any) {
+  await ensureOffLeaderboardSchema(context);
   const row = await context.env.DB.prepare(`SELECT * FROM off_seasons
     WHERE status='active'
       AND (starts_at IS NULL OR datetime(replace(substr(starts_at,1,19),'T',' ')) <= datetime('now'))
@@ -11,6 +13,7 @@ export async function getActiveSeason(context: any) {
 }
 
 export async function applySeasonPointsForMatch(context: any, matchHistoryId: number) {
+  await ensureOffLeaderboardSchema(context);
   const match = await context.env.DB.prepare(`SELECT * FROM off_match_history WHERE id=? LIMIT 1`).bind(matchHistoryId).first<any>();
   if (!match || Number(match.season_points_applied) === 1) return { applied: false, reason: 'already_applied_or_missing' };
   if (!['completed', 'draw'].includes(String(match.status || ''))) return { applied: false, reason: 'status_not_eligible' };
@@ -44,6 +47,7 @@ export async function applySeasonPointsForMatch(context: any, matchHistoryId: nu
 }
 
 export async function updateLeaderboardSnapshots(context: any, userIds: number[], seasonId?: number) {
+  await ensureOffLeaderboardSchema(context);
   if (!userIds.length) return;
   const active = await getActiveSeason(context);
   const seasons = seasonId != null ? [seasonId] : [...new Set([0, Number(active.id || 0)])];
@@ -82,9 +86,18 @@ export async function updateLeaderboardSnapshots(context: any, userIds: number[]
 }
 
 export async function rebuildLeaderboard(context: any, options: { seasonId?: number; limit?: number } = {}) {
+  await ensureOffLeaderboardSchema(context);
   const limit = Math.min(5000, Math.max(1, Number(options.limit || 1000)));
-  const users = await context.env.DB.prepare(`SELECT DISTINCT user_id FROM off_season_points WHERE season_id=? LIMIT ?`).bind(Number(options.seasonId ?? 0), limit).all<any>();
-  const userIds = (users.results || []).map((r: any) => Number(r.user_id)).filter(Boolean);
-  await updateLeaderboardSnapshots(context, userIds, Number(options.seasonId ?? 0));
-  return { affectedUsers: userIds.length };
+  const unapplied = await context.env.DB.prepare(`SELECT id FROM off_match_history WHERE season_points_applied=0 AND status IN ('completed','draw') ORDER BY id ASC LIMIT ?`).bind(limit).all<any>();
+  for (const row of unapplied.results || []) {
+    await applySeasonPointsForMatch(context, Number(row.id));
+  }
+
+  const seasonId = Number(options.seasonId ?? 0);
+  const users = await context.env.DB.prepare(`SELECT user_id FROM off_season_points WHERE season_id=?
+    UNION SELECT host_user_id AS user_id FROM off_match_history
+    UNION SELECT opponent_user_id AS user_id FROM off_match_history`).bind(seasonId).all<any>();
+  const userIds = [...new Set((users.results || []).map((r: any) => Number(r.user_id)).filter(Boolean))];
+  await updateLeaderboardSnapshots(context, userIds, seasonId);
+  return { affectedUsers: userIds.length, backfilledMatches: (unapplied.results || []).length };
 }
