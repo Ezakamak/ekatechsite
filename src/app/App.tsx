@@ -486,24 +486,7 @@ export default function App() {
               ) : isForgotPassword ? (
                 <ForgotPasswordPage />
               ) : isAdmin ? (
-                <>
-                  <AdminPanel />
-                  <div className="bg-black px-4 pb-24 sm:px-6">
-                    <div className="mx-auto max-w-7xl space-y-6">
-                      <AdminOffCredits />
-                      <AdminUserActivity />
-                      <AdminBotProfiles />
-                      <AdminApprovalCenter />
-                      <AdminStockSubmissions />
-                      <MaintenancePanel />
-                      <AdminTodoPanel />
-                      <AdminProjectTools />
-                      <AdminChat />
-                      <AnnouncementAdmin />
-                      <AdminAuditLogs />
-                    </div>
-                  </div>
-                </>
+                <AdminPanel />
               ) : isAccount ? (
                 <AccountPage />
               ) : isOff ? (
