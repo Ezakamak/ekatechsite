@@ -11,14 +11,28 @@ export function normalizeMatchStatus(status: string) {
   if (['abandoned','forfeit'].includes(s)) return 'abandoned';
   return 'completed';
 }
+import { applySeasonPointsForMatch } from './_offLeaderboard';
+
 export async function recordOffMatchHistory(context: any, payload: any) {
   try {
     const started = payload.startedAt ? Date.parse(payload.startedAt) : NaN;
     const ended = payload.completedAt ? Date.parse(payload.completedAt) : NaN;
     const duration = Number.isFinite(started) && Number.isFinite(ended) && ended >= started ? Math.round((ended-started)/1000) : null;
-    await context.env.DB.prepare(`INSERT OR IGNORE INTO off_match_history (game_key,game_label,lobby_table,lobby_id,host_user_id,opponent_user_id,winner_user_id,loser_user_id,status,result_json,game_settings_json,started_at,completed_at,duration_seconds,updated_at)
+    const status = normalizeMatchStatus(payload.status);
+    const result = await context.env.DB.prepare(`INSERT OR IGNORE INTO off_match_history (game_key,game_label,lobby_table,lobby_id,host_user_id,opponent_user_id,winner_user_id,loser_user_id,status,result_json,game_settings_json,started_at,completed_at,duration_seconds,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`)
-      .bind(payload.gameKey, payload.gameLabel || getGameLabel(payload.gameKey), payload.lobbyTable, payload.lobbyId, payload.hostUserId, payload.opponentUserId ?? null, payload.winnerUserId ?? null, payload.loserUserId ?? null, normalizeMatchStatus(payload.status), payload.resultJson == null ? null : JSON.stringify(payload.resultJson), payload.gameSettingsJson == null ? null : JSON.stringify(payload.gameSettingsJson), payload.startedAt ?? null, payload.completedAt ?? null, duration)
+      .bind(payload.gameKey, payload.gameLabel || getGameLabel(payload.gameKey), payload.lobbyTable, payload.lobbyId, payload.hostUserId, payload.opponentUserId ?? null, payload.winnerUserId ?? null, payload.loserUserId ?? null, status, payload.resultJson == null ? null : JSON.stringify(payload.resultJson), payload.gameSettingsJson == null ? null : JSON.stringify(payload.gameSettingsJson), payload.startedAt ?? null, payload.completedAt ?? null, duration)
       .run();
+
+    const existing = await context.env.DB.prepare(`SELECT id, season_points_applied FROM off_match_history WHERE game_key=? AND lobby_id=? LIMIT 1`).bind(payload.gameKey, payload.lobbyId).first<any>();
+    const matchId = Number(existing?.id || 0);
+    if (matchId && Number(existing?.season_points_applied || 0) === 0) {
+      try {
+        await applySeasonPointsForMatch(context, matchId);
+      } catch (error) {
+        console.warn('[off_leaderboard] apply points failed', { matchId, error: String(error) });
+      }
+    }
+    return { inserted: Boolean((result as any)?.meta?.changes), matchId };
   } catch (error) { console.warn('[off_match_history] failed', { payload, error: String(error) }); }
 }

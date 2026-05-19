@@ -733,6 +733,7 @@ export function OffPage() {
             </div>
           </div>
         </section>
+        <OffLeaderboardCard tr={tr} />
 
         <OffFriendsPanel />
 
@@ -921,6 +922,37 @@ export function OffPage() {
       </div>
     </main>
   );
+}
+
+
+function OffLeaderboardCard({ tr }: { tr: boolean }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [seasonId, setSeasonId] = useState(0);
+  const [gameKey, setGameKey] = useState('');
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const u = new URL('/api/off/leaderboard', window.location.origin);
+      u.searchParams.set('seasonId', String(seasonId));
+      u.searchParams.set('limit', '10');
+      if (gameKey) u.searchParams.set('gameKey', gameKey);
+      const r = await fetch(u.toString(), { credentials: 'same-origin' });
+      const d = await r.json().catch(() => ({}));
+      setRows(Array.isArray(d?.leaderboard) ? d.leaderboard : []);
+      setLoading(false);
+    })();
+  }, [seasonId, gameKey]);
+  return <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-medium text-white">OFF Leaderboard</h2>
+      <div className="flex gap-2 text-xs">
+        <button onClick={() => setSeasonId(0)} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-white">All Time</button>
+        <select value={gameKey} onChange={(e) => setGameKey(e.target.value)} className="rounded-full border border-white/10 bg-black px-3 py-1.5 text-white">
+          <option value="">{tr ? 'Tümü' : 'All'}</option><option value="tech_duel">Tech Duel</option><option value="cipher_break">Cipher Break</option><option value="core_clash">Core Clash</option>
+        </select>
+      </div></div>
+    {loading ? <p className="mt-4 text-white/50">...</p> : rows.length === 0 ? <p className="mt-4 text-white/50">Henüz leaderboard verisi yok. İlk maçını oynayıp sıralamaya gir.</p> : <div className="mt-4 space-y-2">{rows.map((r, i) => <div key={r.userId} className={`flex items-center justify-between rounded-2xl border p-3 ${i===0?'border-amber-300/30 bg-amber-300/10':i<3?'border-purple-300/20 bg-purple-300/10':'border-white/10 bg-black/30'}`}><div className="flex items-center gap-3"><span className="w-6 text-white/70">#{r.rank}</span><img src={r.avatarUrl || '/og-image.svg'} className="h-8 w-8 rounded-full object-cover" /><div><p className="text-white">{r.displayName}</p><p className="text-xs text-white/45">{r.wins}/{r.totalMatches} · %{Number(r.winRate||0).toFixed(1)}</p></div></div><p className="font-semibold text-cyan-100">{r.totalPoints}</p></div>)}</div>}
+  </section>
 }
 
 function OffShopApp({
