@@ -8,34 +8,19 @@ export async function onRequestGet(context: any) {
   }
 
   try {
-    const totalUsers = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM users")
-      .first();
-
-    const ownerUsers = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM users WHERE lower(email) = ?")
-      .bind(OWNER_EMAIL)
-      .first();
-
-    const adminUsers = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND lower(email) != ?")
-      .bind(OWNER_EMAIL)
-      .first();
-
-    const offUsers = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'off' AND lower(email) != ?")
-      .bind(OWNER_EMAIL)
-      .first();
-
-    const clientUsers = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM users WHERE (role = 'client' OR role IS NULL) AND lower(email) != ?")
-      .bind(OWNER_EMAIL)
-      .first();
-
-    const blockedUsers = await context.env.DB
-      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'blocked' AND lower(email) != ?")
-      .bind(OWNER_EMAIL)
-      .first();
+    const roleCounts = await context.env.DB
+      .prepare(`
+        SELECT
+          COUNT(*) AS total_users,
+          SUM(CASE WHEN lower(email) = ? THEN 1 ELSE 0 END) AS owner_users,
+          SUM(CASE WHEN role = 'admin' AND lower(email) != ? THEN 1 ELSE 0 END) AS admin_users,
+          SUM(CASE WHEN role = 'off' AND lower(email) != ? THEN 1 ELSE 0 END) AS off_users,
+          SUM(CASE WHEN (role = 'client' OR role IS NULL) AND lower(email) != ? THEN 1 ELSE 0 END) AS client_users,
+          SUM(CASE WHEN role = 'blocked' AND lower(email) != ? THEN 1 ELSE 0 END) AS blocked_users
+        FROM users
+      `)
+      .bind(OWNER_EMAIL, OWNER_EMAIL, OWNER_EMAIL, OWNER_EMAIL, OWNER_EMAIL)
+      .first<any>();
 
     const recentUsers = await context.env.DB
       .prepare(`
@@ -85,12 +70,12 @@ export async function onRequestGet(context: any) {
     return Response.json({
       admin: admin.user,
       stats: {
-        totalUsers: totalUsers?.count || 0,
-        ownerUsers: ownerUsers?.count || 0,
-        adminUsers: adminUsers?.count || 0,
-        offUsers: offUsers?.count || 0,
-        clientUsers: clientUsers?.count || 0,
-        blockedUsers: blockedUsers?.count || 0,
+        totalUsers: Number(roleCounts?.total_users || 0),
+        ownerUsers: Number(roleCounts?.owner_users || 0),
+        adminUsers: Number(roleCounts?.admin_users || 0),
+        offUsers: Number(roleCounts?.off_users || 0),
+        clientUsers: Number(roleCounts?.client_users || 0),
+        blockedUsers: Number(roleCounts?.blocked_users || 0),
         activeSessions: activeSessions?.count || 0,
         averageCustomerRating: customerRatingSummary.averageRating,
         ratedCompletedProjects: customerRatingSummary.ratedCompletedProjects,

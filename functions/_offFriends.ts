@@ -23,10 +23,6 @@ export async function requireOffUser(context: any) {
   }
 
   await ensureUsersNicknameColumn(context);
-  await ensureFriendshipTables(context);
-  await ensureOffProfile(context, Number(user.id));
-  await ensureOffTitleTables(context);
-  await touchOffPresence(context, Number(user.id));
   return { ok: true, user: { id: Number(user.id), name: String(user.name || ""), email: String(user.email || ""), role: isOwner ? "owner" : role } };
 }
 
@@ -50,9 +46,6 @@ export async function requireOffSocialUser(context: any) {
   if (role === "blocked") return { ok: false, status: 403, error: "Bu hesap site erişiminden engellendi." };
 
   await ensureUsersNicknameColumn(context);
-  await ensureFriendshipTables(context);
-  await ensureOffProfile(context, Number(user.id));
-  await touchOffPresence(context, Number(user.id));
 
   return {
     ok: true,
@@ -65,6 +58,28 @@ export async function requireOffSocialUser(context: any) {
   };
 }
 
+
+export async function requireSessionOnly(context: any) {
+  const token = getCookie(context.request.headers.get("Cookie") || "", "session");
+  if (!token) return { ok: false, status: 401, error: "Unauthorized" };
+
+  const user = await context.env.DB.prepare(
+    `SELECT u.id, u.name, u.role, u.email
+     FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.token = ?
+       AND datetime(replace(substr(s.expires_at, 1, 19), 'T', ' ')) > datetime('now')`,
+  ).bind(token).first<any>();
+
+  if (!user) return { ok: false, status: 401, error: "Unauthorized" };
+
+  const rawRole = String(user.role || "client").toLowerCase();
+  const isOwner = String(user.email || "").toLowerCase() === OWNER_EMAIL;
+  const role = isOwner ? "owner" : rawRole;
+  if (role === "blocked") return { ok: false, status: 403, error: "Bu hesap site erişiminden engellendi." };
+
+  return { ok: true, user: { id: Number(user.id), name: String(user.name || ""), email: String(user.email || ""), role } };
+}
 export async function ensureFriendshipTables(context: any) {
   await context.env.DB.prepare(`
     CREATE TABLE IF NOT EXISTS off_friendships (
@@ -155,7 +170,6 @@ export async function ensureOffPresenceTable(context: any) {
 }
 
 export async function touchOffPresence(context: any, userId: number) {
-  await ensureOffPresenceTable(context);
   await context.env.DB.prepare(
     `INSERT INTO off_user_presence (user_id, last_seen_at, updated_at)
      VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 type Item = { id: number; userId?: number; friendshipId?: number; displayName: string; avatarUrl?: string | null; level?: number; xp?: number; selectedTitle?: string | null; status?: string; friendshipStatus?: string; secondaryLabel?: string | null; isOnline?: boolean; lastSeenAt?: string | null };
 
 const btn = "rounded-full px-3 py-1.5 text-xs font-medium transition border";
-const ONLINE_REFRESH_MS = 30000;
+const ONLINE_REFRESH_MS = 300000;
 
 export function OffFriendsPanel() {
   const [friends, setFriends] = useState<Item[]>([]);
@@ -35,7 +35,6 @@ export function OffFriendsPanel() {
     try {
       if (!silent) setLoadingUsers(true);
       setUsersError(null);
-      await pingPresence();
       const res = await fetch("/api/off/users/online");
       let data: any = null;
       try {
