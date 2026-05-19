@@ -40,6 +40,7 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
   const [walletError, setWalletError] = useState("");
   const [pulseKey, setPulseKey] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const cleanupTimerRef = useRef<number | null>(null);
 
   const sounds = useMemo(
     () =>
@@ -94,21 +95,28 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
     return () => {
       active = false;
       window.removeEventListener("ekatech-techcoin-refresh", refreshWallet);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-        audioRef.current = null;
-      }
+      finalizePlayback();
     };
   }, []);
 
-  const stopCurrentAudio = () => {
-    if (!audioRef.current) return;
-    audioRef.current.pause();
-    audioRef.current.onended = null;
-    audioRef.current.onerror = null;
-    audioRef.current.src = "";
-    audioRef.current = null;
+  const clearCleanupTimer = () => {
+    if (cleanupTimerRef.current !== null) {
+      window.clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+    }
+  };
+
+  const finalizePlayback = (nextMessage?: string) => {
+    clearCleanupTimer();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    setIsPlaying(false);
+    if (nextMessage) setMessage(nextMessage);
   };
 
   const awardTechCoin = async () => {
@@ -148,6 +156,7 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
 
     const selected = playableSounds[Math.floor(Math.random() * playableSounds.length)];
     const audio = new Audio(selected.url);
+    finalizePlayback();
     audioRef.current = audio;
     setActiveSound(selected);
     setIsPlaying(true);
@@ -155,25 +164,23 @@ export function MemeClicker({ onBack }: { onBack: () => void }) {
     setMessage(`${selected.displayName} yükleniyor...`);
 
     audio.onended = () => {
-      setIsPlaying(false);
-      setMessage("Ses bitti. Tech Coin aktarılıyor...");
-      audioRef.current = null;
+      finalizePlayback("Ses bitti. Tech Coin aktarılıyor...");
       void awardTechCoin();
     };
 
     audio.onerror = () => {
-      setIsPlaying(false);
-      setMessage("Ses oynatılamadı.");
-      audioRef.current = null;
+      finalizePlayback("Ses oynatılamadı.");
     };
+
+    cleanupTimerRef.current = window.setTimeout(() => {
+      if (audioRef.current === audio) finalizePlayback("Ses zaman aşımına uğradı. Yeni ses seçebilirsin.");
+    }, 20_000);
 
     try {
       await audio.play();
       setMessage(`${selected.displayName} çalıyor...`);
     } catch {
-      stopCurrentAudio();
-      setIsPlaying(false);
-      setMessage("Ses oynatılamadı.");
+      finalizePlayback("Ses oynatılamadı.");
     }
   };
 

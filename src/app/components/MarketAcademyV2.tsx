@@ -188,7 +188,12 @@ function shuffleSymbols(symbols: string[]) {
 }
 
 async function readJson(response: Response) {
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
   const raw = await response.text();
+  const looksLikeHtml = contentType.includes("text/html") || /^\s*<!doctype html/i.test(raw) || /^\s*<html/i.test(raw);
+  if (looksLikeHtml) {
+    throw new Error("Market servisi HTML döndürdü. Lütfen oturumunu yenileyip tekrar dene.");
+  }
   let data: any = null;
   try {
     data = raw ? JSON.parse(raw) : null;
