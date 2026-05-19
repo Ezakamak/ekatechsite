@@ -14,12 +14,24 @@ export async function onRequestGet(context: any) {
 
     const result = await context.env.DB
       .prepare(`
-        SELECT id, type, category, title, body, link, action_label, action_payload, source_table, source_id, priority, is_read, created_at, expires_at
-        FROM notifications
-        WHERE user_id = ?
-          AND (expires_at IS NULL OR expires_at > datetime('now'))
-          AND (? = '' OR category = ?)
-        ORDER BY id DESC
+        SELECT
+          n.id, n.type, n.category, n.title, n.body, n.link, n.action_label, n.action_payload, n.source_table, n.source_id, n.priority, n.is_read, n.created_at, n.expires_at,
+          CASE
+            WHEN n.type = 'friend_request' AND n.source_table = 'off_friendships' THEN f.status
+            WHEN n.type = 'game_invite' AND n.source_table = 'off_game_invites' THEN gi.status
+            ELSE NULL
+          END AS action_status
+        FROM notifications n
+        LEFT JOIN off_friendships f
+          ON n.source_table = 'off_friendships'
+          AND n.source_id = CAST(f.id AS TEXT)
+        LEFT JOIN off_game_invites gi
+          ON n.source_table = 'off_game_invites'
+          AND n.source_id = CAST(gi.id AS TEXT)
+        WHERE n.user_id = ?
+          AND (n.expires_at IS NULL OR n.expires_at > datetime('now'))
+          AND (? = '' OR n.category = ?)
+        ORDER BY n.id DESC
         LIMIT 50
       `)
       .bind(user.user.id, hasCategory ? category : "", hasCategory ? category : "")

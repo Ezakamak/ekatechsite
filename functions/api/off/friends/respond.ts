@@ -17,6 +17,14 @@ export async function onRequestPost(context: any) {
 
   const next = action === "accept" ? "accepted" : "rejected";
   await context.env.DB.prepare(`UPDATE off_friendships SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).bind(next, friendshipId).run();
+  await context.env.DB.prepare(
+    `UPDATE notifications
+     SET is_read = 1, expires_at = datetime('now')
+     WHERE user_id = ?
+       AND source_table = 'off_friendships'
+       AND source_id = ?
+       AND type = 'friend_request'`
+  ).bind(uid, String(friendshipId)).run();
 
   if (next === 'accepted') {
     const accepter = await context.env.DB.prepare(`SELECT COALESCE(name, email, 'Bir kullanıcı') AS display_name FROM users WHERE id = ?`).bind(uid).first<any>();

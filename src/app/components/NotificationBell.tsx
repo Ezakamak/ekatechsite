@@ -18,6 +18,7 @@ type NotificationItem = {
   priority?: string;
   is_read?: number;
   created_at?: string;
+  action_status?: string | null;
 };
 
 function formatTime(value?: string, tr = true) {
@@ -109,6 +110,13 @@ export function NotificationBell() {
 
   const isOffFriendRequest = (item: NotificationItem) => item.type === "friend_request" && item.source_table === "off_friendships";
   const isGameInvite = (item: NotificationItem) => item.type === "game_invite" && item.source_table === "off_game_invites";
+  const isPendingAction = (item: NotificationItem) => item.action_status === "pending";
+  const gameInviteStatusLabel = (status?: string | null) => {
+    if (status === "accepted") return "Kabul edildi";
+    if (status === "rejected") return "Reddedildi";
+    if (status === "expired") return "Süresi doldu";
+    return tr ? "İşlendi" : "Processed";
+  };
 
   const getFriendshipId = (item: NotificationItem) => {
     const id = Number(item.source_id);
@@ -200,8 +208,8 @@ export function NotificationBell() {
                 const isFriendRequest = isOffFriendRequest(item);
                 const friendshipId = getFriendshipId(item);
                 const processing = processingById[item.id];
-                const isHandled = Boolean(handledById[item.id]);
                 const gameInvite = isGameInvite(item);
+                const isHandled = Boolean(handledById[item.id]) || ((isFriendRequest || gameInvite) && !isPendingAction(item));
                 return (
                 <div
                   key={item.id}
@@ -225,7 +233,7 @@ export function NotificationBell() {
                       <p className="text-sm font-medium text-white">{item.title}</p>
                       {item.body && <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/45">{item.body}</p>}
                       {item.action_label && !isFriendRequest && <span className="mt-2 inline-flex rounded-lg border border-cyan-300/40 px-2 py-1 text-[11px] text-cyan-200">{item.action_label}</span>}
-                      {isFriendRequest && friendshipId && !isHandled && (
+                      {isFriendRequest && friendshipId && isPendingAction(item) && !isHandled && (
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -245,13 +253,14 @@ export function NotificationBell() {
                           </button>
                         </div>
                       )}
-                      {gameInvite && !isHandled && (
+                      {gameInvite && isPendingAction(item) && !isHandled && (
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button type="button" onClick={(event) => void handleGameInvite(event, item, "accept")} disabled={Boolean(processing)} className="rounded-lg border border-emerald-300/45 bg-emerald-500/20 px-2.5 py-1 text-[11px] text-emerald-50 disabled:opacity-60">{processing === "accept" ? "İşleniyor..." : "Kabul et"}</button>
                           <button type="button" onClick={(event) => void handleGameInvite(event, item, "reject")} disabled={Boolean(processing)} className="rounded-lg border border-rose-300/45 bg-rose-500/20 px-2.5 py-1 text-[11px] text-rose-50 disabled:opacity-60">{processing === "reject" ? "İşleniyor..." : "Reddet"}</button>
                         </div>
                       )}
                       {isFriendRequest && (!friendshipId || isHandled) && <span className="mt-2 inline-flex rounded-lg border border-white/20 px-2 py-1 text-[11px] text-white/60">{tr ? "İşlendi" : "Processed"}</span>}
+                      {gameInvite && isHandled && <span className="mt-2 inline-flex rounded-lg border border-white/20 px-2 py-1 text-[11px] text-white/60">{gameInviteStatusLabel(item.action_status)}</span>}
                       <p className="mt-1 text-[11px] text-white/30">{formatTime(item.created_at, tr)}</p>
                     </div>
                   </div>

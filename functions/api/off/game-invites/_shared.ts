@@ -48,8 +48,29 @@ export async function onRequestPost(context: any) {
   const inviteId = Number(created?.meta?.last_row_id || 0); const expiresRow = await context.env.DB.prepare("SELECT expires_at FROM off_game_invites WHERE id=?").bind(inviteId).first<any>();
   const me = await context.env.DB.prepare(`SELECT u.id, u.name, u.email, u.nickname, op.display_name AS off_display_name FROM users u LEFT JOIN off_profiles op ON op.user_id=u.id WHERE u.id=?`).bind(auth.user.id).first<any>();
   const actor = resolveDisplayName(me);
-  await createNotification(context, { userId: friendId, category: "off", type: "game_invite", title: gameKey === "tech_duel" ? "Tech Duel daveti" : gameKey === "cipher_break" ? "Cipher Break daveti" : "Core Clash daveti", body: gameKey === "tech_duel" ? `${actor} seni ${toModeName(selectedMode || "classic")} modunda Tech Duel oynamaya davet etti.` : gameKey === "cipher_break" ? `${actor} seni Cipher Break maçına davet etti.` : `${actor} seni ${toMapName(settings.mapKey)} haritasında Core Clash maçına davet etti.`, link: "/off", sourceTable: "off_game_invites", sourceId: String(inviteId), priority: "high", expiresAt: expiresRow?.expires_at || undefined });
-  return Response.json({ ok: true, inviteId, expiresAt: expiresRow?.expires_at || null });
+  let notificationCreated = false;
+  let notificationSkipped = false;
+  let notificationError: string | null = null;
+  try {
+    const createdNotification = await createNotification(context, {
+      userId: friendId,
+      category: "off",
+      type: "game_invite",
+      title: gameKey === "tech_duel" ? "Tech Duel daveti" : gameKey === "cipher_break" ? "Cipher Break daveti" : "Core Clash daveti",
+      body: gameKey === "tech_duel" ? `${actor} seni ${toModeName(selectedMode || "classic")} modunda Tech Duel oynamaya davet etti.` : gameKey === "cipher_break" ? `${actor} seni Cipher Break maçına davet etti.` : `${actor} seni ${toMapName(settings.mapKey)} haritasında Core Clash maçına davet etti.`,
+      link: "/off",
+      sourceTable: "off_game_invites",
+      sourceId: String(inviteId),
+      priority: "high",
+      expiresAt: expiresRow?.expires_at || undefined
+    });
+    notificationSkipped = Boolean(createdNotification?.skipped);
+    notificationCreated = Boolean(createdNotification?.ok) && !notificationSkipped;
+  } catch (error: any) {
+    notificationError = String(error?.message || error || "notification_create_failed");
+    console.warn("[off/game-invites/create] createNotification failed", { inviteId, inviteeId: friendId, gameKey, notificationError });
+  }
+  return Response.json({ ok: true, inviteId, expiresAt: expiresRow?.expires_at || null, notificationCreated, notificationSkipped, notificationError, targetUserId: friendId, inviteeId: friendId, gameKey, gameSettingsJson: settingsJson });
 }
 
 export async function respondInvite(context: any, action: "accept" | "reject") { /* generic */
