@@ -1,4 +1,5 @@
 import { awardGameExp, expForGame } from "../_levels";
+import { creditWallet, debitWalletAtomic, ensureWallet, getWallet, insertCoinTransaction } from "../_coinWallet";
 import { createClientSeed, createNonce, createServerSeed, generateDiceRoll, sha256 } from "../../src/lib/provablyFair";
 
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
@@ -54,13 +55,9 @@ export async function onRequestPost(context: any) {
     const potentialReward = rewardForAmount(amount, math.multiplier);
     const beforeWallet = await getWallet(context, auth.user.id);
 
-    const debit = await d1Prepare(context,
-      `UPDATE coin_wallets SET balance = COALESCE(balance, 0) - ?, updated_at = datetime('now') WHERE user_id = ? AND COALESCE(balance, 0) >= ?`,
-    )
-      .bind(amount, auth.user.id, amount)
-      .run();
+    const debitOk = await debitWalletAtomic(context, auth.user.id, amount, `Tech Dice play: ${mode} ${target}`);
 
-    if ((debit.meta?.changes || 0) < 1) {
+    if (!debitOk) {
       return json(
         {
           error: "Not enough Tech Coin.",
@@ -70,12 +67,6 @@ export async function onRequestPost(context: any) {
         { status: 402 },
       );
     }
-
-    await d1Prepare(context,
-      `INSERT INTO coin_transactions (user_id, amount, reason, created_at) VALUES (?, ?, ?, datetime('now'))`,
-    )
-      .bind(auth.user.id, -amount, `Tech Dice play: ${mode} ${target}`)
-      .run();
 
     const diceOutcome = await generateDiceRoll(serverSeed, clientSeed, nonce);
     const rolledNumber = diceOutcome.roll;
@@ -155,7 +146,7 @@ async function buildState(context: any, userId: number) {
       FROM tech_dice_rolls
       WHERE user_id = ?
       ORDER BY id DESC
-      LIMIT 60
+      LIMIT 20
     `,
   )
     .bind(userId)
@@ -206,29 +197,6 @@ function parseMode(value: any): DiceMode {
 async function ensureDiceTables(context: any) {
   await d1Prepare(context,
     `
-    CREATE TABLE IF NOT EXISTS coin_wallets (
-      user_id INTEGER PRIMARY KEY,
-      balance INTEGER DEFAULT 100,
-      lifetime_earned INTEGER DEFAULT 0,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  ).run();
-
-  await d1Prepare(context,
-    `
-    CREATE TABLE IF NOT EXISTS coin_transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      amount INTEGER NOT NULL,
-      reason TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  ).run();
-
-  await d1Prepare(context,
-    `
     CREATE TABLE IF NOT EXISTS tech_fair_commitments (
       id TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL,
@@ -265,20 +233,6 @@ async function ensureDiceTables(context: any) {
     )
   `,
   ).run();
-  const fairColumns = [
-    ["server_seed", "TEXT"],
-    ["server_hash", "TEXT"],
-    ["client_seed", "TEXT"],
-    ["nonce", "INTEGER"],
-    ["result_hmac", "TEXT"],
-  ];
-  for (const [name, type] of fairColumns) {
-    await d1Prepare(context, `ALTER TABLE tech_dice_rolls ADD COLUMN ${name} ${type}`).run().catch(() => null);
-  }
-
-  await logTableInfo(context, "tech_fair_commitments");
-  await logTableInfo(context, "tech_dice_rolls");
-
 }
 
 type FairCommitment = { id: string; serverSeed: string; serverHash: string; nonce: number };
@@ -323,56 +277,23 @@ async function consumeDiceCommitment(context: any, userId: number, commitmentId:
   return commitment;
 }
 
-async function ensureWallet(context: any, userId: number) {
-  await d1Prepare(context,
-    `INSERT OR IGNORE INTO coin_wallets (user_id, balance, lifetime_earned, updated_at) VALUES (?, 100, 0, datetime('now'))`,
-  )
-    .bind(userId)
-    .run();
-}
-
-async function getWallet(context: any, userId: number) {
-  const wallet = await d1Prepare(context,
-    `SELECT COALESCE(balance, 0) AS balance, COALESCE(lifetime_earned, 0) AS lifetime_earned, updated_at FROM coin_wallets WHERE user_id = ?`,
-  )
-    .bind(userId)
-    .first();
-  return {
-    currency: "Tech Coin",
-    symbol: "TC",
-    balance: Number(wallet?.balance || 0),
-    lifetime_earned: Number(wallet?.lifetime_earned || 0),
-    updated_at: wallet?.updated_at || null,
-  };
-}
-
-async function creditWallet(context: any, userId: number, amount: number, reason: string) {
-  await d1Prepare(context,
-    `UPDATE coin_wallets SET balance = COALESCE(balance, 0) + ?, lifetime_earned = COALESCE(lifetime_earned, 0) + ?, updated_at = datetime('now') WHERE user_id = ?`,
-  )
-    .bind(amount, amount, userId)
-    .run();
-  await d1Prepare(context,
-    `INSERT INTO coin_transactions (user_id, amount, reason, created_at) VALUES (?, ?, ?, datetime('now'))`,
-  )
-    .bind(userId, amount, reason)
-    .run();
-}
-
-
 type D1ColumnInfo = { name: string; type: string; notnull: number; dflt_value: unknown; pk: number };
+
+const DEBUG_D1 = String((globalThis as any)?.process?.env?.DEBUG_D1 || "") === "1";
 
 function d1Prepare(context: any, sql: string) {
   const statement = context.env.DB.prepare(sql);
   const execute = async (method: "run" | "first" | "all", values: unknown[] = []) => {
     const safeValues = values.map(normalizeD1BindValue);
-    logD1Query(sql, safeValues);
-    await logD1ColumnComparison(context, sql, safeValues);
+    if (DEBUG_D1) {
+      logD1Query(sql, safeValues);
+      await logD1ColumnComparison(context, sql, safeValues);
+    }
     try {
       const bound = safeValues.length ? statement.bind(...safeValues) : statement;
       return await bound[method]();
     } catch (error) {
-      console.error("[D1_DEBUG] D1 query failed", {
+      if (DEBUG_D1) console.error("[D1_DEBUG] D1 query failed", {
         sql: compactSql(sql),
         method,
         params: describeD1BindValues(safeValues),
@@ -549,6 +470,7 @@ async function getTableColumns(context: any, table: string): Promise<Map<string,
   const cached = databaseCache.get(table);
   if (cached) return cached;
 
+  if (!DEBUG_D1) return new Map<string, D1ColumnInfo>();
   const rows = await context.env.DB.prepare(`PRAGMA table_info(${quoteIdent(table)})`).all();
   const columns = new Map<string, D1ColumnInfo>();
   for (const row of rows?.results || []) {

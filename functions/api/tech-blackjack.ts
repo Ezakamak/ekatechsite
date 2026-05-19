@@ -1,4 +1,5 @@
 import { awardGameExp, expForGame } from "../_levels";
+import { creditWallet, debitWalletAtomic, ensureWallet, getWallet } from "../_coinWallet";
 import { createClientSeed, createNonce, createServerSeed, generateBlackjackDeck, sha256 } from "../../src/lib/provablyFair";
 
 const OWNER_EMAIL = "emirkaganaksu02@gmail.com";
@@ -31,7 +32,6 @@ export async function onRequestGet(context: any) {
   if (!auth.ok) return json({ error: auth.error }, { status: auth.status });
 
   try {
-    await ensureBlackjackTables(context);
     await ensureWallet(context, auth.user.id);
     return json(await buildState(context, auth.user.id));
   } catch (error) {
@@ -44,7 +44,6 @@ export async function onRequestPost(context: any) {
   if (!auth.ok) return json({ error: auth.error }, { status: auth.status });
 
   try {
-    await ensureBlackjackTables(context);
     await ensureWallet(context, auth.user.id);
 
     const body = await context.request.json().catch(() => ({}));
@@ -85,8 +84,7 @@ export async function onRequestPost(context: any) {
         ...(await buildState(context, auth.user.id)),
         round: {
           roundId,
-          deck,
-          fairness: { algorithm: "SHA-256 / HMAC-SHA256 Provably Fair", clientSeed, nonce, serverHash, deckHmac },
+          fairness: { algorithm: "SHA-256 / HMAC-SHA256 Provably Fair", clientSeed, nonce, serverHash, deckHmac, commitment: deckHmac },
         },
       });
     }
@@ -131,7 +129,7 @@ async function buildState(context: any, userId: number) {
       FROM tech_blackjack_hands
       WHERE user_id = ?
       ORDER BY id DESC
-      LIMIT 40
+      LIMIT 20
     `,
   )
     .bind(userId)
@@ -165,32 +163,8 @@ function calculateBlackjackPayout(result: string | undefined, betAmount: number)
 }
 
 async function debitWallet(context: any, userId: number, amount: number, reason: string) {
-  const debit = await context.env.DB.prepare(
-    `UPDATE coin_wallets SET balance = COALESCE(balance, 0) - ?, updated_at = datetime('now') WHERE user_id = ? AND COALESCE(balance, 0) >= ?`,
-  )
-    .bind(amount, userId, amount)
-    .run();
-
-  if ((debit.meta?.changes || 0) < 1) throw new Error("Not enough Tech Coin.");
-
-  await context.env.DB.prepare(
-    `INSERT INTO coin_transactions (user_id, amount, reason, created_at) VALUES (?, ?, ?, datetime('now'))`,
-  )
-    .bind(userId, -amount, reason)
-    .run();
-}
-
-async function creditWallet(context: any, userId: number, amount: number, reason: string) {
-  await context.env.DB.prepare(
-    `UPDATE coin_wallets SET balance = COALESCE(balance, 0) + ?, lifetime_earned = COALESCE(lifetime_earned, 0) + ?, updated_at = datetime('now') WHERE user_id = ?`,
-  )
-    .bind(amount, amount, userId)
-    .run();
-  await context.env.DB.prepare(
-    `INSERT INTO coin_transactions (user_id, amount, reason, created_at) VALUES (?, ?, ?, datetime('now'))`,
-  )
-    .bind(userId, amount, reason)
-    .run();
+  const ok = await debitWalletAtomic(context, userId, amount, reason);
+  if (!ok) throw new Error("Not enough Tech Coin.");
 }
 
 async function settleBlackjackRound(context: any, userId: number, body: BlackjackLogBody & { roundId?: string; usedDeck?: unknown }) {
@@ -245,101 +219,6 @@ async function insertBlackjackLog(context: any, userId: number, body: BlackjackL
     .run();
 }
 
-async function ensureBlackjackTables(context: any) {
-  await context.env.DB.prepare(
-    `
-    CREATE TABLE IF NOT EXISTS coin_wallets (
-      user_id INTEGER PRIMARY KEY,
-      balance INTEGER DEFAULT 100,
-      lifetime_earned INTEGER DEFAULT 0,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  ).run();
-
-  await context.env.DB.prepare(
-    `
-    CREATE TABLE IF NOT EXISTS coin_transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      amount INTEGER NOT NULL,
-      reason TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  ).run();
-
-  await context.env.DB.prepare(
-    `
-    CREATE TABLE IF NOT EXISTS tech_blackjack_rounds (
-      id TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      server_seed TEXT NOT NULL,
-      server_hash TEXT NOT NULL,
-      client_seed TEXT NOT NULL,
-      nonce INTEGER NOT NULL,
-      deck_hmac TEXT NOT NULL,
-      deck_order TEXT NOT NULL,
-      used_deck TEXT,
-      settled_at TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  ).run();
-
-  await context.env.DB.prepare(
-    `
-    CREATE TABLE IF NOT EXISTS tech_blackjack_hands (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      result_type TEXT NOT NULL,
-      player_score INTEGER DEFAULT 0,
-      dealer_score INTEGER DEFAULT 0,
-      bet_amount INTEGER DEFAULT 0,
-      net_amount INTEGER DEFAULT 0,
-      payout_amount INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  ).run();
-
-  const walletColumns = [
-    ["balance", "INTEGER DEFAULT 100"],
-    ["lifetime_earned", "INTEGER DEFAULT 0"],
-    ["updated_at", "TEXT DEFAULT CURRENT_TIMESTAMP"],
-  ];
-  for (const [name, type] of walletColumns) await addColumnIfMissing(context, "coin_wallets", name, type);
-
-  const transactionColumns = [
-    ["reason", "TEXT"],
-    ["created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"],
-  ];
-  for (const [name, type] of transactionColumns) await addColumnIfMissing(context, "coin_transactions", name, type);
-
-  const roundColumns = [
-    ["server_seed", "TEXT"],
-    ["server_hash", "TEXT"],
-    ["client_seed", "TEXT"],
-    ["nonce", "INTEGER"],
-    ["deck_hmac", "TEXT"],
-    ["deck_order", "TEXT"],
-    ["used_deck", "TEXT"],
-    ["settled_at", "TEXT"],
-    ["created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"],
-  ];
-  for (const [name, type] of roundColumns) await addColumnIfMissing(context, "tech_blackjack_rounds", name, type);
-
-  const handColumns = [
-    ["player_score", "INTEGER DEFAULT 0"],
-    ["dealer_score", "INTEGER DEFAULT 0"],
-    ["bet_amount", "INTEGER DEFAULT 0"],
-    ["net_amount", "INTEGER DEFAULT 0"],
-    ["payout_amount", "INTEGER DEFAULT 0"],
-    ["created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"],
-  ];
-  for (const [name, type] of handColumns) await addColumnIfMissing(context, "tech_blackjack_hands", name, type);
-}
-
 async function getTableColumns(context: any, table: string): Promise<TableColumn[]> {
   const result = await context.env.DB.prepare(`PRAGMA table_info(${sqlIdentifier(table)})`).all();
   return (result?.results || []).map((column: any) => ({
@@ -384,29 +263,6 @@ async function addColumnIfMissing(context: any, table: string, column: string, t
 
 function sanitizeSeed(value: unknown) { return String(value || "").trim().slice(0, 128); }
 function safeJsonArray(value: unknown) { try { const parsed = JSON.parse(String(value || "[]")); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
-
-async function ensureWallet(context: any, userId: number) {
-  await context.env.DB.prepare(
-    `INSERT OR IGNORE INTO coin_wallets (user_id, balance, lifetime_earned, updated_at) VALUES (?, 100, 0, datetime('now'))`,
-  )
-    .bind(userId)
-    .run();
-}
-
-async function getWallet(context: any, userId: number) {
-  const wallet = await context.env.DB.prepare(
-    `SELECT COALESCE(balance, 0) AS balance, COALESCE(lifetime_earned, 0) AS lifetime_earned, updated_at FROM coin_wallets WHERE user_id = ?`,
-  )
-    .bind(userId)
-    .first();
-  return {
-    currency: "Tech Coin",
-    symbol: "TC",
-    balance: Number(wallet?.balance || 0),
-    lifetime_earned: Number(wallet?.lifetime_earned || 0),
-    updated_at: wallet?.updated_at || null,
-  };
-}
 
 async function requireOffUser(context: any) {
   const token = getCookie(context.request.headers.get("Cookie") || "", "session");

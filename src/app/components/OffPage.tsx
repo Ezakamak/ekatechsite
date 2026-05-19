@@ -410,7 +410,7 @@ export function OffPage() {
     };
 
     loadWallet();
-    const timer = window.setInterval(loadWallet, 10_000);
+    const timer = window.setInterval(loadWallet, 60_000);
     window.addEventListener("ekatech-techcoin-refresh", loadWallet);
 
     return () => {

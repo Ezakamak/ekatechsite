@@ -35,10 +35,8 @@ export function TechCoinWalletBadge({ className = "" }: { className?: string }) 
 
   useEffect(() => {
     loadWallet();
-    const timer = window.setInterval(loadWallet, 10_000);
     window.addEventListener("ekatech-techcoin-refresh", loadWallet);
     return () => {
-      window.clearInterval(timer);
       window.removeEventListener("ekatech-techcoin-refresh", loadWallet);
     };
   }, [loadWallet]);
