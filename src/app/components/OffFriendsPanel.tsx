@@ -37,14 +37,17 @@ export function OffFriendsPanel() {
       setUsersError(null);
       await pingPresence();
       const res = await fetch("/api/off/users/online");
-      let data: any = {};
+      let data: any = null;
       try {
         data = await res.json();
       } catch {
-        throw new Error("Kullanıcı listesi geçersiz formatta geldi.");
+        throw new Error("Kullanıcı listesi JSON yerine HTML/hata sayfası döndürdü.");
       }
+      if (!data || typeof data !== "object") throw new Error("Kullanıcı listesi geçersiz formatta geldi.");
+      if (data?.error) throw new Error(String(data.error));
       if (!res.ok) throw new Error(data?.error || `Kullanıcı listesi yüklenemedi (HTTP ${res.status})`);
-      setAddableUsers(Array.isArray(data?.users) ? data.users : []);
+      if (!Array.isArray(data?.users)) throw new Error("Kullanıcı listesi geçersiz formatta geldi.");
+      setAddableUsers(data.users);
     } catch (_error: any) {
       const message = _error?.message || "Kullanıcı listesi yüklenemedi.";
       setUsersError(message);
