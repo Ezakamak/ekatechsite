@@ -24,7 +24,41 @@ export async function requireOffUser(context: any) {
   await ensureOffProfile(context, Number(user.id));
   await ensureOffTitleTables(context);
   await touchOffPresence(context, Number(user.id));
-  return { ok: true, user: { id: Number(user.id), name: String(user.name || "") } };
+  return { ok: true, user: { id: Number(user.id), name: String(user.name || ""), email: String(user.email || ""), role: isOwner ? "owner" : role } };
+}
+
+export async function requireOffSocialUser(context: any) {
+  const token = getCookie(context.request.headers.get("Cookie") || "", "session");
+  if (!token) return { ok: false, status: 401, error: "Unauthorized" };
+
+  const user = await context.env.DB.prepare(
+    `SELECT u.id, u.name, u.role, u.email
+     FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.token = ?
+       AND datetime(replace(substr(s.expires_at, 1, 19), 'T', ' ')) > datetime('now')`,
+  ).bind(token).first<any>();
+
+  if (!user) return { ok: false, status: 401, error: "Unauthorized" };
+
+  const rawRole = String(user.role || "client").toLowerCase();
+  const isOwner = String(user.email || "").toLowerCase() === OWNER_EMAIL;
+  const role = isOwner ? "owner" : rawRole;
+  if (role === "blocked") return { ok: false, status: 403, error: "Bu hesap site erişiminden engellendi." };
+
+  await ensureFriendshipTables(context);
+  await ensureOffProfile(context, Number(user.id));
+  await touchOffPresence(context, Number(user.id));
+
+  return {
+    ok: true,
+    user: {
+      id: Number(user.id),
+      name: String(user.name || ""),
+      email: String(user.email || ""),
+      role,
+    },
+  };
 }
 
 export async function ensureFriendshipTables(context: any) {
@@ -80,7 +114,6 @@ export async function ensureOffProfile(context: any, userId: number) {
   ).bind(userId, userId).run();
 }
 
-
 export async function ensureOffPresenceTable(context: any) {
   await context.env.DB.prepare(`
     CREATE TABLE IF NOT EXISTS off_user_presence (
@@ -102,13 +135,13 @@ export async function touchOffPresence(context: any, userId: number) {
        updated_at = CURRENT_TIMESTAMP`
   ).bind(userId).run();
 }
+
 function getCookie(cookieHeader: string, name: string) {
   return cookieHeader
     .split("; ")
     .find((row) => row.startsWith(`${name}=`))
     ?.split("=")[1];
 }
-
 
 async function ensureOffTitleTables(context: any) {
   await context.env.DB.prepare(`
