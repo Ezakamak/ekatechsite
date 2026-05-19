@@ -951,8 +951,13 @@ function OffLeaderboardCard({ tr }: { tr: boolean }) {
           <option value="">{tr ? 'Tümü' : 'All'}</option><option value="tech_duel">Tech Duel</option><option value="cipher_break">Cipher Break</option><option value="core_clash">Core Clash</option>
         </select>
       </div></div>
-    {loading ? <p className="mt-4 text-white/50">...</p> : rows.length === 0 ? <div className="mt-4 space-y-2"><p className="text-white/50">Henüz leaderboard verisi yok.</p></div> : <div className="mt-4 space-y-2">{rows.map((r, i) => <div key={r.userId} className={`flex items-center justify-between rounded-2xl border p-3 ${i===0?'border-amber-300/30 bg-amber-300/10':i<3?'border-purple-300/20 bg-purple-300/10':'border-white/10 bg-black/30'}`}><div className="flex items-center gap-3"><span className="w-6 text-white/70">#{r.rank}</span><img src={r.avatarUrl || '/og-image.svg'} className="h-8 w-8 rounded-full object-cover" /><div><p className="text-white">{r.displayName}</p><p className="text-xs text-white/45">{r.wins}/{r.totalMatches} · %{Number(r.winRate||0).toFixed(1)}</p></div></div><p className="font-semibold text-cyan-100">{r.totalPoints}</p></div>)}</div>}
+    {loading ? <p className="mt-4 text-white/50">...</p> : rows.length === 0 ? <div className="mt-4 space-y-2"><p className="text-white/50">Henüz leaderboard verisi yok.</p></div> : <div className="mt-4 space-y-2">{rows.map((r, i) => <div key={r.userId} className={`flex items-center justify-between rounded-2xl border p-3 ${i===0?'border-amber-300/30 bg-amber-300/10':i<3?'border-purple-300/20 bg-purple-300/10':'border-white/10 bg-black/30'}`}><div className="flex items-center gap-3"><span className="w-6 text-white/70">#{r.rank}</span>{r.avatarUrl ? <img src={r.avatarUrl} className="h-8 w-8 rounded-full object-cover" /> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500/40 to-purple-500/40 text-xs font-semibold text-white/90">{initialChar(r.displayName)}</span>}<div><p className="text-white">{r.displayName}</p><p className="text-xs text-white/45">{Number(r.totalMatches || 0) > 0 ? `${r.wins} galibiyet / ${r.totalMatches} maç · %${Number(r.winRate || 0).toFixed(1)}` : 'Henüz maç istatistiği yok'}</p></div></div><p className="font-semibold text-cyan-100">{r.totalPoints}</p></div>)}</div>}
   </section>
+}
+
+function initialChar(displayName?: string | null) {
+  const name = String(displayName || '').trim();
+  return (name[0] || 'G').toUpperCase();
 }
 
 function OffShopApp({

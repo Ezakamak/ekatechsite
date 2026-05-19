@@ -58,20 +58,27 @@ export async function updateLeaderboardSnapshots(context: any, userIds: number[]
   for (const uid of userIds) {
     for (const sid of seasons) {
       const pointsRow = await context.env.DB.prepare(`SELECT COALESCE(SUM(points),0) total_points FROM off_season_points WHERE season_id=? AND user_id=?`).bind(sid, uid).first<any>();
-      const matchWhere = sid === 0 ? `WHERE (host_user_id=? OR opponent_user_id=?) AND status IN ${MATCH_STATUSES}` : `WHERE (host_user_id=? OR opponent_user_id=?) AND status IN ${MATCH_STATUSES} AND season_id=?`;
-      const args = sid === 0 ? [uid, uid] : [uid, uid, sid];
+      const matchSourceSql = sid === 0
+        ? `SELECT DISTINCT m.id, m.host_user_id, m.opponent_user_id, m.winner_user_id, m.loser_user_id, m.status, m.game_key, m.completed_at, m.created_at
+           FROM off_match_history m
+           WHERE (m.host_user_id=? OR m.opponent_user_id=?) AND m.status IN ${MATCH_STATUSES}`
+        : `SELECT DISTINCT m.id, m.host_user_id, m.opponent_user_id, m.winner_user_id, m.loser_user_id, m.status, m.game_key, m.completed_at, m.created_at
+           FROM off_season_points sp
+           JOIN off_match_history m ON m.id = sp.match_history_id
+           WHERE sp.season_id=? AND sp.user_id=? AND m.status IN ${MATCH_STATUSES}`;
+      const statArgs = sid === 0 ? [uid, uid] : [sid, uid];
       const stat = await context.env.DB.prepare(`SELECT
         COUNT(*) total_matches,
         SUM(CASE WHEN winner_user_id=? THEN 1 ELSE 0 END) wins,
         SUM(CASE WHEN loser_user_id=? THEN 1 ELSE 0 END) losses,
-        SUM(CASE WHEN status='draw' AND (host_user_id=? OR opponent_user_id=?) THEN 1 ELSE 0 END) draws,
-        SUM(CASE WHEN status IN ('abandoned','expired','cancelled') AND (host_user_id=? OR opponent_user_id=?) THEN 1 ELSE 0 END) abandoned,
+        SUM(CASE WHEN status='draw' THEN 1 ELSE 0 END) draws,
+        SUM(CASE WHEN status IN ('abandoned','expired','cancelled') THEN 1 ELSE 0 END) abandoned,
         SUM(CASE WHEN game_key='tech_duel' THEN 1 ELSE 0 END) tech_duel_matches,
         SUM(CASE WHEN game_key='cipher_break' THEN 1 ELSE 0 END) cipher_break_matches,
         SUM(CASE WHEN game_key='core_clash' THEN 1 ELSE 0 END) core_clash_matches,
         MAX(COALESCE(completed_at, created_at)) last_match_at,
         SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) completed_non_draw
-        FROM off_match_history ${matchWhere}`).bind(uid, uid, uid, uid, uid, uid, ...args).first<any>();
+        FROM (${matchSourceSql}) matches`).bind(uid, uid, ...statArgs).first<any>();
       const wins = Number(stat?.wins || 0);
       const completedNonDraw = Number(stat?.completed_non_draw || 0);
       const winRate = completedNonDraw > 0 ? (wins / completedNonDraw) * 100 : 0;
