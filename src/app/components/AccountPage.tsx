@@ -48,6 +48,13 @@ export function AccountPage() {
   const tr = language === "tr";
   const canUseAdmin = user?.role === "admin" || user?.role === "owner";
 
+  const publicDisplayName = useMemo(() => {
+    const normalized = String(displayName || "").trim();
+    if (normalized) return normalized;
+    if (user?.id) return `Guest ${100 + (user.id % 900)}`;
+    return "Guest";
+  }, [displayName, user?.id]);
+
   const initials = useMemo(() => {
     const source = user?.name || user?.email || "E";
     return source
@@ -275,7 +282,7 @@ export function AccountPage() {
 
               <div>
                 <p className="text-sm text-cyan-100/70">{tr ? "Hesap profili" : "Account profile"}</p>
-                <h1 className="mt-1 text-3xl font-medium text-white sm:text-4xl">{user?.name || "EkaTech User"}</h1>
+                <h1 className="mt-1 text-3xl font-medium text-white sm:text-4xl">{publicDisplayName}</h1>
                 <p className="mt-2 text-white/45">{user?.email}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
@@ -318,14 +325,14 @@ export function AccountPage() {
 
           <div className="mt-8 rounded-2xl border border-white/10 bg-black/30 p-4">
             <p className="text-sm text-white/60">{tr ? "Herkese görünen ad" : "Public display name"}</p>
-            <p className="mt-1 text-lg font-medium text-white">{displayName || user?.name || "-"}</p>
+            <p className="mt-1 text-lg font-medium text-white">{publicDisplayName}</p>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
               <input
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
                 minLength={3}
                 maxLength={24}
-                placeholder={`${displayName || "Guest 384"} gibi görüneceksin`}
+                placeholder={`${publicDisplayName} gibi görüneceksin`}
                 className="w-full rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/35 focus:border-cyan-300/40 focus:outline-none"
               />
               <button type="button" onClick={saveNickname} disabled={nicknameSaving} className="rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-all hover:bg-gray-200 disabled:opacity-60">
