@@ -1,5 +1,5 @@
-import { requireOffUser, resolveDisplayName } from "../../_offFriends";
-import { createNotification } from "../../_notifications";
+import { requireOffUser, resolveDisplayName } from "../../../_offFriends";
+import { createNotification } from "../../../_notifications";
 
 const GAME_KEY = "tech_duel";
 const MODE_LABELS: Record<string, string> = {
