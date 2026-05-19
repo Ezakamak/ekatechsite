@@ -18,7 +18,7 @@ export async function onRequestGet(context: any) {
     }, health: { hasHistory: false, hasCompletedMatches: false, hasPoints: false, hasSnapshots: false, likelyProblem: 'schema_error' }, sampleMatches: [], samplePoints: [], sampleSnapshots: [], lastErrors: [{ step: 'ensureOffLeaderboardSchema', error: schemaError }] }, { status: 500 });
   }
 
-  const [mh, completed, unapplied, points, snapshots, sampleMatches, samplePoints, sampleSnapshots] = await Promise.all([
+  const [mh, completed, unapplied, points, snapshots, sampleMatches, samplePoints, sampleSnapshots, duelCompleted, cipherCompleted, coreCompleted, techHistory, cipherHistory, coreHistory] = await Promise.all([
     context.env.DB.prepare(`SELECT COUNT(*) count FROM off_match_history`).first<any>(),
     context.env.DB.prepare(`SELECT COUNT(*) count FROM off_match_history WHERE status IN ('completed','draw')`).first<any>(),
     context.env.DB.prepare(`SELECT COUNT(*) count FROM off_match_history WHERE season_points_applied=0 AND status IN ('completed','draw')`).first<any>(),
@@ -27,6 +27,12 @@ export async function onRequestGet(context: any) {
     context.env.DB.prepare(`SELECT * FROM off_match_history ORDER BY id DESC LIMIT 5`).all<any>(),
     context.env.DB.prepare(`SELECT * FROM off_season_points ORDER BY id DESC LIMIT 5`).all<any>(),
     context.env.DB.prepare(`SELECT * FROM off_leaderboard_snapshots ORDER BY updated_at DESC LIMIT 5`).all<any>(),
+    context.env.DB.prepare(`SELECT COUNT(*) count FROM duel_lobbies WHERE status='completed' AND creator_user_id IS NOT NULL AND opponent_user_id IS NOT NULL AND winner_user_id IS NOT NULL`).first<any>(),
+    context.env.DB.prepare(`SELECT COUNT(*) count FROM cipher_lobbies WHERE status='completed' AND creator_user_id IS NOT NULL AND opponent_user_id IS NOT NULL`).first<any>(),
+    context.env.DB.prepare(`SELECT COUNT(*) count FROM core_clash_lobbies WHERE status='completed' AND creator_user_id IS NOT NULL AND opponent_user_id IS NOT NULL`).first<any>(),
+    context.env.DB.prepare(`SELECT COUNT(*) count FROM off_match_history WHERE game_key='tech_duel'`).first<any>(),
+    context.env.DB.prepare(`SELECT COUNT(*) count FROM off_match_history WHERE game_key='cipher_break'`).first<any>(),
+    context.env.DB.prepare(`SELECT COUNT(*) count FROM off_match_history WHERE game_key='core_clash'`).first<any>(),
   ]);
 
   const counts = {
@@ -34,14 +40,25 @@ export async function onRequestGet(context: any) {
     usersInSnapshots: Number((await context.env.DB.prepare(`SELECT COUNT(DISTINCT user_id) count FROM off_leaderboard_snapshots`).first<any>())?.count || 0),
     usersInPoints: Number((await context.env.DB.prepare(`SELECT COUNT(DISTINCT user_id) count FROM off_season_points`).first<any>())?.count || 0),
   };
+  const completedLobbyCounts = {
+    techDuelCompletedLobbies: Number(duelCompleted?.count || 0),
+    cipherBreakCompletedLobbies: Number(cipherCompleted?.count || 0),
+    coreClashCompletedLobbies: Number(coreCompleted?.count || 0),
+  };
+  const historyCoverage = {
+    techDuelHistoryRows: Number(techHistory?.count || 0),
+    cipherBreakHistoryRows: Number(cipherHistory?.count || 0),
+    coreClashHistoryRows: Number(coreHistory?.count || 0),
+  };
+  const totalCompletedLobbies = completedLobbyCounts.techDuelCompletedLobbies + completedLobbyCounts.cipherBreakCompletedLobbies + completedLobbyCounts.coreClashCompletedLobbies;
   const likelyProblem = !schemaOk ? 'schema_error'
+    : counts.matchHistoryCount === 0 && totalCompletedLobbies > 0 ? 'completed_lobbies_not_backfilled'
     : counts.matchHistoryCount === 0 ? 'no_match_history'
-    : counts.completedOrDrawCount === 0 ? 'no_completed_matches'
-    : counts.unappliedMatches > 0 && counts.seasonPointsCount === 0 ? 'points_not_applied'
+    : counts.seasonPointsCount === 0 ? 'points_not_applied'
     : counts.seasonPointsCount > 0 && counts.snapshotCount === 0 ? 'snapshots_not_built'
     : counts.snapshotCount > 0 ? 'ok'
     : 'unknown';
   return Response.json({ ok: schemaOk, schemaOk, schemaError, counts, health: {
     hasHistory: counts.matchHistoryCount > 0, hasCompletedMatches: counts.completedOrDrawCount > 0, hasPoints: counts.seasonPointsCount > 0, hasSnapshots: counts.snapshotCount > 0, likelyProblem
-  }, sampleMatches: sampleMatches.results || [], samplePoints: samplePoints.results || [], sampleSnapshots: sampleSnapshots.results || [], lastErrors: schemaError ? [{ step: 'ensureOffLeaderboardSchema', error: schemaError }] : [] }, { status: schemaOk ? 200 : 500 });
+  }, completedLobbyCounts, historyCoverage, sampleMatches: sampleMatches.results || [], samplePoints: samplePoints.results || [], sampleSnapshots: sampleSnapshots.results || [], lastErrors: schemaError ? [{ step: 'ensureOffLeaderboardSchema', error: schemaError }] : [] }, { status: schemaOk ? 200 : 500 });
 }
