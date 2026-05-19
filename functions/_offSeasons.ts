@@ -39,6 +39,18 @@ export async function createOffSeason(context: any, payload: any, actorUserId: n
 async function upsertChildren(context:any, seasonId:number, payload:any){
   await context.env.DB.prepare(`DELETE FROM off_season_games WHERE season_id=?`).bind(seasonId).run();
   for (const g of (payload.games||[])) await context.env.DB.prepare(`INSERT INTO off_season_games (season_id,game_key,game_label,enabled,points_multiplier,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))`).bind(seasonId,g.gameKey,SEASON_GAMES[g.gameKey]||g.gameLabel||g.gameKey,Number(g.enabled??1),Number(g.pointsMultiplier??1)).run();
+
+  await context.env.DB.prepare(`DELETE FROM off_season_rules WHERE season_id=?`).bind(seasonId).run();
+  if (payload.rules) {
+    const r=payload.rules;
+    await context.env.DB.prepare(`INSERT INTO off_season_rules (season_id,win_points,loss_points,draw_points,daily_first_match_bonus,streak_bonus_points,streak_required,max_daily_points,enabled,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`).bind(seasonId,Number(r.winPoints??30),Number(r.lossPoints??10),Number(r.drawPoints??15),Number(r.dailyFirstMatchBonus??0),Number(r.streakBonusPoints??0),Number(r.streakRequired??3),r.maxDailyPoints??null,Number(r.enabled??1)).run();
+  }
+
+  await context.env.DB.prepare(`DELETE FROM off_season_missions WHERE season_id=?`).bind(seasonId).run();
+  for (const m of (payload.missions||[])) await context.env.DB.prepare(`INSERT INTO off_season_missions (season_id,title,description,mission_type,game_key,target_value,reward_points,cadence,enabled,sort_order,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`).bind(seasonId,m.title,m.description||null,m.missionType,m.gameKey??null,Number(m.targetValue??1),Number(m.rewardPoints??0),m.cadence||'season',Number(m.enabled??1),Number(m.sortOrder??0)).run();
+
+  await context.env.DB.prepare(`DELETE FROM off_season_rewards WHERE season_id=?`).bind(seasonId).run();
+  for (const rw of (payload.rewards||[])) await context.env.DB.prepare(`INSERT INTO off_season_rewards (season_id,reward_type,reward_key,reward_label,reward_value,requirement_type,requirement_value,enabled,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`).bind(seasonId,rw.rewardType,rw.rewardKey||null,rw.rewardLabel,rw.rewardValue??null,rw.requirementType||'rank',Number(rw.requirementValue??1),Number(rw.enabled??1)).run();
 }
 
 export async function updateOffSeason(context:any, seasonId:number, payload:any, actorUserId:number){ await ensureOffSeasonEngineSchema(context); await context.env.DB.prepare(`UPDATE off_seasons SET name=COALESCE(?,name), slug=COALESCE(?,slug), description=COALESCE(?,description), starts_at=?, ends_at=?, status=COALESCE(?,status), updated_at=datetime('now') WHERE id=?`).bind(payload.name??null,payload.slug??null,payload.description??null,payload.startsAt??null,payload.endsAt??null,payload.status??null,seasonId).run(); await upsertChildren(context,seasonId,payload); await logAudit(context,seasonId,actorUserId,'update_season',{payload});}
