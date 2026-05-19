@@ -192,12 +192,28 @@ export function OffPage() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeGame, setActiveGame] = useState<GameKey>("hub");
+  const [duelInitialLobbyId, setDuelInitialLobbyId] = useState<number | null>(null);
   const [shopCatalog, setShopCatalog] = useState<ShopCatalogItem[]>([]);
   const [tlPackages, setTlPackages] = useState<TechStoreTlPackage[]>([]);
   const [shopInventory, setShopInventory] = useState<ShopInventoryItem[]>([]);
   const [shopMessage, setShopMessage] = useState("");
   const [buyingSlug, setBuyingSlug] = useState<string | null>(null);
 
+
+  useEffect(() => {
+    const syncFromRoute = () => {
+      const params = new URLSearchParams(window.location.search || "");
+      const game = params.get("game");
+      const lobbyIdRaw = params.get("lobbyId");
+      const lobbyId = Number(lobbyIdRaw || 0);
+      if (game === "duel") setActiveGame("duel");
+      setDuelInitialLobbyId(Number.isFinite(lobbyId) && lobbyId > 0 ? lobbyId : null);
+    };
+
+    syncFromRoute();
+    window.addEventListener("ekatech-route-change", syncFromRoute);
+    return () => window.removeEventListener("ekatech-route-change", syncFromRoute);
+  }, []);
   const copy = tr
     ? {
         loading: "OFF alanı kontrol ediliyor...",
@@ -557,7 +573,7 @@ export function OffPage() {
         </div>
         {activeGame === "duel" ? (
           <GameErrorBoundary gameName="Tech Duel" onBack={handleGameBoundaryBack}>
-            <TechDuelSync />
+            <TechDuelSync initialLobbyId={duelInitialLobbyId} />
             <TechDuelBotAssist />
           </GameErrorBoundary>
         ) : activeGame === "cipher" ? (

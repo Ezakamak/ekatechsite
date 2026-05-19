@@ -20,7 +20,7 @@ function initials(name?: string | null, email?: string | null) { return (name ||
 function Avatar({ name, email, url }: { name?: string | null; email?: string | null; url?: string | null }) { return <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-sm font-semibold text-black">{url ? <img src={url} alt="" className="h-full w-full object-cover" /> : initials(name, email)}</span>; }
 function modeTitle(mode?: Mode) { return mode === "best_focus" ? "Best Focus" : mode === "what_the_hold" ? "What The Hold" : "Classic Mode"; }
 
-export function TechDuelSync() {
+export function TechDuelSync({ initialLobbyId }: { initialLobbyId?: number | null }) {
   const { language } = useLanguage();
   const tr = language === "tr";
   const [user, setUser] = useState<User | null>(null);
@@ -36,6 +36,7 @@ export function TechDuelSync() {
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [autoOpenLobbyId, setAutoOpenLobbyId] = useState<number | null>(null);
   const [focusFakeSignal, setFocusFakeSignal] = useState(() => randomFakeSignal());
 
   const c = useMemo(() => tr ? {
@@ -75,6 +76,30 @@ export function TechDuelSync() {
       setPayload(d); setSyncedAt(Date.now()); if (d?.lobby) setActiveLobby(d.lobby); return d;
     } catch (e) { if (!silent) setNotice({ type: "error", text: e instanceof Error ? e.message : "Round işlemi başarısız." }); return null; }
   };
+
+  useEffect(() => {
+    const nextLobbyId = Number(initialLobbyId || 0);
+    setAutoOpenLobbyId(Number.isFinite(nextLobbyId) && nextLobbyId > 0 ? nextLobbyId : null);
+  }, [initialLobbyId]);
+
+  useEffect(() => {
+    if (!autoOpenLobbyId) return;
+    const openLobbyFromQuery = async () => {
+      const id = autoOpenLobbyId;
+      const lobby = [...openLobbies, ...myLobbies].find((item) => item.id === id);
+      if (!lobby) {
+        setNotice({ type: "error", text: "Bu lobby bulunamadı veya erişim yetkin yok." });
+        setAutoOpenLobbyId(null);
+        return;
+      }
+      setActiveLobby(lobby);
+      setHolding(false);
+      setPayload(null);
+      await loadRound(id, false);
+      setAutoOpenLobbyId(null);
+    };
+    void openLobbyFromQuery();
+  }, [autoOpenLobbyId, openLobbies, myLobbies]);
 
   useEffect(() => {
     loadDuels();

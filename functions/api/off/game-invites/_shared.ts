@@ -180,12 +180,12 @@ export async function respondInvite(context: any, action: "accept" | "reject") {
     type: action === "accept" ? "game_invite_accepted" : "game_invite_rejected",
     title: action === "accept" ? "Tech Duel davetin kabul edildi" : "Tech Duel davetin reddedildi",
     body: `${actor} ${modeName} davetini ${action === "accept" ? "kabul etti" : "reddetti"}.`,
-    link: "/off",
+    link: `/off?game=duel&lobbyId=${lobbyId}`,
     sourceTable: "off_game_invites",
     sourceId: `${action}:${inviteId}`,
   });
 
-  return Response.json({ ok: true, lobbyId });
+  return Response.json({ ok: true, lobbyId, redirectTo: lobbyId ? `/off?game=duel&lobbyId=${lobbyId}` : "/off" });
 }
 
 export async function cancelInvite(context: any) {
