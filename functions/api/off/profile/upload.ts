@@ -2,15 +2,6 @@ import { requireOffUser } from "../../../_offFriends";
 
 const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 
-function toBase64(bytes: Uint8Array) {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
 export async function onRequestPost(context: any) {
   const auth = await requireOffUser(context);
   if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
@@ -28,9 +19,25 @@ export async function onRequestPost(context: any) {
     return Response.json({ error: type === "avatar" ? "Avatar en fazla 300KB olabilir" : "Banner en fazla 700KB olabilir" }, { status: 400 });
   }
 
-  const dataUrl = `data:${file.type};base64,${toBase64(new Uint8Array(await file.arrayBuffer()))}`;
-  const column = type === "avatar" ? "avatar_url" : "banner_url";
-  await context.env.DB.prepare(`UPDATE off_profiles SET ${column}=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`).bind(dataUrl, auth.user.id).run();
+  const quota = await context.env.DB.prepare("SELECT used_bytes, max_bytes FROM storage_quota WHERE id=1").first<any>();
+  const used = Number(quota?.used_bytes || 0);
+  const max = Number(quota?.max_bytes || 8000000000);
+  if (used + file.size > max) {
+    return Response.json({ error: "Depolama limiti doldu. Yeni dosya yüklenemez." }, { status: 413 });
+  }
 
-  return Response.json({ ok: true, url: dataUrl });
+  const r2Key = `off/${auth.user.id}/${type}/${Date.now()}-${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  await context.env.UPLOADS_BUCKET.put(r2Key, file.stream(), { httpMetadata: { contentType: file.type } });
+
+  await context.env.DB.prepare(
+    `INSERT INTO uploaded_files (user_id, file_name, file_size, mime_type, r2_key, visibility) VALUES (?, ?, ?, ?, ?, 'private')`
+  ).bind(auth.user.id, file.name, file.size, file.type, r2Key).run();
+
+  await context.env.DB.prepare(`UPDATE storage_quota SET used_bytes = used_bytes + ?, updated_at=CURRENT_TIMESTAMP WHERE id=1`).bind(file.size).run();
+
+  const column = type === "avatar" ? "avatar_url" : "banner_url";
+  const url = `/api/files/${encodeURIComponent(r2Key)}`;
+  await context.env.DB.prepare(`UPDATE off_profiles SET ${column}=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`).bind(url, auth.user.id).run();
+
+  return Response.json({ ok: true, url });
 }
