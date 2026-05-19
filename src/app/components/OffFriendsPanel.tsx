@@ -59,10 +59,18 @@ export function OffFriendsPanel() {
   useEffect(() => {
     void loadCore();
     void loadAddableUsers();
+    const handleFriendsRefresh = () => {
+      void loadCore();
+      void loadAddableUsers({ silent: true });
+    };
     const id = window.setInterval(() => {
       void loadAddableUsers({ silent: true });
     }, ONLINE_REFRESH_MS);
-    return () => window.clearInterval(id);
+    window.addEventListener("ekatech-off-friends-refresh", handleFriendsRefresh);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("ekatech-off-friends-refresh", handleFriendsRefresh);
+    };
   }, []);
 
   const sendRequest = async (userId: number) => { const res = await fetch("/api/off/friends/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) }); const data = await res.json().catch(() => ({})); if (!res.ok) return toast.error(data.error || "Hata"); toast.success("İstek gönderildi"); loadCore(); loadAddableUsers({ silent: true }); };

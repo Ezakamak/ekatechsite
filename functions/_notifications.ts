@@ -83,7 +83,7 @@ export async function createOffFriendRequestNotification(context: any, params: {
     link: '/off',
     sourceTable: 'off_friendships',
     sourceId: String(params.friendshipId),
-    actionLabel: 'İsteği görüntüle',
+    actionLabel: 'Arkadaşlık isteği',
     priority: 'high',
   });
 }
