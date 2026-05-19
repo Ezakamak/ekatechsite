@@ -44,6 +44,8 @@ type Overview = {
     activeSessions: number;
     averageCustomerRating?: number;
     ratedCompletedProjects?: number;
+    storageUsedBytes?: number;
+    storageMaxBytes?: number;
   };
   recentUsers: User[];
 };
@@ -316,6 +318,8 @@ export function AdminPanel() {
 
   const averageRating = Number(overview?.stats.averageCustomerRating || 0);
   const ratedCompletedProjects = Number(overview?.stats.ratedCompletedProjects || 0);
+  const storageUsedGb = (Number(overview?.stats.storageUsedBytes || 0) / 1_000_000_000).toFixed(2);
+  const storageMaxGb = (Number(overview?.stats.storageMaxBytes || 8_000_000_000) / 1_000_000_000).toFixed(0);
 
   return (
     <section id="admin" className="relative overflow-hidden bg-black px-4 py-24 sm:px-6">
@@ -336,6 +340,7 @@ export function AdminPanel() {
             </div>
             <h2 className="text-4xl font-medium tracking-tight text-white sm:text-5xl">{t.title}</h2>
             <p className="text-lg leading-8 text-white/55">{t.subtitle}</p>
+            <p className="text-sm text-cyan-100/80">Depolama: {storageUsedGb} GB / {storageMaxGb} GB</p>
           </div>
 
           <button

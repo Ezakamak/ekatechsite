@@ -60,6 +60,7 @@ export async function onRequestGet(context: any) {
       .first();
 
     let customerRatingSummary = { averageRating: 0, ratedCompletedProjects: 0 };
+    const storageQuota = await context.env.DB.prepare("SELECT used_bytes, max_bytes FROM storage_quota WHERE id=1").first().catch(() => ({ used_bytes: 0, max_bytes: 8000000000 }));
 
     try {
       const ratingRow = await context.env.DB
@@ -93,6 +94,8 @@ export async function onRequestGet(context: any) {
         activeSessions: activeSessions?.count || 0,
         averageCustomerRating: customerRatingSummary.averageRating,
         ratedCompletedProjects: customerRatingSummary.ratedCompletedProjects,
+        storageUsedBytes: Number((storageQuota as any)?.used_bytes || 0),
+        storageMaxBytes: Number((storageQuota as any)?.max_bytes || 8000000000),
       },
       recentUsers: recentUsers?.results || [],
     });
