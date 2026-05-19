@@ -20,6 +20,7 @@ export function OffFriendsPanel() {
   const [inviteState, setInviteState] = useState<InviteState | null>(null);
   const [inviteSending, setInviteSending] = useState(false);
   const [outgoingInvites, setOutgoingInvites] = useState<any[]>([]);
+  const [watchingInviteIds, setWatchingInviteIds] = useState<number[]>([]);
   const [sentFlagByUser, setSentFlagByUser] = useState<Record<number, boolean>>({});
 
   const loadCore = async () => {
@@ -32,7 +33,11 @@ export function OffFriendsPanel() {
       setOutgoing(req.outgoing || []);
       const invRes = await fetch("/api/off/game-invites");
       const invData = await invRes.json().catch(() => ({}));
-      if (invRes.ok) setOutgoingInvites(invData?.outgoing || []);
+      if (invRes.ok) {
+        setOutgoingInvites(invData?.outgoing || []);
+        const activeWatchedIds = (invData?.outgoing || []).map((i: any) => Number(i.inviteId)).filter((id: number) => Number.isFinite(id));
+        setWatchingInviteIds((prev) => prev.filter((id) => activeWatchedIds.includes(id)));
+      }
     } catch (error: any) {
       toast.error(error?.message || "OFF panel yüklenemedi");
     }
@@ -111,7 +116,10 @@ export function OffFriendsPanel() {
       }
       setInviteState(null);
       const inviteId = data?.inviteId;
-      if (inviteId) console.log("[off-game-invite:create:success] inviteId", inviteId);
+      if (inviteId) {
+        console.log("[off-game-invite:create:success] inviteId", inviteId);
+        setWatchingInviteIds((prev) => prev.includes(Number(inviteId)) ? prev : [...prev, Number(inviteId)]);
+      }
       if (data?.notificationError) {
         toast.warning(`Davet oluştu ama bildirim gönderilemedi: ${data.notificationError}`);
       }
@@ -127,6 +135,53 @@ export function OffFriendsPanel() {
       setInviteSending(false);
     }
   };
+
+  useEffect(() => {
+    if (!watchingInviteIds.length) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const res = await fetch("/api/off/game-invites");
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || cancelled) return;
+        const outgoingRows = Array.isArray(data?.outgoing) ? data.outgoing : [];
+        const outgoingRecent = Array.isArray(data?.outgoingRecent) ? data.outgoingRecent : [];
+        const pendingById = new Map(outgoingRows.map((row: any) => [Number(row.inviteId), row]));
+        setWatchingInviteIds((prev) => prev.filter((inviteId) => {
+          const recent = outgoingRecent.find((row: any) => Number(row.inviteId) === inviteId);
+          if (recent?.status === "accepted") {
+            const handledKey = `handledOutgoingInvite:${inviteId}`;
+            if (!sessionStorage.getItem(handledKey) && typeof recent.redirectTo === "string" && recent.redirectTo) {
+              sessionStorage.setItem(handledKey, "1");
+              toast.success("Davet kabul edildi, oyuna giriliyor...");
+              window.history.pushState({}, "", recent.redirectTo);
+              window.dispatchEvent(new Event("ekatech-route-change"));
+              window.dispatchEvent(new Event("ekatech-off-invites-refresh"));
+              if (recent.gameKey === "tech_duel") window.dispatchEvent(new Event("ekatech-tech-duel-refresh"));
+              if (recent.gameKey === "cipher_break") window.dispatchEvent(new Event("ekatech-cipher-refresh"));
+              if (recent.gameKey === "core_clash") window.dispatchEvent(new Event("ekatech-core-clash-refresh"));
+            }
+            return false;
+          }
+          if (recent?.status === "rejected") { toast.info("Davet reddedildi"); return false; }
+          if (recent?.status === "expired") { toast.info("Davetin süresi doldu"); return false; }
+          const pending = pendingById.get(inviteId);
+          if (!pending) return false;
+          if (String(pending.expiresAt || "") <= new Date().toISOString().slice(0, 19).replace("T", " ")) {
+            toast.info("Davetin süresi doldu");
+            return false;
+          }
+          return true;
+        }));
+      } catch {
+        // ignore polling errors
+      }
+    };
+    void run();
+    const id = window.setInterval(() => { void run(); }, 3000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [watchingInviteIds]);
+
   const hasPendingFor = (userId: number, gameKey: InviteGameKey) => outgoingInvites.some((i: any) => i.invitee?.id === userId && i.status === "pending" && i.gameKey === gameKey);
   const userRow = (u: Item, action?: ReactNode) => <div key={`${u.id}-${u.friendshipId || "x"}`} className="rounded-2xl border border-white/15 bg-white/[0.05] px-3 py-2 flex items-center justify-between gap-3"><div className="flex items-center gap-3 min-w-0"><div className="relative shrink-0">{u.avatarUrl ? <img src={u.avatarUrl} alt={u.displayName} className="h-9 w-9 rounded-full object-cover" /> : <div className="h-9 w-9 rounded-full bg-gradient-to-br from-cyan-500/40 to-purple-500/40" />}{u.isOnline ? <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border border-black/40 bg-emerald-400" /> : null}</div> <div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{u.displayName}</p><p className="text-xs text-white/65">{u.secondaryLabel || (u.level ? `Lvl ${u.level}${u.selectedTitle ? ` · ${u.selectedTitle}` : ""}` : "Kullanıcı")}</p></div></div>{action}</div>;
   return <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6 text-white space-y-5">
