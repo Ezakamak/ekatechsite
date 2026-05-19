@@ -13,6 +13,10 @@ export function OffFriendsPanel() {
   const [addableUsers, setAddableUsers] = useState<Item[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
+  const [inviteState, setInviteState] = useState<{ friend: Item; duelMode: "classic" | "best_focus" | "what_the_hold"; roundCount: 3 | 5 | 7; message: string } | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [outgoingInvites, setOutgoingInvites] = useState<any[]>([]);
+  const [sentFlagByUser, setSentFlagByUser] = useState<Record<number, boolean>>({});
 
   const loadCore = async () => {
     try {
@@ -22,6 +26,9 @@ export function OffFriendsPanel() {
       const req = await r.json();
       setIncoming(req.incoming || []);
       setOutgoing(req.outgoing || []);
+      const invRes = await fetch("/api/off/game-invites");
+      const invData = await invRes.json().catch(() => ({}));
+      if (invRes.ok) setOutgoingInvites(invData?.outgoing || []);
     } catch (error: any) {
       toast.error(error?.message || "OFF panel yüklenemedi");
     }
@@ -67,9 +74,13 @@ export function OffFriendsPanel() {
       void loadAddableUsers({ silent: true });
     }, ONLINE_REFRESH_MS);
     window.addEventListener("ekatech-off-friends-refresh", handleFriendsRefresh);
+    window.addEventListener("ekatech-off-invites-refresh", handleFriendsRefresh);
+    window.addEventListener("ekatech-tech-duel-refresh", handleFriendsRefresh);
     return () => {
       window.clearInterval(id);
       window.removeEventListener("ekatech-off-friends-refresh", handleFriendsRefresh);
+      window.removeEventListener("ekatech-off-invites-refresh", handleFriendsRefresh);
+      window.removeEventListener("ekatech-tech-duel-refresh", handleFriendsRefresh);
     };
   }, []);
 
@@ -77,8 +88,22 @@ export function OffFriendsPanel() {
   const respond = async (friendshipId: number, action: "accept"|"reject") => { const res = await fetch("/api/off/friends/respond", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friendshipId, action }) }); const data = await res.json(); if (!res.ok) return toast.error(data.error || "Hata"); toast.success(action === "accept" ? "İstek kabul edildi" : "İstek reddedildi"); loadCore(); loadAddableUsers({ silent: true }); };
   const removeFriend = async (userId: number) => { const res = await fetch("/api/off/friends/remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) }); if (res.ok) { toast.success("Arkadaş silindi"); loadCore(); loadAddableUsers({ silent: true }); } else toast.error("Hata"); };
 
+  const sendInvite = async () => {
+    if (!inviteState) return;
+    setInviteSending(true);
+    const res = await fetch("/api/off/game-invites/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friendId: inviteState.friend.id, gameKey: "tech_duel", duelMode: inviteState.duelMode, roundCount: inviteState.roundCount, message: inviteState.message }) });
+    const data = await res.json().catch(() => ({}));
+    setInviteSending(false);
+    if (!res.ok) return toast.error(data?.error || "Davet gönderilemedi");
+    setInviteState(null);
+    toast.success("Tech Duel daveti gönderildi");
+    setSentFlagByUser((p) => ({ ...p, [inviteState.friend.id]: true }));
+    window.setTimeout(() => setSentFlagByUser((p) => ({ ...p, [inviteState.friend.id]: false })), 2800);
+    window.dispatchEvent(new Event("ekatech-off-invites-refresh"));
+    void loadCore();
+  };
+  const hasPendingFor = (userId: number) => outgoingInvites.some((i: any) => i.invitee?.id === userId && i.status === "pending");
   const userRow = (u: Item, action?: ReactNode) => <div key={`${u.id}-${u.friendshipId || "x"}`} className="rounded-2xl border border-white/15 bg-white/[0.05] px-3 py-2 flex items-center justify-between gap-3"><div className="flex items-center gap-3 min-w-0"><div className="relative shrink-0">{u.avatarUrl ? <img src={u.avatarUrl} alt={u.displayName} className="h-9 w-9 rounded-full object-cover" /> : <div className="h-9 w-9 rounded-full bg-gradient-to-br from-cyan-500/40 to-purple-500/40" />}{u.isOnline ? <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border border-black/40 bg-emerald-400" /> : null}</div> <div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{u.displayName}</p><p className="text-xs text-white/65">{u.secondaryLabel || (u.level ? `Lvl ${u.level}${u.selectedTitle ? ` · ${u.selectedTitle}` : ""}` : "Kullanıcı")}</p></div></div>{action}</div>;
-
   return <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-xl sm:p-6 text-white space-y-5">
     <h3 className="text-xl font-semibold">Arkadaşlar</h3>
     <div>
@@ -87,6 +112,7 @@ export function OffFriendsPanel() {
     </div>
     <div><p className="text-sm text-white/70 mb-2">Gelen İstekler</p>{incoming.length ? incoming.map((r)=> userRow(r, <div className="flex gap-2"><button onClick={()=>respond(Number(r.friendshipId),"accept")} className={`${btn} border-emerald-300/45 bg-gradient-to-r from-emerald-400/30 to-cyan-400/20 text-emerald-50 hover:shadow-[0_0_16px_rgba(52,211,153,0.35)]`}>Kabul et</button><button onClick={()=>respond(Number(r.friendshipId),"reject")} className={`${btn} border-rose-300/40 bg-gradient-to-r from-rose-500/20 to-fuchsia-500/20 text-rose-50 hover:shadow-[0_0_16px_rgba(244,63,94,0.35)]`}>Reddet</button></div>)) : <p className="text-sm text-white/60">Bekleyen istek yok.</p>}</div>
     <div><p className="text-sm text-white/70 mb-2">Gönderilen İstekler</p>{outgoing.map((r)=> userRow(r, <span className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/60">Bekliyor</span>))}</div>
-    <div><p className="text-sm text-white/70 mb-2">Arkadaş Listesi</p>{friends.map((f)=> userRow(f, <div className="space-x-2"><button onClick={()=>removeFriend(Number(f.id))} className={`${btn} border-rose-300/40 bg-rose-500/10 text-rose-100`}>Arkadaşlıktan çıkar</button><button className={`${btn} border-cyan-300/30 bg-cyan-500/10 text-cyan-100`}>Oyuna davet et</button></div>))}</div>
+    <div><p className="text-sm text-white/70 mb-2">Arkadaş Listesi</p>{friends.map((f)=> userRow(f, <div className="space-x-2"><button onClick={()=>removeFriend(Number(f.id))} className={`${btn} border-rose-300/40 bg-rose-500/10 text-rose-100`}>Arkadaşlıktan çıkar</button><button disabled={hasPendingFor(Number(f.id))} onClick={()=>setInviteState({ friend: f, duelMode: "classic", roundCount: 5, message: "" })} className={`${btn} border-cyan-300/30 bg-cyan-500/10 text-cyan-100 disabled:opacity-60`}>Oyuna davet et</button>{sentFlagByUser[Number(f.id)] ? <span className="text-xs text-emerald-200">Davet gönderildi</span> : null}</div>))}</div>
+    {inviteState ? <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4"><div className="w-full max-w-lg rounded-3xl border border-white/15 bg-[#060b14] p-5"><h4 className="text-lg font-semibold">{inviteState.friend.displayName} kişisini Tech Duel’e davet et</h4><div className="mt-3 space-y-3 text-sm"><div><p>Mod seçimi</p><select className="mt-1 w-full rounded-xl bg-black/30 p-2" value={inviteState.duelMode} onChange={(e)=>setInviteState({ ...inviteState, duelMode: e.target.value as any })}><option value="classic">Classic Mode</option><option value="best_focus">Best Focus</option><option value="what_the_hold">What The Hold</option></select></div><div><p>Round</p><select className="mt-1 w-full rounded-xl bg-black/30 p-2" value={inviteState.roundCount} onChange={(e)=>setInviteState({ ...inviteState, roundCount: Number(e.target.value) as any })}><option value={3}>Best of 3</option><option value={5}>Best of 5</option><option value={7}>Best of 7</option></select></div><textarea value={inviteState.message} onChange={(e)=>setInviteState({ ...inviteState, message: e.target.value.slice(0,160) })} placeholder="Mesaj (opsiyonel)" className="w-full rounded-xl bg-black/30 p-2" /></div><div className="mt-4 flex justify-end gap-2"><button className={`${btn} border-white/20`} onClick={()=>setInviteState(null)}>İptal</button><button disabled={inviteSending} className={`${btn} border-cyan-300/40 bg-cyan-500/20`} onClick={sendInvite}>{inviteSending ? "Gönderiliyor..." : "Davet gönder"}</button></div></div></div> : null}
   </section>;
 }
