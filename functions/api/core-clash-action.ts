@@ -1,3 +1,4 @@
+import { recordOffMatchHistory, getGameLabel } from '../_offMatchHistory';
 import { buildState, ensureTurnIfReady, getLobby, getPlayers, requireUser, startNextTurn } from "./core-clash";
 
 type CardType = "attack" | "defense" | "utility" | "trap" | "overload" | "pass";
@@ -198,7 +199,8 @@ async function resolveTurn(context: any, lobbyId: number, turn: any) {
   await context.env.DB.prepare("UPDATE core_clash_turns SET status = 'resolved', resolution = ?, resolved_at = datetime('now') WHERE id = ?").bind(result.text, turn.id).run();
 
   if (winner) {
-    await context.env.DB.prepare("UPDATE core_clash_lobbies SET status = 'completed', winner_user_id = ?, updated_at = datetime('now') WHERE id = ?").bind(winner, lobbyId).run();
+    await context.env.DB.prepare("UPDATE core_clash_lobbies SET status = 'completed', winner_user_id = ?, completed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").bind(winner, lobbyId).run();
+    await recordOffMatchHistory(context,{gameKey:'core_clash',gameLabel:getGameLabel('core_clash'),lobbyTable:'core_clash_lobbies',lobbyId:Number(lobbyId),hostUserId:Number(lobby.creator_user_id),opponentUserId:Number(lobby.opponent_user_id),winnerUserId:Number(winner),loserUserId:Number(winner)===Number(lobby.creator_user_id)?Number(lobby.opponent_user_id):Number(lobby.creator_user_id),status:'completed',resultJson:{map_key:lobby.map_key,winner_user_id:winner,turn_count:turn.turn_number,final_hp:{creator:creator.hp,opponent:opponent.hp}},startedAt:lobby.created_at,completedAt:new Date().toISOString()});
   } else {
     await startNextTurn(context, lobbyId, Number(turn.turn_number || 0) + 1);
   }
