@@ -91,16 +91,27 @@ export function OffFriendsPanel() {
   const sendInvite = async () => {
     if (!inviteState) return;
     setInviteSending(true);
-    const res = await fetch("/api/off/game-invites/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friendId: inviteState.friend.id, gameKey: "tech_duel", duelMode: inviteState.duelMode, roundCount: inviteState.roundCount, message: inviteState.message }) });
-    const data = await res.json().catch(() => ({}));
-    setInviteSending(false);
-    if (!res.ok) return toast.error(data?.error || "Davet gönderilemedi");
-    setInviteState(null);
-    toast.success("Tech Duel daveti gönderildi");
-    setSentFlagByUser((p) => ({ ...p, [inviteState.friend.id]: true }));
-    window.setTimeout(() => setSentFlagByUser((p) => ({ ...p, [inviteState.friend.id]: false })), 2800);
-    window.dispatchEvent(new Event("ekatech-off-invites-refresh"));
-    void loadCore();
+    try {
+      const res = await fetch("/api/off/game-invites/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friendId: inviteState.friend.id, gameKey: "tech_duel", duelMode: inviteState.duelMode, roundCount: inviteState.roundCount, message: inviteState.message }) });
+      const data = await res.json().catch(() => ({}));
+      console.log("[off-game-invite:create]", { status: res.status, body: data });
+      if (!res.ok) {
+        const backendError = data?.error || data?.details || `HTTP ${res.status}`;
+        return toast.error(`Davet gönderilemedi: ${backendError}`);
+      }
+      setInviteState(null);
+      const inviteId = data?.inviteId;
+      if (inviteId) console.log("[off-game-invite:create:success] inviteId", inviteId);
+      toast.success(inviteId ? `Tech Duel daveti gönderildi (ID: ${inviteId})` : "Tech Duel daveti gönderildi");
+      setSentFlagByUser((p) => ({ ...p, [inviteState.friend.id]: true }));
+      window.setTimeout(() => setSentFlagByUser((p) => ({ ...p, [inviteState.friend.id]: false })), 2800);
+      window.dispatchEvent(new Event("ekatech-off-invites-refresh"));
+      void loadCore();
+    } catch (error: any) {
+      toast.error(`Davet gönderilemedi: ${error?.message || "Bilinmeyen hata"}`);
+    } finally {
+      setInviteSending(false);
+    }
   };
   const hasPendingFor = (userId: number) => outgoingInvites.some((i: any) => i.invitee?.id === userId && i.status === "pending");
   const userRow = (u: Item, action?: ReactNode) => <div key={`${u.id}-${u.friendshipId || "x"}`} className="rounded-2xl border border-white/15 bg-white/[0.05] px-3 py-2 flex items-center justify-between gap-3"><div className="flex items-center gap-3 min-w-0"><div className="relative shrink-0">{u.avatarUrl ? <img src={u.avatarUrl} alt={u.displayName} className="h-9 w-9 rounded-full object-cover" /> : <div className="h-9 w-9 rounded-full bg-gradient-to-br from-cyan-500/40 to-purple-500/40" />}{u.isOnline ? <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border border-black/40 bg-emerald-400" /> : null}</div> <div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{u.displayName}</p><p className="text-xs text-white/65">{u.secondaryLabel || (u.level ? `Lvl ${u.level}${u.selectedTitle ? ` · ${u.selectedTitle}` : ""}` : "Kullanıcı")}</p></div></div>{action}</div>;

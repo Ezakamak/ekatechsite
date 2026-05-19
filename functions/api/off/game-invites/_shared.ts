@@ -67,12 +67,21 @@ async function onCreate(context: any) {
   const roundCount = Number(body?.roundCount || 5);
   const message = sanitizeMessage(body?.message);
 
-  if (!friendId || friendId === auth.user.id) return Response.json({ error: "Geçersiz kullanıcı." }, { status: 400 });
+  const validationDebug = {
+    currentUserId: Number(auth.user.id || 0),
+    friendId,
+    friendshipFound: false,
+    gameKey,
+    duelMode,
+    roundCount,
+  };
+
+  if (!friendId || friendId === auth.user.id) return Response.json({ error: "Geçersiz kullanıcı.", details: validationDebug }, { status: 400 });
   const friend = await context.env.DB.prepare("SELECT id FROM users WHERE id = ? LIMIT 1").bind(friendId).first();
-  if (!friend) return Response.json({ error: "Geçersiz kullanıcı." }, { status: 404 });
-  if (gameKey !== GAME_KEY) return Response.json({ error: "Geçersiz oyun." }, { status: 400 });
-  if (!ALLOWED_MODES.has(duelMode)) return Response.json({ error: "Geçersiz Tech Duel modu." }, { status: 400 });
-  if (!ALLOWED_ROUNDS.has(roundCount)) return Response.json({ error: "Geçersiz round sayısı." }, { status: 400 });
+  if (!friend) return Response.json({ error: "Geçersiz kullanıcı.", details: validationDebug }, { status: 404 });
+  if (gameKey !== GAME_KEY) return Response.json({ error: "Geçersiz oyun.", details: validationDebug }, { status: 400 });
+  if (!ALLOWED_MODES.has(duelMode)) return Response.json({ error: "Geçersiz Tech Duel modu.", details: validationDebug }, { status: 400 });
+  if (!ALLOWED_ROUNDS.has(roundCount)) return Response.json({ error: "Geçersiz round sayısı.", details: validationDebug }, { status: 400 });
 
   const friendship = await context.env.DB.prepare(
     `SELECT id FROM off_friendships
@@ -80,7 +89,8 @@ async function onCreate(context: any) {
        AND ((requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?))
      LIMIT 1`
   ).bind(auth.user.id, friendId, friendId, auth.user.id).first();
-  if (!friendship) return Response.json({ error: "Sadece arkadaşlarını Tech Duel’e davet edebilirsin." }, { status: 403 });
+  validationDebug.friendshipFound = Boolean(friendship);
+  if (!friendship) return Response.json({ error: "Sadece arkadaşlarını Tech Duel’e davet edebilirsin.", details: validationDebug }, { status: 403 });
 
   const duplicate = await context.env.DB.prepare(
     `SELECT id FROM off_game_invites
@@ -88,14 +98,29 @@ async function onCreate(context: any) {
        AND status = 'pending' AND expires_at > datetime('now')
      LIMIT 1`
   ).bind(auth.user.id, friendId, GAME_KEY, duelMode).first();
-  if (duplicate) return Response.json({ error: "Bu kullanıcıya bu mod için zaten aktif davetin var." }, { status: 409 });
+  const duplicateFound = Boolean(duplicate);
+  if (duplicateFound) {
+    return Response.json({
+      error: "Bu kullanıcıya bu mod için zaten aktif davetin var.",
+      details: validationDebug,
+      debug: { currentUserId: validationDebug.currentUserId, friendId, friendshipFound: validationDebug.friendshipFound, duplicateFound },
+    }, { status: 409 });
+  }
 
-  const created = await context.env.DB.prepare(
-    `INSERT INTO off_game_invites (inviter_id, invitee_id, game_key, duel_mode, round_count, status, message, expires_at)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?, datetime('now', '+5 minutes'))`
-  ).bind(auth.user.id, friendId, GAME_KEY, duelMode, roundCount, message || null).run();
-
-  const inviteId = Number(created?.meta?.last_row_id || 0);
+  let inviteId = 0;
+  try {
+    const created = await context.env.DB.prepare(
+      `INSERT INTO off_game_invites (inviter_id, invitee_id, game_key, duel_mode, round_count, status, message, expires_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, datetime('now', '+5 minutes'))`
+    ).bind(auth.user.id, friendId, GAME_KEY, duelMode, roundCount, message || null).run();
+    inviteId = Number(created?.meta?.last_row_id || 0);
+  } catch (error: any) {
+    return Response.json({
+      error: `off_game_invites insert hatası: ${error?.message || "Bilinmeyen veritabanı hatası"}`,
+      details: validationDebug,
+      debug: { currentUserId: validationDebug.currentUserId, friendId, friendshipFound: validationDebug.friendshipFound, duplicateFound },
+    }, { status: 500 });
+  }
   const expiresRow = await context.env.DB.prepare("SELECT expires_at FROM off_game_invites WHERE id = ?").bind(inviteId).first<any>();
   const inviteeProfile = await context.env.DB.prepare(`SELECT u.id, u.name, u.email, u.nickname, op.display_name AS off_display_name FROM users u LEFT JOIN off_profiles op ON op.user_id=u.id WHERE u.id=?`).bind(auth.user.id).first<any>();
   const inviterDisplayName = resolveDisplayName(inviteeProfile);
@@ -112,7 +137,13 @@ async function onCreate(context: any) {
     expiresAt: expiresRow?.expires_at || undefined,
   });
 
-  return Response.json({ ok: true, inviteId, notificationCreated: !notificationResult?.skipped, expiresAt: expiresRow?.expires_at || null });
+  return Response.json({
+    ok: true,
+    inviteId,
+    debug: { currentUserId: validationDebug.currentUserId, friendId, friendshipFound: validationDebug.friendshipFound, duplicateFound },
+    notificationCreated: !notificationResult?.skipped,
+    expiresAt: expiresRow?.expires_at || null,
+  });
 }
 
 export async function respondInvite(context: any, action: "accept" | "reject") {
