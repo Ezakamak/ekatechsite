@@ -8,7 +8,7 @@ export async function onRequestGet(context: any) {
   const rows = await context.env.DB.prepare(
     `SELECT f.id, f.requester_id, f.addressee_id, f.updated_at,
             u.id as friend_id, u.name, u.email, op.display_name AS off_display_name,
-            COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
+            COALESCE(op.avatar_url, u.avatar_url) AS avatar_url,
             op.selected_title,
             1 as level,
             0 as xp
@@ -18,6 +18,8 @@ export async function onRequestGet(context: any) {
           WHERE f.status = 'accepted' AND (f.requester_id = ? OR f.addressee_id = ?)
      ORDER BY f.updated_at DESC`
   ).bind(uid, uid, uid).all();
+  const meta:any=(rows as any).meta||{};
+  if (typeof meta.rows_read === "number" && meta.rows_read > 200) console.warn("[D1][off/friends] high rows_read", meta.rows_read);
 
   const friends = (rows.results || []).map((row: any) => ({
     id: Number(row.friend_id),
