@@ -1,7 +1,5 @@
 import { requireOffSocialUser, resolveDisplayName, ensureOffPresenceTable, touchOffPresence } from "../../../_offFriends";
 
-const ONLINE_WINDOW_SECONDS = 180;
-
 export async function onRequestGet(context: any) {
   const auth = await requireOffSocialUser(context);
   if (!auth.ok) return json({ error: auth.error }, auth.status);
@@ -23,16 +21,15 @@ export async function onRequestGet(context: any) {
               WHERE (f.requester_id=? AND f.addressee_id=u.id) OR (f.requester_id=u.id AND f.addressee_id=?)
               ORDER BY f.id DESC LIMIT 1
             ) AS friendship_status
-     FROM off_user_presence p
-     JOIN users u ON u.id = p.user_id
+     FROM users u
+     LEFT JOIN off_user_presence p ON p.user_id = u.id
      LEFT JOIN off_profiles op ON op.user_id = u.id
      LEFT JOIN user_levels l ON l.user_id = u.id
      WHERE u.id != ?
        AND COALESCE(lower(u.role), 'client') != 'blocked'
-       AND p.last_seen_at >= datetime('now', ?)
-     ORDER BY p.last_seen_at DESC
-     LIMIT 50`
-  ).bind(uid, uid, uid, `-${ONLINE_WINDOW_SECONDS} seconds`).all();
+     ORDER BY COALESCE(op.display_name, u.username, u.display_name, u.name, u.email) ASC
+     LIMIT 100`
+  ).bind(uid, uid, uid).all();
 
   const allRows = rows.results || [];
   const users = allRows
@@ -47,10 +44,17 @@ export async function onRequestGet(context: any) {
       friendshipStatus: row.friendship_status || "none",
       secondaryLabel: row.username || row.email || null,
       lastSeenAt: row.last_seen_at || null,
-      isOnline: true,
+      isOnline: Boolean(row.last_seen_at),
     }));
 
-  return json({ ok: true, users, onlineWindowSeconds: ONLINE_WINDOW_SECONDS, countBeforeFriendshipFilter: allRows.length, countAfterFriendshipFilter: users.length });
+  return json({
+    ok: true,
+    users,
+    listMode: "all-addable-users",
+    requiresActivePresence: false,
+    countBeforeFriendshipFilter: allRows.length,
+    countAfterFriendshipFilter: users.length,
+  });
 }
 
 function json(payload: unknown, status = 200) {
