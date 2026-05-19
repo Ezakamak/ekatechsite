@@ -8,11 +8,11 @@ export async function onRequestGet(context: any) {
   if (q.length < 2) return Response.json({ ok: true, users: [] });
 
   const rows = await context.env.DB.prepare(
-    `SELECT u.id, u.name, NULL AS display_name, NULL AS username, u.email, op.display_name AS off_display_name,
+    `SELECT u.id, u.name, u.email, op.display_name AS off_display_name,
             COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
             op.selected_title,
-            COALESCE(l.level, 1) as level,
-            COALESCE(l.xp, 0) as xp,
+            1 as level,
+            0 as xp,
             (
               SELECT status FROM off_friendships f
               WHERE (f.requester_id=? AND f.addressee_id=u.id) OR (f.requester_id=u.id AND f.addressee_id=?)
@@ -20,8 +20,7 @@ export async function onRequestGet(context: any) {
             ) AS friendship_status
      FROM users u
      LEFT JOIN off_profiles op ON op.user_id = u.id
-     LEFT JOIN user_levels l ON l.user_id = u.id
-     WHERE u.id != ? AND (
+          WHERE u.id != ? AND (
        lower(COALESCE(op.display_name, '')) LIKE ? OR
        lower(COALESCE(u.name, '')) LIKE ? OR
        lower(COALESCE(u.email, '')) LIKE ?

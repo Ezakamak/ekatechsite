@@ -11,12 +11,12 @@ export async function onRequestGet(context: any) {
     await ensureOffProfilesSchema(context);
 
     const rows = await context.env.DB.prepare(
-      `SELECT u.id, u.name, NULL AS display_name, NULL AS username, u.email,
+      `SELECT u.id, u.name, u.email,
               op.display_name AS off_display_name,
               COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
               op.selected_title,
-              COALESCE(l.level, 1) as level,
-              COALESCE(l.xp, 0) as xp,
+              1 as level,
+              0 as xp,
               p.last_seen_at,
               (
                 SELECT status FROM off_friendships f
@@ -26,8 +26,7 @@ export async function onRequestGet(context: any) {
       FROM users u
       LEFT JOIN off_user_presence p ON p.user_id = u.id
       LEFT JOIN off_profiles op ON op.user_id = u.id
-      LEFT JOIN user_levels l ON l.user_id = u.id
-      WHERE u.id != ?
+            WHERE u.id != ?
         AND COALESCE(lower(u.role), 'client') != 'blocked'
       ORDER BY COALESCE(op.display_name, u.name, u.email) ASC
       LIMIT 100`
