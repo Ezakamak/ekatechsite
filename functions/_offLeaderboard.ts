@@ -23,12 +23,15 @@ export async function applySeasonPointsForMatch(context: any, matchHistoryId: nu
   const events: Array<{ userId: number; points: number; reason: string }> = [];
 
   if (match.status === 'draw') {
-    if (match.host_user_id) events.push({ userId: Number(match.host_user_id), points: POINTS.draw, reason: 'match_draw' });
-    if (match.opponent_user_id) events.push({ userId: Number(match.opponent_user_id), points: POINTS.draw, reason: 'match_draw' });
+    if (!match.host_user_id || !match.opponent_user_id) return { applied: false, reason: 'missing_draw_players' };
+    events.push({ userId: Number(match.host_user_id), points: POINTS.draw, reason: 'match_draw' });
+    events.push({ userId: Number(match.opponent_user_id), points: POINTS.draw, reason: 'match_draw' });
   } else {
-    if (match.winner_user_id) events.push({ userId: Number(match.winner_user_id), points: POINTS.winner, reason: 'match_win' });
-    if (match.loser_user_id) events.push({ userId: Number(match.loser_user_id), points: POINTS.loser, reason: 'match_loss' });
+    if (!match.winner_user_id || !match.loser_user_id) return { applied: false, reason: 'missing_winner_or_loser' };
+    events.push({ userId: Number(match.winner_user_id), points: POINTS.winner, reason: 'match_win' });
+    events.push({ userId: Number(match.loser_user_id), points: POINTS.loser, reason: 'match_loss' });
   }
+  if (!events.length) return { applied: false, reason: 'no_point_events' };
 
   for (const e of events) {
     for (const seasonId of targetSeasonIds) {
@@ -43,7 +46,7 @@ export async function applySeasonPointsForMatch(context: any, matchHistoryId: nu
   const affectedUserIds = [...new Set(events.map((e) => e.userId))];
   if (affectedUserIds.length) await updateLeaderboardSnapshots(context, affectedUserIds);
   await context.env.DB.prepare(`UPDATE off_match_history SET season_points_applied=1, updated_at=datetime('now') WHERE id=?`).bind(matchHistoryId).run();
-  return { applied: true, affectedUserIds };
+  return { applied: true, reason: 'applied', affectedUserIds };
 }
 
 export async function updateLeaderboardSnapshots(context: any, userIds: number[], seasonId?: number) {

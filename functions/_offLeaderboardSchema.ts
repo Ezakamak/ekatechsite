@@ -13,7 +13,14 @@ async function getColumns(context: any, tableName: string) {
 async function ensureColumn(context: any, tableName: string, colName: string, colSql: string) {
   const cols = await getColumns(context, tableName);
   if (!cols.has(colName)) {
-    await context.env.DB.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${colSql}`).run();
+    try {
+      await context.env.DB.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${colSql}`).run();
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      if (msg.toLowerCase().includes('duplicate column')) return;
+      console.warn(`[offLeaderboardSchema] Failed to add column ${tableName}.${colName}:`, msg);
+      throw error;
+    }
   }
 }
 
@@ -43,11 +50,21 @@ export async function ensureOffLeaderboardSchema(context: any) {
 
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS off_cleanup_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    dry_run INTEGER NOT NULL DEFAULT 0,
-    started_at TEXT NOT NULL DEFAULT (datetime('now')),
-    finished_at TEXT,
-    result_json TEXT
+    trigger_type TEXT,
+    triggered_by_user_id INTEGER,
+    expired_invites INTEGER NOT NULL DEFAULT 0,
+    expired_lobbies INTEGER NOT NULL DEFAULT 0,
+    abandoned_matches INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`).run();
+  await ensureColumn(context, 'off_cleanup_runs', 'trigger_type', 'trigger_type TEXT');
+  await ensureColumn(context, 'off_cleanup_runs', 'triggered_by_user_id', 'triggered_by_user_id INTEGER');
+  await ensureColumn(context, 'off_cleanup_runs', 'expired_invites', 'expired_invites INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_cleanup_runs', 'expired_lobbies', 'expired_lobbies INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_cleanup_runs', 'abandoned_matches', 'abandoned_matches INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_cleanup_runs', 'notes', 'notes TEXT');
+  await ensureColumn(context, 'off_cleanup_runs', 'created_at', 'created_at TEXT');
 
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS off_seasons (
     id INTEGER PRIMARY KEY,
@@ -62,15 +79,23 @@ export async function ensureOffLeaderboardSchema(context: any) {
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`).run();
 
-  await ensureColumn(context, 'off_seasons', 'slug', 'slug TEXT UNIQUE');
+  await ensureColumn(context, 'off_seasons', 'slug', 'slug TEXT');
   await ensureColumn(context, 'off_seasons', 'name', 'name TEXT');
   await ensureColumn(context, 'off_seasons', 'description', 'description TEXT');
-  await ensureColumn(context, 'off_seasons', 'status', "status TEXT NOT NULL DEFAULT 'active'");
+  await ensureColumn(context, 'off_seasons', 'status', "status TEXT DEFAULT 'active'");
   await ensureColumn(context, 'off_seasons', 'starts_at', 'starts_at TEXT');
   await ensureColumn(context, 'off_seasons', 'ends_at', 'ends_at TEXT');
   await ensureColumn(context, 'off_seasons', 'created_by_user_id', 'created_by_user_id INTEGER');
-  await ensureColumn(context, 'off_seasons', 'created_at', "created_at TEXT NOT NULL DEFAULT (datetime('now'))");
-  await ensureColumn(context, 'off_seasons', 'updated_at', "updated_at TEXT NOT NULL DEFAULT (datetime('now'))");
+  await ensureColumn(context, 'off_seasons', 'created_at', "created_at TEXT");
+  await ensureColumn(context, 'off_seasons', 'updated_at', "updated_at TEXT");
+  await context.env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_off_seasons_slug ON off_seasons(slug)`).run();
+  await context.env.DB.prepare(`UPDATE off_seasons
+    SET created_at = COALESCE(created_at, datetime('now')),
+        updated_at = COALESCE(updated_at, datetime('now')),
+        slug = COALESCE(slug, 'all-time'),
+        name = COALESCE(name, 'All Time'),
+        status = COALESCE(status, 'active')
+    WHERE id = 0`).run();
 
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS off_season_points (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,6 +109,14 @@ export async function ensureOffLeaderboardSchema(context: any) {
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(season_id, user_id, match_history_id)
   )`).run();
+  await ensureColumn(context, 'off_season_points', 'season_id', 'season_id INTEGER');
+  await ensureColumn(context, 'off_season_points', 'user_id', 'user_id INTEGER');
+  await ensureColumn(context, 'off_season_points', 'match_history_id', 'match_history_id INTEGER');
+  await ensureColumn(context, 'off_season_points', 'game_key', 'game_key TEXT');
+  await ensureColumn(context, 'off_season_points', 'points', 'points INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_season_points', 'reason', 'reason TEXT');
+  await ensureColumn(context, 'off_season_points', 'details_json', 'details_json TEXT');
+  await ensureColumn(context, 'off_season_points', 'created_at', 'created_at TEXT');
 
   await context.env.DB.prepare(`CREATE TABLE IF NOT EXISTS off_leaderboard_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,6 +136,20 @@ export async function ensureOffLeaderboardSchema(context: any) {
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(season_id, user_id)
   )`).run();
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'season_id', 'season_id INTEGER');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'user_id', 'user_id INTEGER');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'total_points', 'total_points INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'total_matches', 'total_matches INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'wins', 'wins INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'losses', 'losses INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'draws', 'draws INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'abandoned', 'abandoned INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'tech_duel_matches', 'tech_duel_matches INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'cipher_break_matches', 'cipher_break_matches INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'core_clash_matches', 'core_clash_matches INTEGER DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'win_rate', 'win_rate REAL DEFAULT 0');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'last_match_at', 'last_match_at TEXT');
+  await ensureColumn(context, 'off_leaderboard_snapshots', 'updated_at', 'updated_at TEXT');
 
   await context.env.DB.prepare(`INSERT INTO off_seasons (id, slug, name, status, description, created_at, updated_at)
     VALUES (0, 'all-time', 'All Time', 'active', 'All-time leaderboard season', datetime('now'), datetime('now'))
