@@ -143,7 +143,8 @@ async function completeLobby(context: any, lobby: any, winner: number) {
     const score = await getScore(context, Number(lobby.id));
     const creatorWins = Number(score[lobby.creator_user_id] || 0); const opponentWins = Number(score[lobby.opponent_user_id] || 0);
     const loser = Number(winner) === Number(lobby.creator_user_id) ? Number(lobby.opponent_user_id) : Number(lobby.creator_user_id);
-    await recordOffMatchHistory(context,{gameKey:'tech_duel',gameLabel:getGameLabel('tech_duel'),lobbyTable:'duel_lobbies',lobbyId:Number(lobby.id),hostUserId:Number(lobby.creator_user_id),opponentUserId:Number(lobby.opponent_user_id),winnerUserId:Number(winner),loserUserId:loser,status:creatorWins===opponentWins?'draw':'completed',resultJson:{mode:lobby.mode,round_count:lobby.round_count,scores:{creator:creatorWins,opponent:opponentWins},winner_user_id:winner,final_round:lobby.round_count,reward_amount:lobby.reward_amount},startedAt:lobby.created_at,completedAt:new Date().toISOString()});
+    const historyStatus = winner ? 'completed' : 'draw';
+    await recordOffMatchHistory(context,{gameKey:'tech_duel',gameLabel:getGameLabel('tech_duel'),lobbyTable:'duel_lobbies',lobbyId:Number(lobby.id),hostUserId:Number(lobby.creator_user_id),opponentUserId:Number(lobby.opponent_user_id),winnerUserId:Number(winner),loserUserId:loser,status:historyStatus,resultJson:{mode:lobby.mode,round_count:lobby.round_count,scores:{creator:creatorWins,opponent:opponentWins},winner_user_id:winner,final_round:lobby.round_count,reward_amount:lobby.reward_amount},startedAt:lobby.created_at,completedAt:new Date().toISOString()});
   }
 }
 

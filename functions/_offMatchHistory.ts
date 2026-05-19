@@ -15,7 +15,12 @@ import { applySeasonPointsForMatch } from './_offLeaderboard';
 import { ensureOffLeaderboardSchema } from './_offLeaderboardSchema';
 
 export async function recordOffMatchHistory(context: any, payload: any) {
-  await ensureOffLeaderboardSchema(context);
+  try {
+    await ensureOffLeaderboardSchema(context);
+  } catch (error) {
+    console.warn('[off_match_history] schema ensure failed', { error: String(error) });
+    return { inserted: false, matchId: 0, reason: 'schema_ensure_failed' };
+  }
   try {
     const started = payload.startedAt ? Date.parse(payload.startedAt) : NaN;
     const ended = payload.completedAt ? Date.parse(payload.completedAt) : NaN;
@@ -26,8 +31,11 @@ export async function recordOffMatchHistory(context: any, payload: any) {
       .bind(payload.gameKey, payload.gameLabel || getGameLabel(payload.gameKey), payload.lobbyTable, payload.lobbyId, payload.hostUserId, payload.opponentUserId ?? null, payload.winnerUserId ?? null, payload.loserUserId ?? null, status, payload.resultJson == null ? null : JSON.stringify(payload.resultJson), payload.gameSettingsJson == null ? null : JSON.stringify(payload.gameSettingsJson), payload.startedAt ?? null, payload.completedAt ?? null, duration)
       .run();
 
+    const inserted = Boolean((result as any)?.meta?.changes);
     const existing = await context.env.DB.prepare(`SELECT id, season_points_applied FROM off_match_history WHERE game_key=? AND lobby_id=? LIMIT 1`).bind(payload.gameKey, payload.lobbyId).first<any>();
     const matchId = Number(existing?.id || 0);
+    if (!inserted && !matchId) console.warn('[off_match_history] insert ignored but existing match not found', { gameKey: payload.gameKey, lobbyId: payload.lobbyId });
+    if (!matchId) console.warn('[off_match_history] missing match id after write', { gameKey: payload.gameKey, lobbyId: payload.lobbyId });
     if (matchId && Number(existing?.season_points_applied || 0) === 0) {
       try {
         await applySeasonPointsForMatch(context, matchId);
@@ -35,6 +43,6 @@ export async function recordOffMatchHistory(context: any, payload: any) {
         console.warn('[off_leaderboard] apply points failed', { matchId, error: String(error) });
       }
     }
-    return { inserted: Boolean((result as any)?.meta?.changes), matchId };
+    return { inserted, matchId };
   } catch (error) { console.warn('[off_match_history] failed', { payload, error: String(error) }); }
 }
