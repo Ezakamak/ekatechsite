@@ -112,7 +112,10 @@ export function OffFriendsPanel() {
       setInviteState(null);
       const inviteId = data?.inviteId;
       if (inviteId) console.log("[off-game-invite:create:success] inviteId", inviteId);
-      const successLabel = gameLabelByKey[inviteState.gameKey];
+      if (data?.notificationError) {
+        toast.warning(`Davet oluştu ama bildirim gönderilemedi: ${data.notificationError}`);
+      }
+      const successLabel = data?.gameLabel || gameLabelByKey[inviteState.gameKey];
       toast.success(inviteId ? `${successLabel} daveti gönderildi (ID: ${inviteId})` : `${successLabel} daveti gönderildi`);
       setSentFlagByUser((p) => ({ ...p, [inviteState.friend.id]: true }));
       window.setTimeout(() => setSentFlagByUser((p) => ({ ...p, [inviteState.friend.id]: false })), 2800);
