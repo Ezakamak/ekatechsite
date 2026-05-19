@@ -11,7 +11,7 @@ export async function onRequestGet(context: any) {
     await ensureOffProfilesSchema(context);
 
     const rows = await context.env.DB.prepare(
-      `SELECT u.id, u.name, u.email,
+      `SELECT u.id, u.name,
               op.display_name AS off_display_name,
               COALESCE(op.avatar_data, op.avatar_url, u.avatar_url) AS avatar_url,
               op.selected_title,
@@ -28,7 +28,10 @@ export async function onRequestGet(context: any) {
       LEFT JOIN off_profiles op ON op.user_id = u.id
             WHERE u.id != ?
         AND COALESCE(lower(u.role), 'client') != 'blocked'
-      ORDER BY COALESCE(op.display_name, u.name, u.email) ASC
+        AND lower(COALESCE(u.email, '')) NOT LIKE '%@ekatech.local'
+        AND upper(COALESCE(u.name, '')) NOT LIKE '%BOT%'
+        AND COALESCE(lower(u.role), 'client') NOT IN ('bot', 'system', 'test')
+      ORDER BY COALESCE(op.display_name, u.name, CAST(u.id AS TEXT)) ASC
       LIMIT 100`
     ).bind(uid, uid, uid).all();
 
@@ -37,13 +40,13 @@ export async function onRequestGet(context: any) {
       .filter((row: any) => !["accepted", "pending", "blocked"].includes(String(row.friendship_status || "none")))
       .map((row: any) => ({
         id: Number(row.id),
-        displayName: resolveDisplayName(row),
+        displayName: resolveDisplayName(row) || `Kullanıcı #${Number(row.id)}`,
         avatarUrl: row.avatar_url || null,
         level: Number(row.level || 1),
         xp: Number(row.xp || 0),
         selectedTitle: row.selected_title || null,
         friendshipStatus: row.friendship_status || "none",
-        secondaryLabel: row.email || null,
+        secondaryLabel: null,
         lastSeenAt: row.last_seen_at || null,
         isOnline: Boolean(row.last_seen_at),
       }));
