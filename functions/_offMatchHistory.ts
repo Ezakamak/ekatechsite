@@ -12,8 +12,10 @@ export function normalizeMatchStatus(status: string) {
   return 'completed';
 }
 import { applySeasonPointsForMatch } from './_offLeaderboard';
+import { ensureOffLeaderboardSchema } from './_offLeaderboardSchema';
 
 export async function recordOffMatchHistory(context: any, payload: any) {
+  await ensureOffLeaderboardSchema(context);
   try {
     const started = payload.startedAt ? Date.parse(payload.startedAt) : NaN;
     const ended = payload.completedAt ? Date.parse(payload.completedAt) : NaN;

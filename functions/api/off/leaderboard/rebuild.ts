@@ -1,7 +1,9 @@
 import { requireOffUser } from '../../../_offFriends';
 import { rebuildLeaderboard } from '../../../_offLeaderboard';
+import { ensureOffLeaderboardSchema } from '../../../_offLeaderboardSchema';
 
 export async function onRequestPost(context: any) {
+  await ensureOffLeaderboardSchema(context);
   const auth = await requireOffUser(context); if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
   if (!['admin','owner'].includes(String(auth.user.role || ''))) return Response.json({ error: 'Forbidden' }, { status: 403 });
   const body = await context.request.json().catch(() => ({}));

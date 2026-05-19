@@ -1,6 +1,8 @@
 import { resolveDisplayName } from '../../_offFriends';
+import { ensureOffLeaderboardSchema } from '../../_offLeaderboardSchema';
 
 export async function onRequestGet(context: any) {
+  await ensureOffLeaderboardSchema(context);
   const u = new URL(context.request.url);
   const seasonId = Number(u.searchParams.get('seasonId') || 0);
   const gameKey = (u.searchParams.get('gameKey') || '').trim();

@@ -452,8 +452,24 @@ async function ensureLobbyResultConsistency(context: any, lobbyId: number) {
   const currentWinner = lobby.winner_user_id === null || lobby.winner_user_id === undefined ? null : Number(lobby.winner_user_id);
 
   if (lobby.status !== "completed" || currentWinner !== winner) {
-    await context.env.DB.prepare("UPDATE cipher_lobbies SET status = 'completed', winner_user_id = ?, updated_at = datetime('now') WHERE id = ?").bind(winner, lobbyId).run();
+    const completedAt = new Date().toISOString();
+    await context.env.DB.prepare("UPDATE cipher_lobbies SET status = 'completed', winner_user_id = ?, completed_at = ?, updated_at = datetime('now') WHERE id = ?").bind(winner, completedAt, lobbyId).run();
     if (winner) await awardCoins(context, winner, Number(lobby.reward_amount || FIXED_REWARD_AMOUNT), lobbyId);
+    const loser = winner == null ? null : (Number(winner) === Number(lobby.creator_user_id) ? Number(lobby.opponent_user_id) : Number(lobby.creator_user_id));
+    await recordOffMatchHistory(context, {
+      gameKey: 'cipher_break',
+      gameLabel: getGameLabel('cipher_break'),
+      lobbyTable: 'cipher_lobbies',
+      lobbyId: Number(lobbyId),
+      hostUserId: Number(lobby.creator_user_id),
+      opponentUserId: Number(lobby.opponent_user_id),
+      winnerUserId: winner,
+      loserUserId: loser,
+      status: winner ? 'completed' : 'draw',
+      resultJson: { round_count: roundCount, scores: { creator: creatorWins, opponent: opponentWins }, winner_user_id: winner, reward_amount: Number(lobby.reward_amount || FIXED_REWARD_AMOUNT) },
+      startedAt: lobby.created_at,
+      completedAt,
+    });
   }
 }
 
