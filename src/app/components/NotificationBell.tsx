@@ -108,6 +108,7 @@ export function NotificationBell() {
   };
 
   const isOffFriendRequest = (item: NotificationItem) => item.type === "friend_request" && item.source_table === "off_friendships";
+  const isGameInvite = (item: NotificationItem) => item.type === "game_invite" && item.source_table === "off_game_invites";
 
   const getFriendshipId = (item: NotificationItem) => {
     const id = Number(item.source_id);
@@ -146,6 +147,34 @@ export function NotificationBell() {
       setProcessingById((prev) => ({ ...prev, [item.id]: null }));
     }
   };
+  const handleGameInvite = async (event: React.MouseEvent, item: NotificationItem, action: "accept" | "reject") => {
+    event.stopPropagation();
+    const inviteId = Number(item.source_id);
+    if (!inviteId) return;
+    setProcessingById((prev) => ({ ...prev, [item.id]: action }));
+    try {
+      const response = await fetch("/api/off/game-invites/respond", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inviteId, action }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || "İşlem başarısız");
+      await markRead(item.id);
+      setHandledById((prev) => ({ ...prev, [item.id]: true }));
+      if (action === "accept") {
+        toast.success("Tech Duel daveti kabul edildi");
+        window.history.pushState({}, "", "/off");
+        window.dispatchEvent(new Event("ekatech-route-change"));
+        window.dispatchEvent(new CustomEvent("ekatech-tech-duel-open-lobby", { detail: { lobbyId: data?.lobbyId || null } }));
+        window.dispatchEvent(new Event("ekatech-off-invites-refresh"));
+        window.dispatchEvent(new Event("ekatech-tech-duel-refresh"));
+      } else {
+        toast.success("Tech Duel daveti reddedildi");
+        await load();
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "İşlem başarısız");
+    } finally {
+      setProcessingById((prev) => ({ ...prev, [item.id]: null }));
+    }
+  };
 
   return (
     <div className="relative" data-notification-menu>
@@ -168,6 +197,7 @@ export function NotificationBell() {
                 const friendshipId = getFriendshipId(item);
                 const processing = processingById[item.id];
                 const isHandled = Boolean(handledById[item.id]);
+                const gameInvite = isGameInvite(item);
                 return (
                 <div
                   key={item.id}
@@ -209,6 +239,12 @@ export function NotificationBell() {
                           >
                             {processing === "reject" ? (tr ? "İşleniyor..." : "Processing...") : (tr ? "Reddet" : "Reject")}
                           </button>
+                        </div>
+                      )}
+                      {gameInvite && !isHandled && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" onClick={(event) => void handleGameInvite(event, item, "accept")} disabled={Boolean(processing)} className="rounded-lg border border-emerald-300/45 bg-emerald-500/20 px-2.5 py-1 text-[11px] text-emerald-50 disabled:opacity-60">{processing === "accept" ? "İşleniyor..." : "Kabul et"}</button>
+                          <button type="button" onClick={(event) => void handleGameInvite(event, item, "reject")} disabled={Boolean(processing)} className="rounded-lg border border-rose-300/45 bg-rose-500/20 px-2.5 py-1 text-[11px] text-rose-50 disabled:opacity-60">{processing === "reject" ? "İşleniyor..." : "Reddet"}</button>
                         </div>
                       )}
                       {isFriendRequest && (!friendshipId || isHandled) && <span className="mt-2 inline-flex rounded-lg border border-white/20 px-2 py-1 text-[11px] text-white/60">{tr ? "İşlendi" : "Processed"}</span>}
