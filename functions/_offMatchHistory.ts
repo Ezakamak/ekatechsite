@@ -11,7 +11,7 @@ export function normalizeMatchStatus(status: string) {
   if (['abandoned','forfeit'].includes(s)) return 'abandoned';
   return 'completed';
 }
-import { applySeasonPointsForMatch } from './_offLeaderboard';
+import { applySeasonPointsForMatchV2 } from './_offSeasons';
 import { ensureOffLeaderboardSchema } from './_offLeaderboardSchema';
 
 export async function recordOffMatchHistory(context: any, payload: any) {
@@ -33,7 +33,7 @@ export async function recordOffMatchHistory(context: any, payload: any) {
     if (!matchId) console.warn('[off_match_history] missing match id after write', { gameKey: payload.gameKey, lobbyId: payload.lobbyId });
     if (matchId && Number(existing?.season_points_applied || 0) === 0) {
       try {
-        await applySeasonPointsForMatch(context, matchId);
+        await applySeasonPointsForMatchV2(context, matchId);
       } catch (error) {
         console.warn('[off_leaderboard] apply points failed', { matchId, error: String(error) });
       }
