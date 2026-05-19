@@ -1,15 +1,17 @@
 import { resolveDisplayName } from '../../_offFriends';
 import { ensureOffLeaderboardSchema } from '../../_offLeaderboardSchema';
+import { getActiveOffSeason, ensureOffSeasonEngineSchema } from '../../_offSeasons';
 
 export async function onRequestGet(context: any) {
   await ensureOffLeaderboardSchema(context);
+  await ensureOffSeasonEngineSchema(context);
   const u = new URL(context.request.url);
   const hasSeasonParam = u.searchParams.has('seasonId');
   const requestedSeasonId = Number(u.searchParams.get('seasonId') || 0);
   const gameKey = (u.searchParams.get('gameKey') || '').trim();
   const limit = Math.min(100, Math.max(1, Number(u.searchParams.get('limit') || 50)));
 
-  const activeSeason = await context.env.DB.prepare(`SELECT id, slug, name, status, starts_at, ends_at FROM off_seasons WHERE status='active' ORDER BY id DESC LIMIT 1`).first<any>();
+  const activeSeason = await getActiveOffSeason(context);
   const allTimeSeason = { id: 0, slug: 'all-time', name: 'All Time', status: 'active', starts_at: null, ends_at: null };
   const explicitSeason = Number.isFinite(requestedSeasonId) && requestedSeasonId > 0
     ? await context.env.DB.prepare(`SELECT id, slug, name, status, starts_at, ends_at FROM off_seasons WHERE id=? LIMIT 1`).bind(requestedSeasonId).first<any>()
