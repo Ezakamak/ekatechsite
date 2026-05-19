@@ -35,22 +35,44 @@ export async function onRequestPost(context: any) {
   const friendship = await context.env.DB.prepare(`SELECT id FROM off_friendships WHERE status='accepted' AND ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?)) LIMIT 1`).bind(auth.user.id, friendId, friendId, auth.user.id).first();
   if (!friendship) return Response.json({ error: "Sadece accepted arkadaşlarına davet gönderebilirsin." }, { status: 403 });
 
-  let selectedMode: string | null = null; let settings: any = {}; let rr: number | null = null;
-  if (gameKey === "tech_duel") { if (!gameCfg.modes.includes(gameMode) || !gameCfg.rounds.includes(roundCount)) return Response.json({ error: "Geçersiz Tech Duel ayarı." }, { status: 400 }); selectedMode = gameMode; rr = roundCount; settings = { gameMode, roundCount }; }
-  if (gameKey === "cipher_break") { selectedMode = "standard"; settings = { roundCount: FIXED_CIPHER_ROUNDS }; rr = FIXED_CIPHER_ROUNDS; }
-  if (gameKey === "core_clash") { const fallbackMap = "firewall_city"; const mk = gameCfg.maps.includes(mapKeyInput) ? mapKeyInput : (gameCfg.maps.includes(fallbackMap) ? fallbackMap : gameCfg.maps[Math.floor(Math.random() * gameCfg.maps.length)]); settings = { mapKey: mk }; rr = 1; }
+  let selectedMode: string | null = null;
+  let mapKey: string | null = null;
+  if (gameKey === "tech_duel") {
+    if (!gameCfg.modes.includes(gameMode) || !gameCfg.rounds.includes(roundCount)) return Response.json({ error: "Geçersiz Tech Duel ayarı." }, { status: 400 });
+    selectedMode = gameMode;
+  }
+  if (gameKey === "core_clash") {
+    const fallbackMap = "firewall_city";
+    mapKey = gameCfg.maps.includes(mapKeyInput) ? mapKeyInput : (gameCfg.maps.includes(fallbackMap) ? fallbackMap : gameCfg.maps[Math.floor(Math.random() * gameCfg.maps.length)]);
+  }
 
-  const settingsJson = JSON.stringify(settings);
+  const normalizedLegacyDuelMode =
+    gameKey === "tech_duel" ? selectedMode || "classic" : "classic";
+
+  const normalizedGameMode =
+    gameKey === "tech_duel" ? selectedMode || "classic" :
+    gameKey === "cipher_break" ? "standard" :
+    gameKey === "core_clash" ? "standard" :
+    "standard";
 
   const normalizedRoundCount =
     gameKey === "tech_duel" ? roundCount :
-    gameKey === "cipher_break" ? FIXED_CIPHER_ROUNDS :
+    gameKey === "cipher_break" ? 5 :
     gameKey === "core_clash" ? 1 :
     5;
-  const dup = await context.env.DB.prepare(`SELECT id FROM off_game_invites WHERE inviter_id=? AND invitee_id=? AND game_key=? AND COALESCE(game_mode,duel_mode,'')=? AND COALESCE(game_settings_json,'{}')=? AND status='pending' AND expires_at>datetime('now') LIMIT 1`).bind(auth.user.id, friendId, gameKey, selectedMode || "", settingsJson).first();
+
+  const normalizedSettings =
+    gameKey === "tech_duel" ? { gameMode: normalizedGameMode, roundCount: normalizedRoundCount } :
+    gameKey === "cipher_break" ? { roundCount: 5 } :
+    gameKey === "core_clash" ? { mapKey } :
+    {};
+
+  const settingsJson = JSON.stringify(normalizedSettings);
+
+  const dup = await context.env.DB.prepare(`SELECT id FROM off_game_invites WHERE inviter_id=? AND invitee_id=? AND game_key=? AND COALESCE(game_mode,duel_mode,'')=? AND COALESCE(game_settings_json,'{}')=? AND status='pending' AND expires_at>datetime('now') LIMIT 1`).bind(auth.user.id, friendId, gameKey, normalizedGameMode, settingsJson).first();
   if (dup) return Response.json({ error: "Bu oyun/ayar için aktif davet var." }, { status: 409 });
 
-  const created = await context.env.DB.prepare(`INSERT INTO off_game_invites (inviter_id, invitee_id, game_key, duel_mode, game_mode, round_count, game_settings_json, target_route, status, message, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, '/off', 'pending', ?, datetime('now', '+5 minutes'))`).bind(auth.user.id, friendId, gameKey, selectedMode || null, selectedMode || null, normalizedRoundCount, settingsJson, message || null).run();
+  const created = await context.env.DB.prepare(`INSERT INTO off_game_invites (inviter_id, invitee_id, game_key, duel_mode, game_mode, round_count, game_settings_json, target_route, status, message, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, '/off', 'pending', ?, datetime('now', '+5 minutes'))`).bind(auth.user.id, friendId, gameKey, normalizedLegacyDuelMode, normalizedGameMode, normalizedRoundCount, settingsJson, message || null).run();
   const inviteId = Number(created?.meta?.last_row_id || 0); const expiresRow = await context.env.DB.prepare("SELECT expires_at FROM off_game_invites WHERE id=?").bind(inviteId).first<any>();
   const me = await context.env.DB.prepare(`SELECT u.id, u.name, u.email, u.nickname, op.display_name AS off_display_name FROM users u LEFT JOIN off_profiles op ON op.user_id=u.id WHERE u.id=?`).bind(auth.user.id).first<any>();
   const actor = resolveDisplayName(me);
@@ -64,7 +86,7 @@ export async function onRequestPost(context: any) {
       category: "off",
       type: "game_invite",
       title: gameKey === "tech_duel" ? "Tech Duel daveti" : gameKey === "cipher_break" ? "Cipher Break daveti" : "Core Clash daveti",
-      body: gameKey === "tech_duel" ? `${actor} seni ${toModeName(selectedMode || "classic")} modunda Tech Duel oynamaya davet etti.` : gameKey === "cipher_break" ? `${actor} seni Cipher Break maçına davet etti.` : `${actor} seni ${toMapName(settings.mapKey)} haritasında Core Clash maçına davet etti.`,
+      body: gameKey === "tech_duel" ? `${actor} seni ${toModeName(normalizedGameMode)} modunda Tech Duel oynamaya davet etti.` : gameKey === "cipher_break" ? `${actor} seni Cipher Break maçına davet etti.` : `${actor} seni ${toMapName(String(mapKey || "firewall_city"))} haritasında Core Clash maçına davet etti.`,
       link: "/off",
       sourceTable: "off_game_invites",
       sourceId: String(inviteId),
@@ -77,7 +99,7 @@ export async function onRequestPost(context: any) {
     notificationError = String(error?.message || error || "notification_create_failed");
     console.warn("[off/game-invites/create] createNotification failed", { inviteId, inviteeId: friendId, gameKey, notificationError });
   }
-  return Response.json({ ok: true, inviteId, inviteeId: friendId, gameKey, gameLabel: gameCfg.label, gameSettingsJson: settings, notificationCreated, notificationSkipped, notificationId: notificationResult?.id || null, notificationError, expiresAt: expiresRow?.expires_at || null, targetUserId: friendId });
+  return Response.json({ ok: true, inviteId, inviteeId: friendId, gameKey, gameLabel: gameCfg.label, notificationCreated, notificationSkipped, notificationId: notificationResult?.id || null, notificationError });
 }
 
 export async function respondInvite(context: any, action: "accept" | "reject") { /* generic */
