@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { toast } from "sonner";
 import { useLanguage } from "../i18n";
 
 type NotificationItem = {
@@ -12,6 +13,8 @@ type NotificationItem = {
   link?: string;
   action_label?: string;
   action_payload?: string;
+  source_table?: string;
+  source_id?: string;
   priority?: string;
   is_read?: number;
   created_at?: string;
@@ -53,6 +56,8 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
+  const [processingById, setProcessingById] = useState<Record<number, "accept" | "reject" | null>>({});
+  const [handledById, setHandledById] = useState<Record<number, boolean>>({});
 
   const load = async () => {
     try {
@@ -102,6 +107,46 @@ export function NotificationBell() {
     }
   };
 
+  const isOffFriendRequest = (item: NotificationItem) => item.type === "friend_request" && item.source_table === "off_friendships";
+
+  const getFriendshipId = (item: NotificationItem) => {
+    const id = Number(item.source_id);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  };
+
+  const handleFriendRequest = async (event: React.MouseEvent, item: NotificationItem, action: "accept" | "reject") => {
+    event.stopPropagation();
+    const friendshipId = getFriendshipId(item);
+    if (!friendshipId) return;
+    setProcessingById((prev) => ({ ...prev, [item.id]: action }));
+    try {
+      const response = await fetch("/api/off/friends/respond", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ friendshipId, action }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 409) {
+          toast.error("Bu istek artık geçerli değil");
+          await markRead(item.id);
+          setHandledById((prev) => ({ ...prev, [item.id]: true }));
+          return;
+        }
+        throw new Error(data?.error || "İşlem başarısız");
+      }
+      toast.success(action === "accept" ? "Arkadaşlık isteği kabul edildi" : "Arkadaşlık isteği reddedildi");
+      await markRead(item.id);
+      setHandledById((prev) => ({ ...prev, [item.id]: true }));
+      window.dispatchEvent(new Event("ekatech-off-friends-refresh"));
+    } catch (error: any) {
+      toast.error(error?.message || "İşlem başarısız");
+    } finally {
+      setProcessingById((prev) => ({ ...prev, [item.id]: null }));
+    }
+  };
+
   return (
     <div className="relative" data-notification-menu>
       <button type="button" onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); load(); }} className="relative flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white transition-all hover:bg-white/[0.1]" aria-label={tr ? "Bildirimler" : "Notifications"}>
@@ -118,8 +163,25 @@ export function NotificationBell() {
             </div>
             <div className="max-h-80 space-y-1 overflow-y-auto">
               {items.length === 0 && <p className="px-3 py-8 text-center text-sm text-white/45">{tr ? "Bildirim yok." : "No notifications."}</p>}
-              {items.map((item) => (
-                <button key={item.id} type="button" onClick={() => navigate(item)} className={`w-full rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/[0.06] ${item.priority === 'high' ? 'border border-amber-300/40 bg-amber-300/5' : ''}`}>
+              {items.map((item) => {
+                const isFriendRequest = isOffFriendRequest(item);
+                const friendshipId = getFriendshipId(item);
+                const processing = processingById[item.id];
+                const isHandled = Boolean(handledById[item.id]);
+                return (
+                <div
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      void navigate(item);
+                    }
+                  }}
+                  className={`w-full cursor-pointer rounded-2xl px-3 py-3 text-left transition-colors hover:bg-white/[0.06] ${item.priority === "high" ? "border border-amber-300/40 bg-amber-300/5" : ""}`}
+                >
                   <div className="flex items-start gap-2">
                     <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${Number(item.is_read || 0) ? "bg-white/20" : "bg-cyan-300"}`} />
                     <div className="min-w-0">
@@ -128,12 +190,33 @@ export function NotificationBell() {
                       </div>
                       <p className="text-sm font-medium text-white">{item.title}</p>
                       {item.body && <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/45">{item.body}</p>}
-                      {item.action_label && <span className="mt-2 inline-flex rounded-lg border border-cyan-300/40 px-2 py-1 text-[11px] text-cyan-200">{item.action_label}</span>}
+                      {item.action_label && !isFriendRequest && <span className="mt-2 inline-flex rounded-lg border border-cyan-300/40 px-2 py-1 text-[11px] text-cyan-200">{item.action_label}</span>}
+                      {isFriendRequest && friendshipId && !isHandled && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={(event) => void handleFriendRequest(event, item, "accept")}
+                            disabled={Boolean(processing)}
+                            className="rounded-lg border border-emerald-300/45 bg-emerald-500/20 px-2.5 py-1 text-[11px] text-emerald-50 disabled:opacity-60"
+                          >
+                            {processing === "accept" ? (tr ? "İşleniyor..." : "Processing...") : (tr ? "Kabul et" : "Accept")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(event) => void handleFriendRequest(event, item, "reject")}
+                            disabled={Boolean(processing)}
+                            className="rounded-lg border border-rose-300/45 bg-rose-500/20 px-2.5 py-1 text-[11px] text-rose-50 disabled:opacity-60"
+                          >
+                            {processing === "reject" ? (tr ? "İşleniyor..." : "Processing...") : (tr ? "Reddet" : "Reject")}
+                          </button>
+                        </div>
+                      )}
+                      {isFriendRequest && (!friendshipId || isHandled) && <span className="mt-2 inline-flex rounded-lg border border-white/20 px-2 py-1 text-[11px] text-white/60">{tr ? "İşlendi" : "Processed"}</span>}
                       <p className="mt-1 text-[11px] text-white/30">{formatTime(item.created_at, tr)}</p>
                     </div>
                   </div>
-                </button>
-              ))}
+                </div>
+              )})}
             </div>
           </motion.div>
         )}

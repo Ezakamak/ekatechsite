@@ -14,7 +14,7 @@ export async function onRequestGet(context: any) {
 
     const result = await context.env.DB
       .prepare(`
-        SELECT id, type, category, title, body, link, action_label, action_payload, priority, is_read, created_at, expires_at
+        SELECT id, type, category, title, body, link, action_label, action_payload, source_table, source_id, priority, is_read, created_at, expires_at
         FROM notifications
         WHERE user_id = ?
           AND (expires_at IS NULL OR expires_at > datetime('now'))
