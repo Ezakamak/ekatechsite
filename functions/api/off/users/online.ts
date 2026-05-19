@@ -1,10 +1,10 @@
-import { requireOffUser, resolveDisplayName, ensureOffPresenceTable, touchOffPresence } from "../../../_offFriends";
+import { requireOffSocialUser, resolveDisplayName, ensureOffPresenceTable, touchOffPresence } from "../../../_offFriends";
 
-const ONLINE_WINDOW_SECONDS = 90;
+const ONLINE_WINDOW_SECONDS = 180;
 
 export async function onRequestGet(context: any) {
-  const auth = await requireOffUser(context);
-  if (!auth.ok) return Response.json({ error: auth.error }, { status: auth.status });
+  const auth = await requireOffSocialUser(context);
+  if (!auth.ok) return json({ error: auth.error }, auth.status);
   const uid = Number(auth.user.id);
 
   await ensureOffPresenceTable(context);
@@ -28,12 +28,14 @@ export async function onRequestGet(context: any) {
      LEFT JOIN off_profiles op ON op.user_id = u.id
      LEFT JOIN user_levels l ON l.user_id = u.id
      WHERE u.id != ?
+       AND COALESCE(lower(u.role), 'client') != 'blocked'
        AND p.last_seen_at >= datetime('now', ?)
      ORDER BY p.last_seen_at DESC
      LIMIT 50`
   ).bind(uid, uid, uid, `-${ONLINE_WINDOW_SECONDS} seconds`).all();
 
-  const users = (rows.results || [])
+  const allRows = rows.results || [];
+  const users = allRows
     .filter((row: any) => !["accepted", "pending", "blocked"].includes(String(row.friendship_status || "none")))
     .map((row: any) => ({
       id: Number(row.id),
@@ -48,5 +50,9 @@ export async function onRequestGet(context: any) {
       isOnline: true,
     }));
 
-  return Response.json({ ok: true, users, onlineWindowSeconds: ONLINE_WINDOW_SECONDS });
+  return json({ ok: true, users, onlineWindowSeconds: ONLINE_WINDOW_SECONDS, countBeforeFriendshipFilter: allRows.length, countAfterFriendshipFilter: users.length });
+}
+
+function json(payload: unknown, status = 200) {
+  return Response.json(payload, { status, headers: { "Cache-Control": "no-store" } });
 }
