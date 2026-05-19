@@ -160,7 +160,8 @@ export function NotificationBell() {
       setHandledById((prev) => ({ ...prev, [item.id]: true }));
       if (action === "accept") {
         toast.success("Tech Duel daveti kabul edildi");
-        window.history.pushState({}, "", "/off");
+        const redirectTo = typeof data?.redirectTo === "string" && data.redirectTo ? data.redirectTo : "/off";
+        window.history.pushState({}, "", redirectTo);
         window.dispatchEvent(new Event("ekatech-route-change"));
         window.dispatchEvent(new CustomEvent("ekatech-tech-duel-open-lobby", { detail: { lobbyId: data?.lobbyId || null } }));
         window.dispatchEvent(new Event("ekatech-off-invites-refresh"));
