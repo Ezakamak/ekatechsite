@@ -1,4 +1,5 @@
 import { requireOffUser } from "../../../_offFriends";
+import { createOffFriendRequestNotification } from "../../../_notifications";
 
 export async function onRequestPost(context: any) {
   const auth = await requireOffUser(context);
@@ -24,6 +25,12 @@ export async function onRequestPost(context: any) {
     return Response.json({ ok: true, message: "İstek yeniden gönderildi." });
   }
 
-  await context.env.DB.prepare(`INSERT INTO off_friendships (requester_id, addressee_id, status) VALUES (?, ?, 'pending')`).bind(from, to).run();
+  const insert = await context.env.DB.prepare(`INSERT INTO off_friendships (requester_id, addressee_id, status) VALUES (?, ?, 'pending')`).bind(from, to).run();
+  const requester = await context.env.DB.prepare(`SELECT COALESCE(name, email, 'Bir kullanıcı') AS display_name FROM users WHERE id = ?`).bind(from).first<any>();
+  await createOffFriendRequestNotification(context, {
+    inviteeId: to,
+    requesterDisplayName: String(requester?.display_name || 'Bir kullanıcı'),
+    friendshipId: Number(insert.meta?.last_row_id || 0),
+  });
   return Response.json({ ok: true, message: "İstek gönderildi." });
 }
