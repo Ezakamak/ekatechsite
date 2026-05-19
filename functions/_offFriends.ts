@@ -23,6 +23,7 @@ export async function requireOffUser(context: any) {
   await ensureFriendshipTables(context);
   await ensureOffProfile(context, Number(user.id));
   await ensureOffTitleTables(context);
+  await touchOffPresence(context, Number(user.id));
   return { ok: true, user: { id: Number(user.id), name: String(user.name || "") } };
 }
 
@@ -79,6 +80,28 @@ export async function ensureOffProfile(context: any, userId: number) {
   ).bind(userId, userId).run();
 }
 
+
+export async function ensureOffPresenceTable(context: any) {
+  await context.env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS off_user_presence (
+      user_id INTEGER PRIMARY KEY,
+      last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  await context.env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_off_user_presence_last_seen_at ON off_user_presence(last_seen_at)`).run();
+}
+
+export async function touchOffPresence(context: any, userId: number) {
+  await ensureOffPresenceTable(context);
+  await context.env.DB.prepare(
+    `INSERT INTO off_user_presence (user_id, last_seen_at, updated_at)
+     VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id) DO UPDATE SET
+       last_seen_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`
+  ).bind(userId).run();
+}
 function getCookie(cookieHeader: string, name: string) {
   return cookieHeader
     .split("; ")
